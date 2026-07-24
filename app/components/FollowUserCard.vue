@@ -1,0 +1,113 @@
+<template lang="pug">
+.follow-user-card
+  .follow-user-inner(v-if='user')
+    .flex-1.flex.gap-1
+      .left
+        RouterLink(:to='"/users/" + user.userId')
+          img(:src='user.profileImageUrl' alt='')
+      .right
+        .username: h4.plain
+          RouterLink(:to='"/users/" + user.userId') {{ user.userName }}
+        .comment: FnbEllipsis.description.pre(:line-clamp='3' :tooltip='false') {{ user.userComment }}
+        .action: FnbButton(
+          :loading='loadingUserFollow',
+          :variant='user.following ? "success" : "default"'
+          @click='handleUserFollow'
+          size='sm'
+          v-if='user.userId !== userStore.userId'
+        )
+          template(#icon)
+            IFasCheck(v-if='user.following')
+            IFasPlus(v-else)
+          | {{ user.following ? '已关注' : '关注' }}
+    .user-artworks
+      ArtworkList.tiny(:list='user.illusts' inline)
+
+  .follow-user-inner.placeholder(v-else)
+    .flex-1.flex.gap-1
+      .left: a: FnbSkeleton(circle height='80px' text width='80px')
+      .right
+        h4.plain: FnbSkeleton(height='1.6em' text width='12em')
+        FnbSkeleton(block height='6em' width='100%')
+    .user-artworks: ArtworkList.tiny(:list='[]', :loading='4' inline)
+</template>
+
+<script lang="ts" setup>
+import ArtworkList from './Artwork/ArtworkList.vue'
+import type { User, UserListItem } from '~/types'
+import IFasCheck from '~icons/fa-solid/check'
+import IFasPlus from '~icons/fa-solid/plus'
+import { useUserStore } from '~/stores/session'
+import { useUserProfileStore } from '~/stores/user-profile'
+
+const userStore = useUserStore()
+const userProfileStore = useUserProfileStore()
+const toast = useToast()
+
+const props = defineProps<{
+  user?: UserListItem
+}>()
+
+const loadingUserFollow = ref(false)
+async function handleUserFollow() {
+  if (!props.user || loadingUserFollow.value) return
+  loadingUserFollow.value = true
+  try {
+    if (props.user.following) {
+      await userProfileStore.unfollowUser(props.user.userId)
+    } else {
+      await userProfileStore.followUser(props.user.userId)
+    }
+    props.user.following = !props.user.following
+  } catch {
+    toast.error(
+      props.user.following ? '取消关注失败，请重试' : '关注失败，请重试'
+    )
+  } finally {
+    loadingUserFollow.value = false
+  }
+}
+</script>
+
+<style scoped lang="scss">
+.follow-user-card {
+  overflow: hidden;
+}
+
+.follow-user-inner {
+  display: flex;
+  gap: 1rem;
+  @media (max-width: 860px) {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+}
+
+.left {
+  margin-right: 1rem;
+  img {
+    border-radius: var(--fnb-radius-sm);
+    @include fnb-border-sm;
+    width: 80px;
+    height: 80px;
+  }
+}
+
+.right {
+  flex: 1;
+  > div:not(:first-of-type) {
+    margin-top: 1rem;
+  }
+}
+
+h4 {
+  margin: 0.2rem 0;
+  padding-left: 0;
+  flex: 1;
+  font-weight: 700;
+}
+
+:deep(.artworks-list .author) {
+  display: none;
+}
+</style>

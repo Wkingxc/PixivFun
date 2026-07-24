@@ -1,0 +1,85 @@
+// app/assets/styles/index.scss
+@use 'variables';
+@use 'animate';
+@use 'elements';
+@use 'formats';
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+// Form controls don't inherit text color by default, so their text falls back
+// to UA black — invisible on dark surfaces (e.g. pagination page numbers).
+// Components that need a specific color set it explicitly and override this.
+button,
+input,
+select,
+textarea {
+  color: inherit;
+}
+
+body {
+  background-color: var(--fnb-bg);
+  // Base typography and text color. The legacy `#app` selector predated the
+  // Nuxt migration (real root is `#app-full-container`) and no longer matched,
+  // so these fell back to UA defaults — black text (invisible in dark mode)
+  // and the system font instead of the loaded Noto Sans SC. Layout
+  // (flex/min-height) lives on #app-full-container in app.vue.
+  color: var(--fnb-text);
+  font-family: var(--fnb-font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-image:
+    linear-gradient(var(--fnb-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--fnb-grid-line) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+// Env specific
+[data-env="production"] {
+  .dev-only,
+  .dev-test {
+    display: none !important;
+  }
+}
+
+[data-env="development"] {
+  .prod-only {
+    display: none !important;
+  }
+}
+
+.container {
+  margin-left: 10%;
+  margin-right: 10%;
+}
+
+.narrow-only {
+  display: none;
+}
+
+.isAdContainer {
+  display: none !important;
+}
+
+@media screen and (max-width: 800px) {
+  .container {
+    margin-left: 2rem;
+    margin-right: 2rem;
+  }
+
+  .narrow-only {
+    display: inherit;
+  }
+
+  .wide-only {
+    display: none;
+  }
+}
