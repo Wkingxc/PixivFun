@@ -1,9 +1,8 @@
 // ==UserScript==
 // @name         PixivNow Login Helper
-// @namespace    https://pixiv.js.org/
+// @namespace    PixivNow
 // @version      1.0.0
 // @description  Add a "Login to PixivNow" button on Pixiv account portal
-// @author       PixivNow
 // @match        https://accounts.pixiv.net/*
 // @grant        GM_cookie
 // @grant        GM_getValue
@@ -14,7 +13,7 @@
 ;(function () {
   'use strict'
 
-  const DEFAULT_HOST = 'https://pixiv.js.org'
+  const DEFAULT_HOST = 'http://localhost:3000'
 
   function getHost() {
     return GM_getValue('pixivnow_host', DEFAULT_HOST).replace(/\/$/, '')

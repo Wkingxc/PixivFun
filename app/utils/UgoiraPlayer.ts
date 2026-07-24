@@ -56,7 +56,6 @@ const enum PlayerState {
 
 /**
  * UgoiraPlayer
- * @author dragon-fish
  * @license MIT
  */
 export class UgoiraPlayer {

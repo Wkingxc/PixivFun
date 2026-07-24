@@ -16,7 +16,7 @@ import { effect } from 'vue'
 
 const msgList = [
   // 正经向提示
-  '频繁遇到此问题？请通过关于里的联系方式联系我们！',
+  '频繁遇到此问题？请检查网络连接后稍后重试。',
   '您可以尝试刷新页面。',
   // 日常玩梗
   '这像装在游戏机盒子里的作业本一样没有人喜欢！',
@@ -62,14 +62,7 @@ const props = defineProps<{
   title?: string
   description?: string
   status?:
-    | 'warning'
-    | '500'
-    | 'error'
-    | 'info'
-    | 'success'
-    | '404'
-    | '403'
-    | '418'
+    'warning' | '500' | 'error' | 'info' | 'success' | '404' | '403' | '418'
 }>()
 const msg = ref('')
 function randomMsg(): void {

@@ -3,12 +3,7 @@
   "version": "5.0.0",
   "private": true,
   "type": "module",
-  "repository": "https://github.com/FreeNowOrg/PixivNow.git",
-  "contributors": [
-    "Dragon-Fish <824399619@qq.com>",
-    "AlPha5130 <34984380+AlPha5130@users.noreply.github.com>"
-  ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "nuxt dev",
     "build": "nuxt build",
@@ -16,14 +11,12 @@
     "preview": "nuxt preview",
     "prepare": "nuxt prepare",
     "postinstall": "nuxt prepare",
-    "serve": "node .output/server/index.mjs",
-    "changelog": "conventional-changelog -p jquery -i CHANGELOG.md -s -r 0"
+    "serve": "node .output/server/index.mjs"
   },
   "dependencies": {
     "axios": "^1.18.0",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
-    "fflate": "^0.8.3",
     "gif.js": "^0.2.0",
     "modern-mp4": "^0.2.0",
     "nprogress": "^0.2.0",
@@ -35,7 +28,6 @@
     "vue-waterfall-plugin-next": "^3.0.1"
   },
   "devDependencies": {
-    "@dragon-fish/sensitive-words-filter": "^2.0.1",
     "@iconify-json/fa-solid": "^1.2.2",
     "@nuxtjs/i18n": "^10.4.0",
     "@pinia/nuxt": "^0.11.3",
@@ -49,7 +41,6 @@
     "@vueuse/core": "^14.3.0",
     "@vueuse/nuxt": "^14.3.0",
     "cheerio": "^1.2.0",
-    "conventional-changelog-cli": "^5.0.0",
     "cookie": "^1.1.1",
     "lodash.escaperegexp": "^4.1.2",
     "nuxt": "^4.4.8",

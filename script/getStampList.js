@@ -2,7 +2,7 @@
  * @desc 获取绘文字的映射表
  *       这个是扔到浏览器控制台里用的
  *       点开评论框旁边的笑脸然后运行
- * @example (normal) => https://pixiv.js.org/~/common/images/emoji/101.png
+ * @example (normal) => /~/common/images/emoji/101.png
  */
 !(() => {
   const btn = document.querySelectorAll('.emoji-mart-category-list button')

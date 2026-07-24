@@ -11,46 +11,33 @@ footer.global-footer
         li
           RouterLink(to='/about') 关于本站
     section.flex-1
-      h4 关注我们
+      h4 相关资源
       ul
         li
-          | FreeNow 团队：
-          ExternalLink(:href='`https://github.com/${GITHUB_OWNER}`') Free Now Tech.
+          ExternalLink(href='https://www.pixiv.net/' target='_blank') Pixiv
         li
-          | PixivNow 团队：
-          RouterLink.plain(to='/users/32338232') Dragon Fish
-          | 、
-          RouterLink.plain(to='/users/15552366') MysticNebula70
-    //- section.flex-1
-    //-   h4 社交媒体
-    //-     p Placeholder
-    section.flex-1
-      h4 友情链接
-      div 快来 GitHub issues 交换友链吧~
-      //- ul
-      //-   li 链接
+          ExternalLink(
+            href='https://www.pixiv.net/settings/viewing'
+            target='_blank'
+          ) 浏览与显示设置
 
   .bottom.align-center
     p.copyright
       | Copyright &copy; {{ yearStr }}
       |
-      a(:href='GITHUB_URL' target='_blank') {{ PROJECT_NAME }}
+      | {{ PROJECT_NAME }}
       | &nbsp;
       em v{{ version }}
-    .dev-only(style='font-style: italic')
-      | This is test site →&nbsp;
-      a(:href='"https://pixiv.js.org" + $route.path' target='_blank') Go to Prod.
 </template>
 
 <script lang="ts" setup>
 import ExternalLink from './ExternalLink.vue'
-import { GITHUB_URL, PROJECT_NAME, GITHUB_OWNER, version } from '~/config'
+import { PROJECT_NAME, version } from '~/config'
 
-const yearStr = ref(`2021 - ${new Date().getFullYear()}`)
+const yearStr = ref(new Date().getFullYear().toString())
 </script>
 
 <style scoped lang="scss">
-
 .global-footer {
   background-color: var(--fnb-surface);
   font-size: 1rem;

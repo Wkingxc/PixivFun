@@ -3,7 +3,6 @@
   :data-env='siteConfig.public.siteEnv',
   :data-route-name='route.name'
 )
-  SiteNoticeBanner
   SiteHeader
 
   main

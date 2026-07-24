@@ -8,10 +8,7 @@ export default defineNuxtConfig({
 
   modules: ['@pinia/nuxt', '@nuxtjs/i18n', '@vueuse/nuxt'],
 
-  components: [
-    { path: '~/components/ui', pathPrefix: false },
-    '~/components',
-  ],
+  components: [{ path: '~/components/ui', pathPrefix: false }, '~/components'],
 
   css: ['~/assets/styles/index.scss'],
 
@@ -68,7 +65,6 @@ export default defineNuxtConfig({
       pximgBaseUrlI: process.env.VITE_PXIMG_BASEURL_I || '/-/',
       pximgBaseUrlS: process.env.VITE_PXIMG_BASEURL_S || '/~/',
       googleAnalyticsId: process.env.VITE_GOOGLE_ANALYTICS_ID || '',
-      disableSiteNotice: process.env.DISABLE_SITE_NOTICE || 'false',
       siteEnv:
         process.env.NODE_ENV === 'production' ? 'production' : 'development',
     },

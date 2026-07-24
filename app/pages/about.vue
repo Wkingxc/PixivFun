@@ -1,7 +1,4 @@
 <template lang="pug">
-mixin repoLink
-  ExternalLink(:href='GITHUB_URL' target='_blank') {{ GITHUB_OWNER }}/{{ GITHUB_REPO }}
-
 mixin GoToPixivSettings
   p 部分高级功能的效果取决于您在 Pixiv 源站的设定，请前往 #[ExternalLink(href='https://www.pixiv.net/settings/viewing' target='_blank') 浏览与显示设置] 调整。
 
@@ -48,18 +45,6 @@ mixin GoToPixivSettings
       h3 简单来说
       p 请只在您信任当前运营方时提交 cookie。PixivNow 无法为任何第三方部署实例提供安全担保。
 
-    Card(title='鸣谢')
-      p: em 以下排名不分先后
-      h3 组织
-      ul
-        li <strong>GitHub</strong> 提供了源码托管和版本管控服务
-        li <strong>EdgeOne</strong> 提供了网站托管和 serverless 计算服务
-        li <strong>JS.ORG</strong> 提供了域名服务
-      h3 Pixiv.cat
-      p 我们使用 #[ExternalLink(href='https://pixiv.cat/' target='_blank') Pixiv.cat] 提供的代理服务获取图片资源，感谢他们提供的稳定服务和友好支持。
-      h3 个人
-      p 感谢为 #[+repoLink] 贡献内容的全部编辑者！
-
     Card(title='免责声明')
       h3 基本服务
       p PixivNow 是非官方开源项目，主要用于学习、研究与个人浏览体验改进。项目不提供任何 SLA 或可用性保证，服务可能随时不稳定、中断或停止。
@@ -76,14 +61,10 @@ mixin GoToPixivSettings
       p PixivNow 程序源代码通过 Apache-2.0 协议授权。
       p PixivNow 的 Logo 及品牌视觉资产以 #[ExternalLink(href='https://creativecommons.org/licenses/by-nc-sa/4.0/') CC BY-NC-SA 4.0] 协议授权。您可以自由分享和改编，但须署名、禁止商用、以相同协议共享。
       p “Pixiv” 是 pixiv Inc. 的商标。PixivNow 项目与 pixiv Inc. 没有从属、认可或赞助关系。
-
-    Card(title='加入我们')
-      p 我们是开源项目，欢迎给我们点星星或者提交 PR 以及 issue：#[+repoLink]。
 </template>
 
 <script lang="ts" setup>
 definePageMeta({ name: 'about' })
-import { PROJECT_NAME, GITHUB_OWNER, GITHUB_REPO, GITHUB_URL } from '~/config'
 import Card from '~/components/Card.vue'
 import ExternalLink from '~/components/ExternalLink.vue'
 import { setTitle } from '~/utils/setTitle'

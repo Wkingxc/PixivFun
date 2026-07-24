@@ -10,9 +10,9 @@ PixivNow - Now, everyone can enjoy Pixiv!
 
 ### Docker (推荐)
 
+获取当前仓库代码并进入项目根目录后运行：
+
 ```bash
-git clone https://github.com/FreeNowOrg/PixivNow.git
-cd PixivNow
 docker compose up -d
 ```
 
@@ -21,14 +21,12 @@ docker compose up -d
 代码更新后重新构建：
 
 ```bash
-git pull && docker compose up -d --build
+docker compose up -d --build
 ```
 
 ### Vercel
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FFreeNowOrg%2FPixivNow&demo-title=PixivNow)
-
-点击上方按钮一键部署，或 Fork 后在 Vercel 导入项目。
+将当前仓库导入 Vercel，并使用项目默认的 Nuxt 构建配置。
 
 如果打算公开你的部署，请小心你的账单。PixivNow 可能会被滥用来大量下载图片，导致流量激增和高额费用。
 
