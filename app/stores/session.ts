@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { PixivUser } from '~/types'
+import { initUser } from '~/composables/userData'
 
 export const useSideNavStore = defineStore('sidenav', () => {
   const openState = ref(false)
@@ -17,7 +18,6 @@ export const useSideNavStore = defineStore('sidenav', () => {
 })
 
 export const useUserStore = defineStore('user', () => {
-  const pixivClient = usePixivClient()
   const user = ref<PixivUser | null>(null)
   const isLoggedIn = computed(() => !!user.value)
   const userId = computed(() => user.value?.id)
@@ -35,17 +35,11 @@ export const useUserStore = defineStore('user', () => {
 
   async function initFromSession(): Promise<PixivUser> {
     try {
-      const data = await pixivClient._getSessionUser()
-      if (data.token) {
-        sessionStorage.setItem('pixivnow:csrf', data.token)
-        user.value = data.userData
-        return data.userData
-      } else {
-        sessionStorage.removeItem('pixivnow:csrf')
-        return Promise.reject('Invalid session ID')
-      }
+      const data = await initUser()
+      user.value = data
+      return data
     } catch (err) {
-      sessionStorage.removeItem('pixivnow:csrf')
+      user.value = null
       return Promise.reject(err)
     }
   }

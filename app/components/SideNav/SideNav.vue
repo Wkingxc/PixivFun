@@ -1,9 +1,12 @@
 <template lang="pug">
-aside.global-side-nav(:class='{ hidden: !sideNavStore.isOpened }')
-  .backdrop(@click='closeSideNav')
-  .inner
+aside.global-side-nav(
+  :aria-hidden='!sideNavStore.isOpened',
+  :class='{ hidden: !sideNavStore.isOpened }'
+)
+  .backdrop(@click='closeSideNav' aria-hidden='true')
+  nav.inner(aria-label='站点导航')
     .group
-      .search-area
+      .search-area.mobile-search
         SearchBox
 
     .list
@@ -11,69 +14,80 @@ aside.global-side-nav(:class='{ hidden: !sideNavStore.isOpened }')
         .title 导航
         ul
           SideNavListLink(link='/' text='首页')
-            IFasHome.link-icon
+            ITablerHome.link-icon
           SideNavListLink(link='/ranking' text='排行榜')
-            IFasCrown.link-icon
+            ITablerCrown.link-icon
           SideNavListLink(link='/search' text='搜索')
-            IFasSearch.link-icon
+            ITablerSearch.link-icon
 
       .group
         .title 探索发现
         ul
           SideNavListLink(link='/discovery/artworks' text='插画·漫画')
-            IFasImage.link-icon
+            ITablerPhoto.link-icon
           SideNavListLink(link='/discovery/novels' text='小说')
-            IFasBook.link-icon
+            ITablerBook.link-icon
           SideNavListLink(link='/discovery/users' text='用户')
-            IFasUser.link-icon
+            ITablerUsers.link-icon
 
       .group
         .title 用户
         ul
           SideNavListLink(
             :text='userStore.isLoggedIn ? "查看令牌" : "设置令牌"'
-            link='/login'
+            :link='userStore.isLoggedIn ? "/login" : guestLoginPath'
           )
-            IFasFingerprint.link-icon
+            ITablerKey.link-icon
           SideNavListLink(
-            :link='userStore.isLoggedIn ? `/users/${userStore.userId}` : `/login?back=${$route.fullPath}`'
+            :link='userStore.isLoggedIn ? `/users/${userStore.userId}` : guestLoginPath'
             text='我的页面'
           )
-            IFasUser.link-icon
+            ITablerUserCircle.link-icon
           SideNavListLink(
-            :link='userStore.isLoggedIn ? `/users/${userStore.userId}/following` : `/login?back=${$route.fullPath}`'
+            :link='userStore.isLoggedIn ? `/users/${userStore.userId}/following` : guestLoginPath'
             text='我的关注'
           )
-            IFasUser.link-icon
+            ITablerHeart.link-icon
           SideNavListLink(link='/following/latest' text='关注用户的作品')
-            IFasUser.link-icon
+            ITablerUserPlus.link-icon
 
       .group
-        .title PixivNow
+        .title PixivFun
         ul
-          SideNavListLink(externalLink='https://www.pixiv.net/' text='Pixiv.net')
-            IFasExternalLinkAlt.link-icon
+          SideNavListLink(
+            externalLink='https://www.pixiv.net/'
+            text='Pixiv.net'
+          )
+            ITablerExternalLink.link-icon
           SideNavListLink(link='/about' text='关于我们')
-            IFasHeart.link-icon
+            ITablerInfoCircle.link-icon
 </template>
 
 <script lang="ts" setup>
 import SideNavListLink from './SideNavListLink.vue'
 import SearchBox from '../SearchBox.vue'
-import IFasCrown from '~icons/fa-solid/crown'
-import IFasExternalLinkAlt from '~icons/fa-solid/external-link-alt'
-import IFasFingerprint from '~icons/fa-solid/fingerprint'
-import IFasHeart from '~icons/fa-solid/heart'
-import IFasHome from '~icons/fa-solid/home'
-import IFasBook from '~icons/fa-solid/book'
-import IFasImage from '~icons/fa-solid/image'
-import IFasSearch from '~icons/fa-solid/search'
-import IFasUser from '~icons/fa-solid/user'
+import {
+  IconBook2 as ITablerBook,
+  IconCrown as ITablerCrown,
+  IconExternalLink as ITablerExternalLink,
+  IconHeart as ITablerHeart,
+  IconHome as ITablerHome,
+  IconInfoCircle as ITablerInfoCircle,
+  IconKey as ITablerKey,
+  IconPhoto as ITablerPhoto,
+  IconSearch as ITablerSearch,
+  IconUserCircle as ITablerUserCircle,
+  IconUserPlus as ITablerUserPlus,
+  IconUsers as ITablerUsers,
+} from '@tabler/icons-vue'
 import { useSideNavStore, useUserStore } from '~/stores/session'
+import { createLoginPath } from '~/utils/loginNavigation'
 
 const sideNavStore = useSideNavStore()
 const userStore = useUserStore()
+const route = useRoute()
 const router = useRouter()
+const guestLoginPath = computed(() => createLoginPath(route.fullPath))
 router.afterEach(() => sideNavStore.close())
 
 sideNavStore.$subscribe((_mutation, state): void => {
@@ -88,123 +102,105 @@ function closeSideNav() {
   sideNavStore.close()
 }
 
-onMounted(() => {
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeSideNav()
-  })
+useEventListener(document, 'keydown', (event) => {
+  if (event.key === 'Escape') closeSideNav()
 })
 </script>
 
 <style scoped lang="scss">
-svg.link-icon {
-  width: 2em;
-}
-
 .global-side-nav {
-  z-index: 90;
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  pointer-events: none;
+
+  &:not(.hidden) {
+    pointer-events: auto;
+  }
 }
 
 .backdrop {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.1);
-  z-index: 90;
+  inset: 0;
+  background: rgb(18 24 33 / 18%);
+  opacity: 1;
+  transition: opacity 220ms ease;
 }
 
 .inner {
   position: fixed;
-  top: 0;
+  top: 64px;
   left: 0;
-  width: 240px;
-  max-width: 80vw;
-  padding-top: 60px;
-  height: 100vh;
-  background-color: var(--fnb-surface);
-  border-right: 3px solid var(--fnb-border);
-  z-index: 95;
-  transition: all 0.5s;
-}
-
-.side-nav-toggle {
-  font-size: 1.2rem;
-  text-align: center;
-  margin: auto 0.5rem;
-  color: var(--fnb-text-muted);
-  cursor: pointer;
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: var(--fnb-radius);
-  display: flex;
-  align-items: center;
-  background-color: rgba(0, 0, 0, 0.05);
-
-  [data-icon] {
-    margin: 0 auto;
-  }
+  width: 248px;
+  max-width: min(88vw, 248px);
+  height: calc(100dvh - 64px);
+  padding: 20px 18px 28px;
+  overflow: hidden;
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-left: 0;
+  border-radius: 0 18px 18px 0;
+  box-shadow: 8px 0 24px rgb(74 37 77 / 18%);
+  transform: translateX(0);
+  transition: transform 240ms ease;
 }
 
 .list {
-  max-height: calc(100vh - 60px);
-  overflow-x: auto;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--pf-line) transparent;
 }
 
 .group {
-  margin: 0.5rem 0;
+  margin: 0 0 20px;
 
   .title {
     user-select: none;
-    padding: 0 1.6rem;
-    margin: 1.6rem 0 0.4rem 0;
-    font-weight: 600;
+    padding: 0 10px;
+    margin: 0 0 7px;
+    color: #8a7490;
+    font-weight: 700;
     font-size: 0.8rem;
-    color: var(--fnb-text-muted);
   }
 
   ul {
+    display: grid;
+    gap: 7px;
     margin: 0;
     list-style: none;
-    padding-left: 0;
+    padding: 0;
   }
 }
 
-// Top banner
-.banner {
-  height: 60px;
-  padding: 0.4rem;
-  display: flex;
-  align-items: center;
-}
-
-.siteLogo {
-  height: 2.2rem;
-}
-
-// Hidden state
 .hidden {
   .inner {
-    left: -300px;
+    transform: translateX(-110%);
   }
 
   .backdrop {
-    display: none;
+    opacity: 0;
   }
 }
 
 .search-area {
-  display: block;
-  padding: 0 1.6rem;
+  display: none;
+  padding: 0;
 
-  .search-box {
-    border-radius: var(--fnb-radius);
+  :deep(input) {
+    height: 40px;
+    border: 1px solid var(--pf-line);
+    border-radius: 10px;
+    box-shadow: none;
   }
 }
 
-@media screen and (min-width: 450px) {
+@media (max-width: 449px) {
   .search-area {
-    display: none !important;
+    display: block;
+    margin-bottom: 20px;
   }
 }
 </style>

@@ -4,55 +4,59 @@ FnbCard.user-status-card(shadow='sm')
   .user-status(v-if='userStore.isLoggedIn')
     .user-identity
       RouterLink.plain(:to='"/users/" + userStore.userId')
-        img.avatar(:src='userStore.userProfileImg', :alt='userStore.userName')
+        img.avatar(:alt='userStore.userName', :src='userStore.userProfileImg')
       .user-info
         .user-name
           RouterLink.plain(:to='"/users/" + userStore.userId') {{ userStore.userName }}
-          FnbTag.premium-badge(v-if='userStore.user?.premium', color='var(--fnb-highlight)') Premium
+          FnbTag.premium-badge(
+            color='var(--fnb-highlight)'
+            v-if='userStore.user?.premium'
+          ) Premium
         .user-id @{{ userStore.userPixivId }}
     .user-actions
       FnbButton(
-        size='sm',
-        tag='RouterLink',
         :to='`/users/${userStore.userId}?tab=public_bookmarks`'
+        size='sm'
+        tag='RouterLink'
       )
         template(#icon): FnbIcon: ITablerBookmark
         | 收藏
       FnbButton(
-        size='sm',
-        tag='RouterLink',
         :to='`/users/${userStore.userId}/following`'
+        size='sm'
+        tag='RouterLink'
       )
         template(#icon): FnbIcon: ITablerUsers
         | 关注
-      FnbButton(
-        size='sm',
-        tag='RouterLink',
-        to='/login'
-      )
+      FnbButton(size='sm' tag='RouterLink' to='/login')
         template(#icon): FnbIcon: ITablerKey
         | 令牌
 
   //- Not logged in
   .user-status.guest(v-else)
     .user-identity
-      img.avatar(:src='noProfileImg', alt='游客')
+      img.avatar(:src='noProfileImg' alt='游客')
       .user-info
         .user-name 游客
         .user-id 绑定令牌，同步您的 Pixiv 信息！
     .user-actions
       FnbButton(
-        size='sm',
-        variant='primary',
-        tag='RouterLink',
         :to='"/login?back=/"'
+        size='sm'
+        tag='RouterLink'
+        variant='primary'
       )
         template(#icon): FnbIcon: ITablerLogin
         | 登录
 </template>
 
 <script lang="ts" setup>
-import { IconBookmark as ITablerBookmark, IconUsers as ITablerUsers, IconKey as ITablerKey, IconLogin as ITablerLogin } from '@tabler/icons-vue'
+import {
+  IconBookmark as ITablerBookmark,
+  IconUsers as ITablerUsers,
+  IconKey as ITablerKey,
+  IconLogin as ITablerLogin,
+} from '@tabler/icons-vue'
 import { useUserStore } from '~/stores/session'
 import { pximgS } from '~/utils/pximg'
 
@@ -63,6 +67,11 @@ const noProfileImg = pximgS('common/images/no_profile.png')
 <style scoped lang="scss">
 .user-status-card {
   padding: 0.75rem 1rem;
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 16px;
+  box-shadow: var(--pf-card-shadow);
 }
 
 .user-status {
@@ -83,7 +92,9 @@ const noProfileImg = pximgS('common/images/no_profile.png')
 .avatar {
   width: 48px;
   height: 48px;
-  @include fnb-border-sm;
+  object-fit: cover;
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
   flex-shrink: 0;
 }
 
@@ -112,7 +123,7 @@ const noProfileImg = pximgS('common/images/no_profile.png')
 
 .user-id {
   font-size: 0.8rem;
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
 }
 
 .user-actions {
@@ -120,5 +131,15 @@ const noProfileImg = pximgS('common/images/no_profile.png')
   gap: 0.5rem;
   flex-shrink: 0;
   flex-wrap: wrap;
+
+  :deep(.fnb-button) {
+    border: 1px solid var(--pf-line);
+    border-radius: 10px;
+    box-shadow: none;
+
+    &:hover {
+      transform: translateY(-1px);
+    }
+  }
 }
 </style>

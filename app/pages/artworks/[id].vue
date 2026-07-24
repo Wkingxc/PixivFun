@@ -1,7 +1,32 @@
 <template lang="pug">
 #artwork-view
-  //- Loading
-  section.placeholder(v-if='loading')
+  //- Modern loading
+  section.modern-placeholder(
+    :style='directoryTuningStyle'
+    v-if='loading && artworkDetailStyle === "modern"'
+  )
+    .modern-placeholder__shell
+      .modern-placeholder__main
+        .modern-placeholder__panel.modern-placeholder__media
+          FnbSkeleton(block height='100%' width='100%')
+        .modern-placeholder__panel.modern-placeholder__meta
+          FnbSkeleton(height='2rem' width='46%')
+          FnbSkeleton(:repeat='3' text)
+      .modern-placeholder__panel.modern-placeholder__directory
+        .modern-placeholder__heading
+          FnbSkeleton(height='1.5rem' width='7rem')
+          FnbSkeleton(height='2.1rem' width='9rem')
+        .modern-placeholder__grid
+          FnbSkeleton(
+            :key='index'
+            block
+            height='100%'
+            v-for='index in 6'
+            width='100%'
+          )
+
+  //- Classic loading
+  section.placeholder(v-else-if='loading')
     .gallery
       FnbSkeleton(
         block
@@ -29,7 +54,9 @@
         FnbSkeleton(height='8rem' width='100%')
 
   //- Done
-  section.illust-container(v-if='!error && illust')
+  section.illust-container(
+    v-if='!error && illust && artworkDetailStyle === "classic"'
+  )
     #top-area
       .align-center(:style='{ marginBottom: "1rem" }' v-if='isUgoira')
         UgoiraViewer(:illust='illust')
@@ -49,7 +76,7 @@
               p.stats
                 //- 点赞
                 button.stat-item.like-btn(
-                  :aria-label='illust.likeData ? "已赞" : "点赞"'
+                  :aria-label='illust.likeData ? "已赞" : "点赞"',
                   :class='{ liked: illust.likeData }',
                   :title='!userStore.isLoggedIn ? "点赞" : illust.likeData ? "已赞（不可取消）" : "点赞"'
                   @click='handleLike'
@@ -59,7 +86,7 @@
 
                 //- 收藏
                 button.stat-item.bookmark-btn(
-                  :aria-label='illust.bookmarkData ? "取消收藏" : "添加收藏"'
+                  :aria-label='illust.bookmarkData ? "取消收藏" : "添加收藏"',
                   :class='{ bookmarked: illust.bookmarkData }',
                   :title='!userStore.isLoggedIn ? "收藏" : illust.bookmarkData ? "取消收藏" : "添加收藏"'
                   @click='illust?.bookmarkData ? handleRemoveBookmark() : handleAddBookmark()'
@@ -90,7 +117,8 @@
               ) AI生成
               ArtTag(
                 :key='_',
-                :tag='item.tag'
+                :tag='item.tag',
+                :translation='item.translation?.en'
                 v-for='(item, _) in illust.tags.tags'
               )
 
@@ -121,13 +149,32 @@
     //- 相关推荐
     .recommend-works.body-inner(ref='recommendRef')
       h2 相关推荐
-      ArtworkList(:list='artworkStore.recommendations', :loading='!artworkStore.recommendations.length')
+      ArtworkList(
+        :list='artworkStore.recommendations',
+        :loading='!artworkStore.recommendations.length'
+      )
       ShowMore(
         :loading='recommendLoading',
         :method='handleMoreRecommend',
         :text='recommendLoading ? "加载中" : "加载更多"'
         v-if='artworkStore.recommendations.length && artworkStore.recommendNextIds.length'
       )
+
+  ArtworkDetailModern(
+    :bookmark-loading='bookmarkLoading',
+    :has-more-recommendations='!!artworkStore.recommendNextIds.length',
+    :illust='illust',
+    :like-loading='likeLoading',
+    :pages='pages',
+    :recommend-loading='recommendLoading',
+    :recommendations='artworkStore.recommendations',
+    :user='user'
+    @add-bookmark='handleAddBookmark'
+    @like='handleLike'
+    @more-recommend='handleMoreRecommend'
+    @remove-bookmark='handleRemoveBookmark'
+    v-else-if='!error && illust'
+  )
 
   //- Error
   section.error(v-if='error')
@@ -141,6 +188,7 @@ definePageMeta({
 })
 import ArtTag from '~/components/ArtTag.vue'
 import ArtworkList from '~/components/Artwork/ArtworkList.vue'
+import ArtworkDetailModern from '~/components/Artwork/ArtworkDetailModern.vue'
 import AuthorCard from '~/components/AuthorCard.vue'
 import Card from '~/components/Card.vue'
 import CommentArea from '~/components/Comment/CommentArea.vue'
@@ -161,6 +209,10 @@ import { useArtworkStore } from '~/stores/artwork'
 import { useUserProfileStore } from '~/stores/user-profile'
 import { effect } from 'vue'
 import { setTitle } from '~/utils/setTitle'
+import {
+  artworkDirectoryScrollKey,
+  parseArtworkDirectoryScroll,
+} from '~/utils/artworkDirectoryNavigation'
 
 const loading = ref(true)
 const error = ref('')
@@ -174,6 +226,8 @@ const route = useRoute()
 const userStore = useUserStore()
 const artworkStore = useArtworkStore()
 const userProfileStore = useUserProfileStore()
+const { style: artworkDetailStyle } = useArtworkDetailStyle()
+const { style: directoryTuningStyle } = useArtworkDirectoryTuning()
 
 const recommendRef = ref<HTMLDivElement | null>(null)
 const authorRef = ref<HTMLElement>()
@@ -216,7 +270,36 @@ function addObserver(elementRef: Ref, cb: () => any) {
   })
 }
 
+function consumeDirectoryScroll(artworkId: string): number | null {
+  if (!import.meta.client) return null
+
+  const key = artworkDirectoryScrollKey(artworkId)
+  try {
+    const scrollTop = parseArtworkDirectoryScroll(localStorage.getItem(key))
+    localStorage.removeItem(key)
+    return scrollTop
+  } catch {
+    return null
+  }
+}
+
+async function restoreDirectoryScroll(
+  artworkId: string,
+  scrollTop: number | null
+): Promise<void> {
+  if (!import.meta.client || scrollTop === null) return
+
+  await nextTick()
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (String(route.params.id) !== artworkId) return
+      window.scrollTo({ top: scrollTop, behavior: 'auto' })
+    })
+  })
+}
+
 async function init(id: string): Promise<void> {
+  const directoryScrollTop = consumeDirectoryScroll(id)
   loading.value = true
 
   // Reset states
@@ -234,6 +317,7 @@ async function init(id: string): Promise<void> {
     illust.value = cachedArtwork
     pages.value = cachedPages
     loading.value = false
+    await restoreDirectoryScroll(id, directoryScrollTop)
     return
   }
 
@@ -253,6 +337,7 @@ async function init(id: string): Promise<void> {
     }
   } finally {
     loading.value = false
+    await restoreDirectoryScroll(id, directoryScrollTop)
   }
 }
 
@@ -380,9 +465,118 @@ effect(() => setTitle(illust.value?.illustTitle, 'Artworks'))
 onMounted(() => {
   init(route.params.id as string)
 })
+
+watch(
+  [loading, artworkDetailStyle],
+  ([isLoading, style]) => {
+    if (!isLoading && style === 'modern' && illust.value) {
+      if (!user.value) handleUserInit(illust.value.userId)
+      if (!artworkStore.recommendations.length) {
+        handleRecommendInit(illust.value.illustId)
+      }
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped lang="scss">
+.modern-placeholder {
+  min-height: calc(100vh - 64px);
+  padding: 28px 0;
+  background: var(--pf-bg);
+}
+
+.modern-placeholder__shell {
+  display: grid;
+  grid-template-columns:
+    min(
+      var(--modern-content-width, 740px),
+      calc(100vw - var(--modern-sidebar-width, 620px) - 96px)
+    )
+    var(--modern-sidebar-width, 620px);
+  align-items: start;
+  gap: 28px;
+  width: auto;
+  margin-right: 20px;
+  margin-left: max(24px, calc((100% - 1440px) / 2));
+}
+
+.modern-placeholder__main {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.modern-placeholder__panel {
+  overflow: hidden;
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 18px;
+  box-shadow: var(--pf-card-shadow);
+}
+
+.modern-placeholder__media {
+  height: min(68vh, 720px);
+  min-height: 420px;
+  padding: 16px;
+}
+
+.modern-placeholder__meta,
+.modern-placeholder__directory {
+  padding: 20px;
+}
+
+.modern-placeholder__meta {
+  display: grid;
+  gap: 14px;
+}
+
+.modern-placeholder__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.modern-placeholder__grid {
+  display: grid;
+  grid-template-columns: repeat(
+    2,
+    min(var(--directory-card-size, 240px), calc((100% - 10px) / 2))
+  );
+  gap: 10px;
+  justify-content: center;
+
+  :deep(.fnb-skeleton) {
+    aspect-ratio: 1;
+    border-radius: 14px;
+  }
+}
+
+@media (max-width: 920px) {
+  .modern-placeholder__shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .modern-placeholder {
+    padding-top: 14px;
+  }
+
+  .modern-placeholder__shell {
+    gap: 14px;
+    margin-right: 12px;
+    margin-left: 12px;
+  }
+
+  .modern-placeholder__panel {
+    border-radius: 14px;
+  }
+}
+
 section {
   padding-top: 1rem;
 }
@@ -440,7 +634,9 @@ h1 {
     font-weight: 800;
     font-size: 0.9rem;
     line-height: 1;
-    transition: background-color 0.15s, color 0.15s;
+    transition:
+      background-color 0.15s,
+      color 0.15s;
 
     & + .stat-item {
       border-left: 2px solid var(--fnb-border);

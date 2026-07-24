@@ -32,8 +32,10 @@
   --fnb-radius-lg: 0;
 
   // Typography
-  --fnb-font-sans: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
-  --fnb-font-display: 'Archivo Black', 'Noto Sans SC', system-ui, sans-serif;
+  --fnb-font-sans:
+    'Geist', 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui,
+    sans-serif;
+  --fnb-font-display: 'Geist', 'Noto Sans SC', system-ui, sans-serif;
   --fnb-font-mono: 'Space Grotesk', ui-monospace, monospace;
 
   // Shadows. --fnb-shadow-color defaults to the border color (black in light
@@ -54,6 +56,18 @@
   --pixiv-ai-text: #c70;
   --pixiv-r18-badge: rgba(255, 0, 0, 0.8);
   --pixiv-ai-badge: rgba(204, 102, 0, 0.8);
+
+  // PixivFun home experience
+  --pf-bg: #fbf8fb;
+  --pf-surface: #fff;
+  --pf-text: #172033;
+  --pf-muted: #7b8498;
+  --pf-line: #eee7ed;
+  --pf-blue: #2388ff;
+  --pf-pink: #f06aae;
+  --pf-soft-blue: #eaf4ff;
+  --pf-soft-pink: #fce1ef;
+  --pf-card-shadow: 0 6px 20px rgba(217, 112, 165, 0.11);
 }
 
 // ============================================================
@@ -71,6 +85,15 @@ html.dark {
   --fnb-skeleton: #2a2e38;
   --fnb-divider: #343a45;
   --fnb-grid-line: rgba(255, 255, 255, 0.04);
+
+  --pf-bg: #15171d;
+  --pf-surface: #20232c;
+  --pf-text: #eef0f3;
+  --pf-muted: #a8afbc;
+  --pf-line: #343a45;
+  --pf-soft-blue: #1d344d;
+  --pf-soft-pink: #432a3a;
+  --pf-card-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
 
   // Project tokens
   --pixiv-original: #ff4fa3;

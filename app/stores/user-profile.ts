@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import type { ArtworkInfo, User } from '~/types'
 import { sortArtList } from '~/utils'
+import { BOOKMARK_PAGE_SIZE } from '~/utils/refineModernArtwork'
 
 export const useUserProfileStore = defineStore('user-profile', () => {
   const pixivClient = usePixivClient()
@@ -35,7 +36,7 @@ export const useUserProfileStore = defineStore('user-profile', () => {
     return pixivClient.getUserBookmarks(userId, {
       tag: '',
       offset: params.offset,
-      limit: 48,
+      limit: BOOKMARK_PAGE_SIZE,
       rest: params.hidden ? 'hide' : 'show',
     })
   }

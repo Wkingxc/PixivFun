@@ -17,12 +17,12 @@ export default defineNuxtConfig({
       link: [
         {
           rel: 'stylesheet',
-          href: 'https://fonts.googleapis.com/css2?family=Archivo+Black&family=Noto+Sans+SC:wght@400;700;900&display=swap',
+          href: 'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;900&display=swap',
         },
         {
           rel: 'icon',
-          type: 'image/svg+xml',
-          href: '/favicon.svg',
+          type: 'image/png',
+          href: '/favicon.png',
         },
       ],
     },
@@ -60,6 +60,7 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    sessionSecret: process.env.NUXT_SESSION_SECRET || '',
     uaBlacklist: process.env.UA_BLACKLIST || '[]',
     public: {
       pximgBaseUrlI: process.env.VITE_PXIMG_BASEURL_I || '/-/',

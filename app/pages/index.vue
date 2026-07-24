@@ -1,143 +1,123 @@
 <template lang="pug">
 #home-view
-  //- ── Hero Section ──
-  .hero-section(
-    :style='{ "background-image": `url(${randomBgRegularUrl || ""})` }'
-  )
+  section.hero-section(:style='heroStyle' aria-labelledby='home-hero-title')
     .hero-overlay
     .hero-content
-      .site-logo
-        img(:src='SiteLogo')
-      .description Now, everyone can enjoy Pixiv
+      h1#home-hero-title.hero-logo
+        img(:src='logoUrl' alt='PixivFun')
+      p.hero-subtitle Let's enjoy Pixiv Fun!
 
-      .search-area
-        SearchBox.big.search
+      SearchBox.big.hero-search(placeholder='搜索关键词，或输入 id:作品编号')
 
-      .quick-links
-        FnbTag(clickable, @click='$router.push("/ranking")')
-          FnbIcon: ITablerChartBar
-          |  排行榜
-        FnbTag(clickable, @click='$router.push("/following/latest")')
-          FnbIcon: ITablerUsers
-          |  关注
-        FnbTag(clickable, @click='scrollToDiscovery')
-          FnbIcon: ITablerCompass
-          |  探索
-        FnbTag(clickable, @click='scrollToDiscovery(); changeDiscoveryTab("novel")')
-          FnbIcon: ITablerBook
-          |  小说
+      nav.quick-links(aria-label='主页快捷入口')
+        FnbTag(@click='$router.push("/ranking")' clickable)
+          ITablerChartBar(aria-hidden='true')
+          | 排行榜
+        FnbTag(@click='$router.push("/following/latest")' clickable)
+          ITablerUsers(aria-hidden='true')
+          | 关注更新
+        FnbTag(@click='scrollToDiscovery' clickable)
+          ITablerCompass(aria-hidden='true')
+          | 探索
+        FnbTag(@click='openNovelDiscovery' clickable)
+          ITablerBook(aria-hidden='true')
+          | 小说
 
-    .bg-info
-      a.pointer(@click='homeStore.fetchRandomBg()', title='换一个~')
-        FnbIcon: IFasRandom
-      a.pointer(
-        @click='isShowBgInfo = true',
-        style='margin-left: 0.5em',
-        title='关于背景',
+    .hero-utilities
+      button(
+        @click='homeStore.fetchRandomBg()'
+        aria-label='更换背景作品'
+        title='更换背景作品'
+      )
+        ITablerShuffle(aria-hidden='true')
+      button(
+        @click='isShowBgInfo = true'
+        aria-label='查看背景作品信息'
+        title='查看背景作品信息'
         v-if='randomBg?.id'
       )
-        FnbIcon: IFasInfoCircle
+        ITablerInfoCircle(aria-hidden='true')
 
-  //- ── Background Info Dialog ──
-  .fnb-dialog-overlay(v-if='isShowBgInfo', @click.self='isShowBgInfo = false')
-    .fnb-dialog-card
-      button.fnb-dialog-card__close(@click='isShowBgInfo = false', aria-label='关闭') ×
-      .fnb-dialog-card__header {{ `背景图片：${randomBg?.alt}` }}
+  .fnb-dialog-overlay(@click.self='isShowBgInfo = false' v-if='isShowBgInfo')
+    .fnb-dialog-card(
+      aria-labelledby='background-dialog-title'
+      aria-modal='true'
+      role='dialog'
+    )
+      button.fnb-dialog-card__close(
+        @click='isShowBgInfo = false'
+        aria-label='关闭'
+      )
+        ITablerX(aria-hidden='true')
+      #background-dialog-title.fnb-dialog-card__header {{ `背景作品：${randomBg?.alt || randomBg?.title}` }}
       .fnb-dialog-card__body
         .bg-info-modal
-          .align-center
-            RouterLink.thumb(:to='"/artworks/" + randomBg?.id')
-              img(
-                :src='randomBgRegularUrl',
-                lazyload
-              )
-            .desc
-              .author
-                RouterLink(:to='"/users/" + randomBg?.userId') @{{ randomBg?.userName }}
-                | 的作品 (ID: {{ randomBg?.id }})
-            .tag-list(style='display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-top: 1rem')
-              FnbTag(
-                :key='tag',
-                clickable,
-                @click='$router.push({ path: "/search", query: { q: tag } })',
-                v-for='tag in randomBg?.tags'
-              ) {{ tag }}
+          RouterLink.thumb(:to='`/artworks/${randomBg?.id}`')
+            img(:alt='randomBg?.alt', :src='randomBgRegularUrl')
+          .desc
+            RouterLink(:to='`/users/${randomBg?.userId}`') @{{ randomBg?.userName }}
+            span 的作品（ID: {{ randomBg?.id }}）
+          .tag-list
+            FnbTag(
+              :key='tag'
+              @click='$router.push({ path: "/search", query: { q: tag } })'
+              clickable
+              v-for='tag in randomBg?.tags'
+            ) {{ tag }}
 
-  //- ── Body Content ──
-  .body-inner
-    //- User Status Card
-    UserStatusCard
+  main.home-main
+    UserStatusCard(v-if='!userStore.isLoggedIn')
 
-    //- Two-Column Content Area
-    .content-grid
-      .content-left
-        h3.section-title
-          FnbIcon: ITablerTrophy
-          |  今日排行
-        RankingCarousel(
-          v-if='homeStore.rankingList.length',
-          :artworks='homeStore.rankingList'
-        )
-        .ranking-skeleton(v-else-if='homeStore.loadingRanking')
-          FnbSkeleton(block, height='360px')
+    .overview-grid
+      RankingCarousel(
+        :artworks='homeStore.rankingList'
+        v-if='homeStore.rankingList.length'
+      )
+      .featured-skeleton(v-else)
+        FnbSkeleton(block height='360px')
 
-      .content-right
-        FollowingLatest(
-          :artworks='homeStore.followingList',
-          :loading='homeStore.loadingFollowing',
-          :logged-in='userStore.isLoggedIn'
-        )
+      DailyRankingPanel(
+        :artworks='homeStore.rankingList',
+        :loading='homeStore.loadingRanking'
+      )
 
-    //- Discovery Section
-    section.discover(ref='discoverRef')
+    section.discover(aria-labelledby='discovery-title' ref='discoverRef')
       .discover-header
-        h2
-          FnbIcon: ITablerCompass
-          |  探索发现
+        h2#discovery-title.plain
+          ITablerSparkles(aria-hidden='true')
+          | 探索发现
         .discover-controls
           DiscoveryTabs(
-            :model-value='discoveryTab',
+            :model-value='discoveryTab'
             @update:model-value='changeDiscoveryTab'
           )
           FnbSelect(
-            v-if='userStore.isLoggedIn',
             :model-value='discoveryMode',
-            :options='discoveryModeOptions',
+            :options='discoveryModeOptions'
             @update:model-value='changeDiscoveryMode'
+            v-if='userStore.isLoggedIn'
           )
           FnbButton(
-            :loading='isDiscoveryLoading',
-            @click='refreshDiscovery',
+            :loading='isDiscoveryLoading'
+            @click='refreshDiscovery'
             size='sm'
           )
-            template(#icon): IFasRandom
+            template(#icon)
+              ITablerRefresh(aria-hidden='true')
             | {{ isDiscoveryLoading ? '加载中' : '换一批' }}
+
       ArtworkList(
-        v-if='discoveryTab !== "novel"',
-        :list='discoveryStore.discoveryList',
-        :loading='discoveryStore.loadingDiscovery'
+        :list='displayedDiscoveryList',
+        :loading='isDiscoveryLoading ? discoveryArtworkLimit : false'
+        v-if='discoveryTab !== "novel"'
       )
       NovelList(
-        v-else,
-        :list='discoveryStore.novelDiscoveryList',
-        :loading='discoveryStore.loadingNovelDiscovery'
+        :list='displayedNovelDiscoveryList',
+        :loading='isDiscoveryLoading ? discoveryNovelLimit : false'
+        v-else
       )
 
-      //- Infinite scroll sentinel / login prompt
-      .discover-footer(v-if='!discoveryStore.loadingDiscovery')
-        .loading-more(v-if='userStore.isLoggedIn && (discoveryTab === "novel" ? discoveryStore.loadingMoreNovelDiscovery : discoveryStore.loadingMoreDiscovery)')
-          FnbSkeleton(block, height='2rem', width='200px')
-        .login-prompt(v-else-if='!userStore.isLoggedIn && discoveryStore.discoveryList.length')
-          p 登录后解锁无限浏览
-          FnbButton(
-            size='sm',
-            variant='primary',
-            tag='RouterLink',
-            to='/login?back=/'
-          )
-            template(#icon): ITablerLogin
-            | 登录
-        div(v-else-if='userStore.isLoggedIn', ref='scrollSentinel')
+  SiteFooter(compact)
 </template>
 
 <script lang="ts" setup>
@@ -145,17 +125,25 @@ import ArtworkList from '~/components/Artwork/ArtworkList.vue'
 import NovelList from '~/components/Novel/NovelList.vue'
 import SearchBox from '~/components/SearchBox.vue'
 import RankingCarousel from '~/components/RankingCarousel.vue'
+import DailyRankingPanel from '~/components/DailyRankingPanel.vue'
 import UserStatusCard from '~/components/UserStatusCard.vue'
-import FollowingLatest from '~/components/FollowingLatest.vue'
 import DiscoveryTabs from '~/components/DiscoveryTabs.vue'
-import IFasRandom from '~icons/fa-solid/random'
-import IFasInfoCircle from '~icons/fa-solid/info-circle'
-import { IconChartBar as ITablerChartBar, IconUsers as ITablerUsers, IconCompass as ITablerCompass, IconBook as ITablerBook, IconTrophy as ITablerTrophy, IconLogin as ITablerLogin } from '@tabler/icons-vue'
+import logoUrl from '~/assets/PixivFun.png'
+import {
+  IconBook as ITablerBook,
+  IconChartBar as ITablerChartBar,
+  IconCompass as ITablerCompass,
+  IconInfoCircle as ITablerInfoCircle,
+  IconRefresh as ITablerRefresh,
+  IconArrowsShuffle as ITablerShuffle,
+  IconSparkles as ITablerSparkles,
+  IconUsers as ITablerUsers,
+  IconX as ITablerX,
+} from '@tabler/icons-vue'
 import { useHomeStore } from '~/stores/home'
 import { useDiscoveryStore } from '~/stores/discovery'
 import { useUserStore } from '~/stores/session'
 import { toRegularUrl } from '~/utils/pximg'
-import SiteLogo from '~/assets/PixivNow.svg'
 import { setTitle } from '~/utils/setTitle'
 
 definePageMeta({ name: 'home' })
@@ -166,20 +154,24 @@ useHead({
 
 const isShowBgInfo = ref(false)
 useBodyScrollLock(isShowBgInfo)
+
 const homeStore = useHomeStore()
 const discoveryStore = useDiscoveryStore()
 const userStore = useUserStore()
 const route = useRoute()
 const router = useRouter()
 const discoverRef = ref<HTMLElement | null>(null)
-const scrollSentinel = ref<HTMLElement | null>(null)
 
 const randomBg = computed(() => homeStore.randomBg)
 const randomBgRegularUrl = computed(() => {
-  const bg = randomBg.value
-  if (!bg?.url) return ''
-  return toRegularUrl(bg.url)
+  const background = randomBg.value
+  return background?.url ? toRegularUrl(background.url) : ''
 })
+const heroStyle = computed(() =>
+  randomBgRegularUrl.value
+    ? { backgroundImage: `url("${randomBgRegularUrl.value}")` }
+    : undefined
+)
 
 const discoveryModeOptions = [
   { label: '混池', value: 'all' },
@@ -189,11 +181,39 @@ const discoveryModeOptions = [
 
 const savedDiscoveryTab = useLocalStorage('pixivnow:discovery-tab', 'all')
 const savedDiscoveryMode = useLocalStorage('pixivnow:discovery-mode', 'all')
-
 const discoveryTab = ref((route.query.tab as string) || savedDiscoveryTab.value)
-const discoveryMode = ref((route.query.mode as string) || savedDiscoveryMode.value)
+const discoveryMode = ref(
+  (route.query.mode as string) || savedDiscoveryMode.value
+)
 
 discoveryStore.discoveryMode = discoveryMode.value
+
+const isDiscoveryLoading = computed(() =>
+  discoveryTab.value === 'novel'
+    ? discoveryStore.loadingNovelDiscovery
+    : discoveryStore.loadingDiscovery
+)
+
+const isPhoneDiscovery = useMediaQuery('(max-width: 560px)')
+const isTabletDiscovery = useMediaQuery('(max-width: 820px)')
+const isCompactDiscovery = useMediaQuery('(max-width: 1180px)')
+const discoveryArtworkLimit = computed(() => {
+  if (isPhoneDiscovery.value) return 4
+  if (isTabletDiscovery.value) return 6
+  if (isCompactDiscovery.value) return 8
+  return 10
+})
+const discoveryNovelLimit = computed(() => {
+  if (isPhoneDiscovery.value) return 2
+  if (isTabletDiscovery.value) return 4
+  return 6
+})
+const displayedDiscoveryList = computed(() =>
+  discoveryStore.discoveryList.slice(0, discoveryArtworkLimit.value)
+)
+const displayedNovelDiscoveryList = computed(() =>
+  discoveryStore.novelDiscoveryList.slice(0, discoveryNovelLimit.value)
+)
 
 function syncDiscoveryQuery() {
   const query = { ...route.query } as Record<string, string>
@@ -221,12 +241,6 @@ function changeDiscoveryMode(mode: string) {
   refreshDiscovery()
 }
 
-const isDiscoveryLoading = computed(() =>
-  discoveryTab.value === 'novel'
-    ? discoveryStore.loadingNovelDiscovery
-    : discoveryStore.loadingDiscovery
-)
-
 function refreshDiscovery() {
   if (discoveryTab.value === 'novel') {
     discoveryStore.fetchNovelDiscovery()
@@ -239,336 +253,515 @@ function scrollToDiscovery() {
   discoverRef.value?.scrollIntoView({ behavior: 'smooth' })
 }
 
-// Infinite scroll observer
-useIntersectionObserver(scrollSentinel, ([{ isIntersecting }]) => {
-  if (isIntersecting && userStore.isLoggedIn) {
-    if (discoveryTab.value === 'novel') {
-      discoveryStore.appendNovelDiscovery()
-    } else {
-      discoveryStore.appendDiscovery()
-    }
-  }
-})
-
-// Fetch following when login state becomes available (async session init)
-watch(() => userStore.isLoggedIn, (loggedIn) => {
-  if (loggedIn && !homeStore.followingList.length) {
-    homeStore.fetchFollowing()
-  }
-}, { immediate: true })
+function openNovelDiscovery() {
+  changeDiscoveryTab('novel')
+  scrollToDiscovery()
+}
 
 onMounted(() => {
   setTitle()
   syncDiscoveryQuery()
-  if (!homeStore.randomBg) {
-    homeStore.fetchRandomBg()
-  }
   if (!homeStore.rankingList.length) {
     homeStore.fetchRanking()
+  } else if (!homeStore.randomBg) {
+    homeStore.fetchRandomBg()
   }
-  if (!discoveryStore.discoveryList.length) {
-    discoveryStore.fetchDiscovery()
-  }
+  if (!discoveryStore.discoveryList.length) discoveryStore.fetchDiscovery()
 })
 </script>
 
 <style lang="scss">
+body[data-route='home'] {
+  background-color: var(--pf-bg);
+  background-image: none;
+
+  #app-full-container > main > article {
+    padding-bottom: 0;
+  }
+}
+
 #home-view {
-  // ── Hero ──
+  min-height: 100vh;
+  color: var(--pf-text);
+  background: var(--pf-bg);
+
   .hero-section {
-    min-height: 65vh;
-    margin-top: -63px;
-    padding: 30px 10%;
-    padding-top: 93px;
+    position: relative;
+    display: grid;
+    height: 610px;
+    margin-top: -64px;
+    padding: 64px 24px 0;
+    overflow: hidden;
+    place-items: start center;
+    color: #fff;
+    background-color: #142028;
     background-position: center;
     background-repeat: no-repeat;
     background-size: cover;
-    background-attachment: fixed;
-    position: relative;
-    color: #fff;
-    text-shadow: 0 0 2px #222;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   .hero-overlay {
     position: absolute;
     inset: 0;
-    background-color: rgba(0, 0, 0, 0.3);
-    pointer-events: none;
-    z-index: 0;
+    background: rgb(11 20 26 / 78%);
   }
 
   .hero-content {
     position: relative;
     z-index: 1;
+    display: grid;
+    justify-items: center;
+    width: min(700px, 100%);
+    margin-top: 61px;
     text-align: center;
-    width: 100%;
-    max-width: 600px;
   }
 
-  .site-logo {
+  .hero-logo {
+    margin: 0;
+    line-height: 0;
+
     img {
-      height: 10rem;
-      width: auto;
+      display: block;
+      width: min(250px, 64vw);
+      height: auto;
     }
-    margin-bottom: 0.25rem;
   }
 
-  .description {
-    margin-bottom: 2rem;
+  .hero-subtitle {
+    margin: 2px 0 20px;
+    font-size: 1.125rem;
   }
 
-  .search-area {
-    margin-bottom: 0.75rem;
+  .hero-search {
+    width: min(640px, 100%);
+    margin: 0;
+    color: #172033;
+    text-align: left;
 
-    > * {
-      width: 100%;
+    input {
+      height: 64px;
+      padding-inline: 54px 18px;
+      color: #172033;
+      background: #fff;
+      border: 3px solid #111;
+      border-radius: 3px;
+      box-shadow: 0 8px 26px rgb(0 0 0 / 18%);
+      font-size: 1.05rem;
+
+      &::placeholder {
+        color: #73777e;
+      }
+    }
+
+    .icon,
+    [data-icon] {
+      left: 18px;
+      width: 28px;
+      height: 28px;
+      color: #666a70;
     }
   }
 
   .quick-links {
     display: flex;
-    justify-content: center;
-    gap: 0.5rem;
     flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 20px;
 
     .fnb-tag {
-      color: #fff;
-      background: rgba(0, 0, 0, 0.4);
-      border-color: rgba(255, 255, 255, 0.5);
-      backdrop-filter: blur(4px);
-      text-shadow: none;
       display: inline-flex;
       align-items: center;
-      gap: 0.25rem;
+      gap: 7px;
+      min-height: 34px;
+      padding: 0 12px;
+      color: #fff;
+      background: rgb(16 22 28 / 86%);
+      border: 1px solid rgb(255 255 255 / 82%);
+      border-radius: 4px;
+      box-shadow: none;
+      font-size: 0.875rem;
+      font-weight: 400;
+
+      svg {
+        width: 17px;
+        height: 17px;
+      }
 
       &:hover {
-        background: var(--fnb-highlight);
-        color: var(--fnb-on-light);
-        border-color: var(--fnb-border);
+        color: #fff;
+        background: var(--pf-blue);
+        transform: translateY(-1px);
       }
     }
   }
 
-  .bg-info {
+  .hero-utilities {
     position: absolute;
-    right: 1.5rem;
-    bottom: 1rem;
-    font-size: 1.25rem;
-    z-index: 1;
+    z-index: 2;
+    right: 20px;
+    bottom: 18px;
+    display: flex;
+    gap: 8px;
 
-    a {
+    button {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      padding: 0;
       color: #fff;
-    }
-  }
+      background: rgb(11 20 26 / 42%);
+      border: 1px solid rgb(255 255 255 / 22%);
+      border-radius: 9px;
+      cursor: pointer;
+      place-items: center;
 
-  // ── Background Info Modal (reuse existing dialog styles) ──
-  .bg-info-modal {
-    .thumb {
-      display: block;
-      text-align: center;
+      &:hover {
+        background: var(--pf-blue);
+      }
 
-      img {
-        max-width: 100%;
-        max-height: 60vh;
-        object-fit: contain;
+      svg {
+        width: 20px;
+        height: 20px;
       }
     }
-    .desc {
-      margin-top: 1rem;
-      font-size: 0.75rem;
-      font-style: italic;
-    }
   }
 
-  // ── Body content below hero ──
-  > .body-inner {
-    margin-top: 1.5rem;
+  .home-main {
+    width: min(1440px, 100%);
+    margin: 0 auto;
+    padding: 36px 28px 48px 40px;
   }
 
-  // ── User Status Card ──
   .user-status-card {
-    margin-bottom: 1.5rem;
+    margin-bottom: 18px;
   }
 
-  // ── Two-Column Grid ──
-  .content-grid {
+  .overview-grid {
     display: grid;
-    grid-template-columns: 1fr 340px;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-    align-items: start;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 16px;
+    align-items: stretch;
+    margin-bottom: 18px;
   }
 
-  .content-left,
-  .content-right {
-    min-height: 0;
-    min-width: 0;
+  .featured-skeleton {
+    height: 360px;
     overflow: hidden;
+    border: 1px solid var(--pf-line);
+    border-radius: 20px;
   }
 
-  .content-right {
-    .following-latest {
-      display: flex;
-      flex-direction: column;
-      max-height: calc(360px + 2rem + 1.1rem + 0.75rem);
-    }
-
-    .fnb-card {
-      flex: 1;
-      overflow-y: auto;
-      min-height: 0;
-    }
-  }
-
-  @media (max-width: 768px) {
-    .content-right .following-latest {
-      max-height: 320px;
-    }
-  }
-
-  .section-title {
-    font-family: var(--fnb-font-display);
-    font-weight: 900;
-    font-size: 1.1rem;
-    margin-bottom: 0.75rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .ranking-skeleton {
-    @include fnb-border;
-    overflow: hidden;
-  }
-
-  // ── Discovery ──
   .discover {
-    margin-top: 1rem;
+    padding: 16px 12px 24px;
+    color: var(--pf-text);
+    background: color-mix(in srgb, var(--pf-surface) 92%, transparent);
+    border: 1px solid var(--pf-line);
+    border-radius: 20px;
+    box-shadow: var(--pf-card-shadow);
   }
 
   .discover-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 1rem;
-    margin-bottom: 1rem;
+    gap: 20px;
+    min-height: 32px;
+    margin-bottom: 12px;
 
     h2 {
-      font-family: var(--fnb-font-display);
-      font-weight: 900;
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 7px;
       margin: 0;
+      color: var(--pf-text);
+      font-size: 1.125rem;
+      font-weight: 700;
+
+      svg {
+        width: 18px;
+        height: 18px;
+        color: var(--pf-pink);
+      }
     }
   }
 
   .discover-controls {
     display: flex;
-    align-items: center;
-    gap: 0.75rem;
     flex-wrap: wrap;
-  }
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
 
-  .discover-footer {
-    margin-top: 2rem;
-    text-align: center;
-
-    .loading-more {
-      display: flex;
-      justify-content: center;
+    .discovery-tabs {
+      gap: 4px;
     }
 
-    .login-prompt {
-      padding: 2rem;
-      color: var(--fnb-text-muted);
+    .discovery-tab,
+    .fnb-select-trigger,
+    .fnb-button {
+      min-height: 32px;
+      padding: 6px 12px;
+      color: var(--pf-muted);
+      background: transparent;
+      border: 0;
+      border-radius: 999px;
+      box-shadow: none;
+      font-size: 0.75rem;
+      font-weight: 500;
 
-      p {
-        margin-bottom: 0.75rem;
-        font-weight: 700;
+      &:hover {
+        color: var(--pf-blue);
+        background: var(--pf-soft-blue);
+        box-shadow: none;
+        transform: none;
       }
     }
+
+    .discovery-tab.active,
+    .fnb-button--primary {
+      color: #fff;
+      background: var(--pf-blue);
+      transform: none;
+    }
+
+    .fnb-select-dropdown {
+      color: var(--pf-text);
+      background: var(--pf-surface);
+      border: 1px solid var(--pf-line);
+      border-radius: 10px;
+      box-shadow: var(--pf-card-shadow);
+    }
+  }
+
+  .artworks-list {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+    justify-content: stretch;
+    margin: 0;
+
+    li {
+      display: block;
+      width: auto;
+      max-width: none;
+      min-width: 0;
+    }
+
+    .artwork-card-container {
+      height: 100%;
+    }
+
+    .artwork-card {
+      height: 100%;
+      transition: transform 180ms ease;
+
+      &:hover {
+        transform: translateY(-2px);
+      }
+    }
+
+    a {
+      text-decoration: none;
+    }
+
+    .artwork-image {
+      animation: none;
+    }
+  }
+
+  .novel-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0;
   }
 }
 
-// ── Dialog styles (used by other pages too) ──
 .fnb-dialog-overlay {
   position: fixed;
+  z-index: 9000;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9000;
+  padding: 24px;
+  background: rgb(11 20 26 / 58%);
 }
 
 .fnb-dialog-card {
-  @include fnb-border;
-  @include fnb-shadow-lg;
-  background: var(--fnb-surface);
-  width: 600px;
-  max-width: 86vw;
-  max-height: 80vh;
+  position: relative;
   display: flex;
   flex-direction: column;
-  position: relative;
+  width: min(600px, 100%);
+  max-height: 84vh;
+  overflow: hidden;
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 20px;
+  box-shadow: 0 24px 70px rgb(11 20 26 / 28%);
 
   &__close {
     position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    font-weight: 900;
-    line-height: 1;
-    cursor: pointer;
-    color: var(--fnb-text-muted);
     z-index: 1;
+    top: 12px;
+    right: 12px;
+    display: grid;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    color: var(--pf-muted);
+    background: var(--pf-bg);
+    border: 0;
+    border-radius: 9px;
+    cursor: pointer;
+    place-items: center;
 
     &:hover {
-      color: var(--fnb-text);
+      color: var(--pf-text);
     }
   }
 
   &__header {
-    font-family: var(--fnb-font-display);
-    font-weight: 900;
-    font-size: 1.1rem;
-    padding: 1rem 1.5rem 0.5rem;
-    padding-right: 2.5rem;
+    padding: 20px 56px 12px 22px;
+    font-size: 1.05rem;
+    font-weight: 700;
   }
 
   &__body {
-    padding: 0 1.5rem 1rem;
-    overflow-y: auto;
     flex: 1;
+    overflow-y: auto;
+    padding: 0 22px 22px;
   }
 }
 
-.dialog-enter-active,
-.dialog-leave-active {
-  transition: opacity 0.2s ease;
-}
-.dialog-enter-from,
-.dialog-leave-to {
-  opacity: 0;
+.bg-info-modal {
+  .thumb {
+    display: block;
+    overflow: hidden;
+    border-radius: 14px;
+
+    img {
+      display: block;
+      width: 100%;
+      max-height: 58vh;
+      object-fit: contain;
+      background: var(--pf-bg);
+    }
+  }
+
+  .desc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 14px;
+    color: var(--pf-muted);
+    font-size: 0.8rem;
+  }
+
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
 }
 
-// ── Responsive ──
-@media (max-width: 768px) {
+@media (max-width: 1180px) {
   #home-view {
-    .content-grid {
-      grid-template-columns: 1fr;
+    .artworks-list {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+}
+
+@media (max-width: 820px) {
+  #home-view {
+    .hero-section {
+      height: 560px;
+      place-items: center;
     }
 
+    .hero-content {
+      margin-top: 0;
+    }
+
+    .home-main {
+      padding: 24px 16px 40px;
+    }
+
+    .overview-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .discover-header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .discover-controls {
+      justify-content: flex-start;
+    }
+
+    .artworks-list {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .novel-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}
+
+@media (max-width: 560px) {
+  #home-view {
     .hero-section {
-      padding: 30px 5%;
-      padding-top: 93px;
+      height: 520px;
+      padding-inline: 16px;
+    }
+
+    .hero-logo img {
+      width: min(220px, 68vw);
+    }
+
+    .hero-subtitle {
+      margin-bottom: 18px;
+      font-size: 1rem;
+    }
+
+    .hero-search input {
+      height: 56px;
+      padding-left: 46px;
+      font-size: 0.9rem;
+    }
+
+    .hero-search .icon,
+    .hero-search [data-icon] {
+      left: 15px;
+      width: 23px;
+      height: 23px;
+    }
+
+    .quick-links {
+      gap: 7px;
+
+      .fnb-tag {
+        padding-inline: 10px;
+        font-size: 0.78rem;
+      }
+    }
+
+    .hero-utilities {
+      right: 12px;
+      bottom: 12px;
+    }
+
+    .artworks-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .novel-list {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 }

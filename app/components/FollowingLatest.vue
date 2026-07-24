@@ -1,39 +1,40 @@
 <template lang="pug">
 .following-latest
-  h3.section-title
-    FnbIcon: ITablerUsers
-    | 关注更新
   FnbCard(shadow='sm')
+    .panel-header
+      h2.plain
+        ITablerUsers(aria-hidden='true')
+        | 关注更新
+      RouterLink(to='/following/latest') 查看全部
+
     //- Loading
     template(v-if='loading')
-      .following-item(v-for='i in 4', :key='i')
-        FnbSkeleton(width='48px', height='48px')
+      .following-item(:key='i' v-for='i in 4')
+        FnbSkeleton(circle height='32px' width='32px')
         .following-item-info
-          FnbSkeleton(text, width='8em', height='1em')
-          FnbSkeleton(text, width='5em', height='0.8em')
+          FnbSkeleton(height='1em' text width='8em')
+          FnbSkeleton(height='0.8em' text width='5em')
 
     //- Logged in with artworks
     template(v-else-if='artworks.length')
       RouterLink.following-item(
-        v-for='item in artworks',
         :key='item.id',
         :to='"/artworks/" + item.id'
+        v-for='item in artworks.slice(0, 5)'
       )
-        DeferLoad.following-thumb(:src='item.url', :alt='item.alt')
+        img.following-avatar(:alt='item.userName', :src='item.profileImageUrl')
         .following-item-info
-          .following-item-title {{ item.title }}
-          .following-item-author @{{ item.userName }}
-      .following-more
-        RouterLink(to='/following/latest') 更多 →
+          .following-item-title {{ item.userName }}
+          .following-item-author 发布了「{{ item.title }}」
 
     //- Not logged in
     .following-empty(v-else-if='!loggedIn')
       p 登录后查看关注用户的最新作品
       FnbButton(
-        size='sm',
-        variant='primary',
-        tag='RouterLink',
+        size='sm'
+        tag='RouterLink'
         to='/login?back=/'
+        variant='primary'
       )
         template(#icon): FnbIcon: ITablerLogin
         | 登录
@@ -44,8 +45,10 @@
 </template>
 
 <script lang="ts" setup>
-import DeferLoad from '~/components/DeferLoad.vue'
-import { IconUsers as ITablerUsers, IconLogin as ITablerLogin } from '@tabler/icons-vue'
+import {
+  IconUsers as ITablerUsers,
+  IconLogin as ITablerLogin,
+} from '@tabler/icons-vue'
 import type { ArtworkInfo } from '~/types'
 
 defineProps<{
@@ -56,44 +59,83 @@ defineProps<{
 </script>
 
 <style scoped lang="scss">
-.section-title {
-  font-family: var(--fnb-font-display);
-  font-weight: 900;
-  font-size: 1.1rem;
-  margin-bottom: 0.75rem;
+.following-latest,
+:deep(.fnb-card) {
+  height: 360px;
+}
+
+:deep(.fnb-card) {
+  overflow: hidden;
+  padding: 18px;
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 20px;
+  box-shadow: var(--pf-card-shadow);
+}
+
+.panel-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  margin-bottom: 14px;
+
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+
+    svg {
+      width: 18px;
+      height: 18px;
+      color: var(--pf-pink);
+    }
+  }
+
+  a {
+    color: var(--pf-muted);
+    font-size: 0.75rem;
+    text-decoration: none;
+
+    &:hover {
+      color: var(--pf-blue);
+    }
+  }
 }
 
 .following-item {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 0;
   text-decoration: none;
-  color: var(--fnb-text);
-  transition: background 0.15s;
+  color: var(--pf-text);
+  transition:
+    color 150ms ease,
+    background 150ms ease;
 
   &:hover {
-    background: var(--fnb-highlight);
-    color: var(--fnb-on-light);
-    margin: 0 -1rem;
-    padding-left: 1rem;
-    padding-right: 1rem;
+    color: var(--pf-blue);
+    background: var(--pf-soft-blue);
   }
 
   & + .following-item {
-    border-top: 1px solid var(--fnb-border);
+    border-top: 1px solid var(--pf-line);
   }
 }
 
-.following-thumb {
-  width: 48px;
-  height: 48px;
+.following-avatar {
+  width: 32px;
+  height: 32px;
   object-fit: cover;
-  @include fnb-border-sm;
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
   flex-shrink: 0;
+  background: var(--fnb-skeleton);
 }
 
 .following-item-info {
@@ -102,37 +144,38 @@ defineProps<{
 }
 
 .following-item-title {
-  font-weight: 700;
-  font-size: 0.9rem;
+  font-weight: 650;
+  font-size: 0.75rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .following-item-author {
-  font-size: 0.8rem;
-  color: var(--fnb-text-muted);
-  font-style: italic;
-}
-
-.following-more {
-  text-align: right;
-  padding-top: 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 700;
-
-  a {
-    color: var(--fnb-brand);
-  }
+  color: var(--pf-muted);
+  font-size: 0.625rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .following-empty {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  min-height: 250px;
+  padding: 1rem;
+  color: var(--pf-muted);
   text-align: center;
-  padding: 1rem 0;
-  color: var(--fnb-text-muted);
 
   p {
     margin-bottom: 0.75rem;
+  }
+
+  :deep(.fnb-button) {
+    border: 0;
+    border-radius: 10px;
+    box-shadow: none;
   }
 }
 </style>

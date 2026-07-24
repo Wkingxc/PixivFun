@@ -1,4 +1,4 @@
-import { PROXY_USER_AGENT } from '~~/server/utils/pixiv'
+import { PROXY_USER_AGENT } from '~~/server/utils/pixiv-headers'
 import { proxyPass } from '~~/server/utils/proxy'
 
 const PREFIX_MAP: Record<string, string> = {

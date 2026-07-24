@@ -1,11 +1,12 @@
 <template lang="pug">
 .search-box(:class='{ "no-icon": noIcon }')
   input(
+    :aria-label='placeholder',
+    :placeholder='placeholder'
     @keyup.enter='makeSearch'
-    placeholder='输入关键词搜索/输入 id:数字 查看作品'
     v-model='keyword'
   )
-  IFasSearch.icon(data-icon, v-if='!noIcon')
+  IFasSearch.icon(data-icon v-if='!noIcon')
 </template>
 
 <script lang="ts" setup>
@@ -14,21 +15,26 @@ import IFasSearch from '~icons/fa-solid/search'
 const props = defineProps<{
   type?: string
   noIcon?: boolean
+  placeholder?: string
 }>()
+
+const placeholder = computed(
+  () => props.placeholder || '输入关键词搜索/输入 id:数字 查看作品'
+)
 
 const route = useRoute()
 const router = useRouter()
 const keyword = ref((route.query.q as string) || '')
 
 function makeSearch(): void {
-  if (!keyword.value) {
+  const normalizedKeyword = keyword.value.trim()
+  if (!normalizedKeyword) return
+  const artworkId = /^(?:id:)?(\d+)$/i.exec(normalizedKeyword)?.[1]
+  if (artworkId) {
+    router.push(`/artworks/${artworkId}`)
     return
   }
-  if (/^id:(\d+)$/.test(keyword.value)) {
-    router.push(`/artworks/${/^id:(\d+)$/.exec(keyword.value)?.[1]}`)
-    return
-  }
-  const query: Record<string, string> = { q: keyword.value }
+  const query: Record<string, string> = { q: normalizedKeyword }
   if (props.type && props.type !== 'artworks') {
     query.type = props.type
   }
@@ -37,7 +43,6 @@ function makeSearch(): void {
 </script>
 
 <style lang="scss">
-
 // Search Box
 .search-box {
   display: flex;

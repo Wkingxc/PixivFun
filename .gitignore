@@ -117,3 +117,6 @@ dev-test
 
 # macOS
 .DS_Store
+
+.design-qa/
+openspec/

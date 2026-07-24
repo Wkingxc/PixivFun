@@ -1,38 +1,53 @@
 import { defineStore } from 'pinia'
 import type { ArtworkInfo, RankedArtworkInfo } from '~/types'
+import { safeRankingCandidates } from '~/utils/refineModernArtwork'
 
 export const useHomeStore = defineStore('home', () => {
   const pixivClient = usePixivClient()
   const randomBg = ref<ArtworkInfo | null>(null)
 
   const rankingList = ref<RankedArtworkInfo[]>([])
+  const rankingCandidates = ref<RankedArtworkInfo[]>([])
   const loadingRanking = ref(false)
+  let rankingRequest: Promise<void> | null = null
 
   const followingList = ref<ArtworkInfo[]>([])
   const loadingFollowing = ref(false)
 
   async function fetchRandomBg(): Promise<void> {
-    try {
-      const illusts = await pixivClient.getDiscovery({ mode: 'safe', limit: 1 })
-      if (illusts.length) {
-        randomBg.value = illusts[0]!
-      }
-    } catch (err) {
-      console.error(err)
-    }
+    if (!rankingCandidates.value.length) await fetchRanking()
+    const available = rankingCandidates.value.filter(
+      (artwork) =>
+        rankingCandidates.value.length === 1 ||
+        artwork.id !== randomBg.value?.id
+    )
+    if (!available.length) return
+    randomBg.value = available[Math.floor(Math.random() * available.length)]!
   }
 
   async function fetchRanking(): Promise<void> {
-    if (loadingRanking.value) return
-    try {
-      loadingRanking.value = true
-      const data = await pixivClient.getRanking({ mode: 'daily', content: 'all', p: 1 })
-      rankingList.value = data.contents.slice(0, 5)
-    } catch (err) {
-      console.error('Failed to fetch ranking', err)
-    } finally {
-      loadingRanking.value = false
-    }
+    if (rankingRequest) return rankingRequest
+    rankingRequest = (async () => {
+      try {
+        loadingRanking.value = true
+        const data = await pixivClient.getRanking({
+          mode: 'daily',
+          content: 'all',
+          p: 1,
+        })
+        rankingCandidates.value = safeRankingCandidates(data.contents, 10)
+        rankingList.value = rankingCandidates.value.slice(0, 5)
+        if (!randomBg.value && rankingCandidates.value.length) {
+          await fetchRandomBg()
+        }
+      } catch (err) {
+        console.error('Failed to fetch ranking', err)
+      } finally {
+        loadingRanking.value = false
+        rankingRequest = null
+      }
+    })()
+    return rankingRequest
   }
 
   async function fetchFollowing(): Promise<void> {
@@ -52,6 +67,7 @@ export const useHomeStore = defineStore('home', () => {
     randomBg,
     fetchRandomBg,
     rankingList,
+    rankingCandidates,
     loadingRanking,
     fetchRanking,
     followingList,

@@ -1,6 +1,6 @@
 <template lang="pug">
-footer.global-footer
-  .top.flex.container
+footer.global-footer(:class='{ compact }')
+  .top.flex.container(v-if='!compact')
     section.flex-1
       h4 探索更多
       ul
@@ -34,6 +34,15 @@ footer.global-footer
 import ExternalLink from './ExternalLink.vue'
 import { PROJECT_NAME, version } from '~/config'
 
+withDefaults(
+  defineProps<{
+    compact?: boolean
+  }>(),
+  {
+    compact: false,
+  }
+)
+
 const yearStr = ref(new Date().getFullYear().toString())
 </script>
 
@@ -55,6 +64,23 @@ const yearStr = ref(new Date().getFullYear().toString())
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
   background-color: var(--fnb-bg);
+}
+
+.compact {
+  border-top-width: 1px;
+
+  .bottom {
+    min-height: 54px;
+    display: grid;
+    place-items: center;
+    padding: 12px 24px;
+  }
+
+  .copyright {
+    margin: 0;
+    color: var(--pf-muted);
+    font-size: 0.78rem;
+  }
 }
 
 a {

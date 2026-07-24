@@ -1,35 +1,21 @@
 <template lang="pug">
 .artwork-card-container
-  .artwork-card.placeholder(v-if='loading')
-    .artwork-image
-      FnbSkeleton(block height='180px' width='180px')
-    .artwork-info
-      .title: a: FnbSkeleton(height='1.4em' text width='8em')
-      .author: a
+  .artwork-card.fnb-media-card.placeholder(v-if='loading')
+    .artwork-image.fnb-media-card__media
+      FnbSkeleton(block height='100%' width='100%')
+    .artwork-info.fnb-media-card__body
+      .title.fnb-media-card__title: a: FnbSkeleton(height='1.4em' text width='8em')
+      .author.fnb-media-card__author: a
         FnbSkeleton.avatar(circle height='1.5em' text width='1.5em')
         FnbSkeleton(text width='4em')
-  .artwork-card(v-else-if='item')
-    .artwork-image
+  .artwork-card.fnb-media-card(v-else-if='item')
+    .artwork-image.fnb-media-card__media
       .side-tags
-        .restrict.x-restrict(
-          aria-label='R-18'
-          role='img'
-          title='R-18'
-          v-if='item.xRestrict'
-        )
-          IFasEye(aria-hidden='true')
-        .restrict.ai-restrict(
-          :aria-label='`AI生成`',
-          :title='`AI生成(${item.aiType})`'
-          role='img'
-          v-if='item.aiType === 2'
-        )
-          IFasRobot(aria-hidden='true')
         .page-count(
           :title='"共 " + item.pageCount + " 张"'
           v-if='item.pageCount > 1'
         )
-          IFasImages(data-icon)
+          ITablerCopy(aria-hidden='true')
           | {{ item.pageCount }}
         button.bookmark(
           :aria-label='item.bookmarkData ? "取消收藏" : "添加收藏"',
@@ -45,12 +31,13 @@
           :title='item.alt'
           lazyload
         )
-        .hover-title {{ item.title }}
-        .type-ugoira(v-if='item.type !== "novel" && item.illustType === IllustType.UGOIRA'): IPlayCircle
-    .artwork-info
-      .title
+        .type-ugoira(
+          v-if='item.type !== "novel" && item.illustType === IllustType.UGOIRA'
+        ): IPlayCircle
+    .artwork-info.fnb-media-card__body
+      .title.fnb-media-card__title
         RouterLink(:to='workLink') {{ item.title }}
-      .author(:title='item.userName')
+      .author.fnb-media-card__author(:title='item.userName')
         RouterLink(:to='"/users/" + item.userId')
           img.avatar(:src='item.profileImageUrl' lazyload)
           | {{ item.userName }}
@@ -60,11 +47,9 @@
 import DeferLoad from '../DeferLoad.vue'
 import { IllustType } from '~/utils/constants'
 import { toRef } from 'vue'
-import IFasEye from '~icons/fa-solid/eye'
 import IFasHeart from '~icons/fa-solid/heart'
-import IFasImages from '~icons/fa-solid/images'
-import IFasRobot from '~icons/fa-solid/robot'
 import IPlayCircle from '~icons/fa-solid/play-circle'
+import { IconCopyFilled as ITablerCopy } from '@tabler/icons-vue'
 import type { ArtworkInfo } from '~/types'
 
 import { useArtworkStore } from '~/stores/artwork'
@@ -79,7 +64,9 @@ const loading = toRef(props, 'loading')
 
 const artworkStore = useArtworkStore()
 const workLink = computed(() =>
-  item.value?.type === 'novel' ? `/novels/${item.value.id}` : `/artworks/${item.value?.id}`
+  item.value?.type === 'novel'
+    ? `/novels/${item.value.id}`
+    : `/artworks/${item.value?.id}`
 )
 
 const loadingBookmark = ref(false)
@@ -106,31 +93,22 @@ async function handleBookmark() {
 </script>
 
 <style lang="scss">
-
 .artwork-image {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--fnb-radius);
-  @include fnb-border;
-  width: 100%;
-  aspect-ratio: 1 / 1;
   animation: imgProgress 0.6s ease infinite alternate;
 
   a {
     position: absolute;
-    left: 0;
-    top: 0;
+    inset: 0;
     display: block;
+    width: 100%;
+    height: 100%;
 
     &::before {
       content: '';
-      display: block;
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
       z-index: 1;
+      inset: 0;
+      display: block;
       pointer-events: none;
       transition: all 0.4s ease-in-out;
     }
@@ -142,6 +120,7 @@ async function handleBookmark() {
     top: 0;
     width: 100%;
     height: 100%;
+    object-fit: cover;
     transition: all 0.25s ease-in-out;
   }
 
@@ -166,19 +145,6 @@ async function handleBookmark() {
     }
   }
 
-  .hover-title {
-    z-index: 10;
-    color: #fff;
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translateX(-50%) translateY(-50%);
-    font-weight: 600;
-    pointer-events: none;
-    opacity: 0;
-    transition: all 0.25s ease-in-out;
-  }
-
   .type-ugoira {
     position: absolute;
     pointer-events: none;
@@ -198,9 +164,6 @@ async function handleBookmark() {
     }
     img {
       transform: scale(1.2);
-    }
-    .hover-title {
-      opacity: 1;
     }
     .type-ugoira {
       opacity: 0;
@@ -222,43 +185,30 @@ async function handleBookmark() {
     z-index: 10;
   }
 
-  [data-icon] {
-    font-size: 1em;
-  }
-
   .page-count {
-    top: .4rem;
-    right: .4rem;
-    color: #fff;
-    background-color: rgba(0, 0, 0, 0.6);
-    padding: .1rem .2rem;
-    border-radius: var(--fnb-radius-sm);
-    font-size: 0.8rem;
-  }
-
-  [data-icon] {
-    margin-right: .2rem;
-  }
-
-  .restrict {
-    color: var(--fnb-on-brand);
-    font-size: 0.8rem;
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: var(--fnb-radius-sm);
-    display: flex;
+    top: 8px;
+    right: 8px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-  }
-  .x-restrict {
-    top: .4rem;
-    left: .4rem;
-    background-color: var(--pixiv-r18-badge);
-  }
-  .ai-restrict {
-    bottom: .4rem;
-    left: .4rem;
-    background-color: var(--pixiv-ai-badge);
+    gap: 3px;
+    min-width: 36px;
+    height: 24px;
+    padding: 0 7px;
+    color: #fff;
+    background: rgb(18 28 31 / 72%);
+    border: 0;
+    border-radius: 9px;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 14%);
+    backdrop-filter: blur(6px);
+    font-size: 0.75rem;
+    font-weight: 650;
+    line-height: 1;
+
+    svg {
+      width: 14px;
+      height: 14px;
+    }
   }
 
   .bookmark {
@@ -274,52 +224,22 @@ async function handleBookmark() {
 }
 
 .artwork-info {
-  .title,
-  .author {
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    width: 100%;
-    padding-bottom: 2px;
-
-    a {
-      align-items: center;
-
-      &.router-link-active {
-        color: var(--fnb-text);
-        font-weight: 700;
-        font-style: normal;
-        cursor: default;
-
-        &::after {
-          visibility: hidden;
-        }
-      }
-    }
-  }
-
-  .title {
-    margin: 0.4rem 0;
-
-    a {
-      display: inline;
-      font-weight: 600;
-    }
-  }
-
   .author {
     .avatar {
       display: inline-block;
-      width: 1.5rem;
-      height: 1.5rem;
-      @include fnb-border-sm;
-      margin-right: .4rem;
+      flex: 0 0 auto;
+      width: 22px;
+      height: 22px;
+      margin-right: 7px;
+      object-fit: cover;
+      border: 0;
+      border-radius: 999px;
     }
 
     a {
-      font-size: 0.8rem;
-      font-style: italic;
       display: inline-flex;
+      align-items: center;
+      max-width: 100%;
     }
   }
 }

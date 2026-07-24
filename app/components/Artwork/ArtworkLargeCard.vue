@@ -3,14 +3,7 @@
   .top
     RouterLink.plain(:to='"/artworks/" + illust.id')
       .thumb(:style='thumbStyle')
-        DeferLoad.image(
-          :alt='illust.title',
-          :src='illust.url'
-        )
-      .restrict.x-restrict(aria-label='R-18' role='img' title='R-18' v-if='illust.xRestrict === 2')
-        IFasEye(aria-hidden='true')
-      .restrict.ai-restrict(aria-label='AI生成' role='img' title='AI生成' v-if='illust.aiType === 2')
-        IFasRobot(aria-hidden='true')
+        DeferLoad.image(:alt='illust.title', :src='illust.url')
       .page-count(
         :title='"共 " + illust.pageCount + " 张"'
         v-if='+illust.pageCount > 1'
@@ -27,7 +20,11 @@
       RouterLink(:to='"/artworks/" + illust.id') {{ illust.title }}
     .author(:title='illust.userName')
       RouterLink(:to='"/users/" + illust.userId')
-        img.avatar(:alt='illust.userName' :src='illust.profileImageUrl' lazyload)
+        img.avatar(
+          :alt='illust.userName',
+          :src='illust.profileImageUrl'
+          lazyload
+        )
         | {{ illust.userName }}
     .tags
       ArtTag(:key='_', :tag='item' v-for='(item, _) in illust.tags')
@@ -38,9 +35,7 @@ import type { ArtworkInfo } from '~/types'
 import { IllustType } from '~/utils/constants'
 import DeferLoad from '../DeferLoad.vue'
 import ArtTag from '../ArtTag.vue'
-import IFasEye from '~icons/fa-solid/eye'
 import IFasImages from '~icons/fa-solid/images'
-import IFasRobot from '~icons/fa-solid/robot'
 import IPlayCircle from '~icons/fa-solid/play-circle'
 
 const props = defineProps<{
@@ -96,38 +91,23 @@ h3 {
 
   .page-count {
     position: absolute;
-    top: 0.3rem;
-    right: 0.3rem;
-    color: #fff;
-    background-color: rgba(0, 0, 0, 0.6);
-    padding: 0.1rem 0.4rem;
-    font-size: 0.7rem;
-    border-radius: var(--fnb-radius-sm);
-    [data-icon] {
-      margin-right: 0.15rem;
-    }
-  }
-
-  .restrict {
-    position: absolute;
-    color: var(--fnb-on-brand);
-    width: 1.4rem;
-    height: 1.4rem;
-    font-size: 0.7rem;
-    border-radius: var(--fnb-radius-sm);
-    display: flex;
+    top: 8px;
+    right: 8px;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-  }
-  .x-restrict {
-    top: 0.4rem;
-    left: 0.4rem;
-    background-color: var(--pixiv-r18-badge);
-  }
-  .ai-restrict {
-    bottom: 0.4rem;
-    left: 0.4rem;
-    background-color: var(--pixiv-ai-badge);
+    gap: 3px;
+    min-width: 36px;
+    height: 24px;
+    box-sizing: border-box;
+    color: #fff;
+    background-color: rgb(18 28 31 / 72%);
+    padding: 0 7px;
+    font-size: 0.75rem;
+    border-radius: 9px;
+    [data-icon] {
+      width: 14px;
+      height: 14px;
+    }
   }
 
   .ranking {

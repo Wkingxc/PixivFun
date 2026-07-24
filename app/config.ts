@@ -5,5 +5,5 @@ export { version }
 export const SITE_ENV = import.meta.dev ? 'development' : 'production'
 
 // Site name
-export const PROJECT_NAME = 'PixivNow'
-export const PROJECT_TAGLINE = 'Enjoy Pixiv Now'
+export const PROJECT_NAME = 'PixivFun'
+export const PROJECT_TAGLINE = 'Enjoy Pixiv Fun'

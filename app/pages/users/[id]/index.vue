@@ -3,17 +3,22 @@
   //- Loading
   section.loading(v-if='loadingUser')
     .cover-banner.no-cover
-    .body-inner.user-layout
-      .user-sidebar
+    .body-inner.user-layout(
+      :class='{ "artwork-grid-layout": isArtworkGridView }'
+    )
+      .user-sidebar(v-if='!isArtworkGridView')
         FnbCard
           .avatar-area
-            FnbSkeleton(block, height='6rem', width='6rem')
+            FnbSkeleton(block height='6rem' width='6rem')
           .sidebar-info
-            FnbSkeleton(text, width='8em', height='1.4em')
+            FnbSkeleton(height='1.4em' text width='8em')
             .meta-lines
               .meta-line(v-for='_ in 3')
-                FnbSkeleton(text, width='1em', height='1em')
-                FnbSkeleton(text, :width='`${Math.max(4, 10 * Math.random())}em`')
+                FnbSkeleton(height='1em' text width='1em')
+                FnbSkeleton(
+                  :width='`${Math.max(4, 10 * Math.random())}em`'
+                  text
+                )
       .user-content
         ArtworkList(:list='[]', :loading='20')
 
@@ -25,18 +30,20 @@
   section.user(v-else-if='user')
     .cover-banner(:class='{ "no-cover": !user?.background }')
       .cover-image(
-        v-if='user?.background?.url',
         :style='{ backgroundImage: `url("${user.background.url}")` }'
+        v-if='user?.background?.url'
       )
       span.cover-placeholder(v-else) 用户未设置封面~
 
-    .body-inner.user-layout
+    .body-inner.user-layout(
+      :class='{ "artwork-grid-layout": isArtworkGridView }'
+    )
       //- Left: User info card
-      .user-sidebar
+      .user-sidebar(v-if='!isArtworkGridView')
         FnbCard(shadow='md')
           .avatar-area
             a.plain.pointer(@click='showUserMore = true')
-              img.user-avatar(:src='user.imageBig', :alt='user.name')
+              img.user-avatar(:alt='user.name', :src='user.imageBig')
           h2.username {{ user.name }}
           .user-id(v-if='user.premium')
             FnbTag(color='var(--fnb-highlight)') Premium
@@ -44,8 +51,9 @@
             .meta-line
               RouterLink(:to='`/users/${user.userId}/following`')
                 | 关注了
-                strong  {{ user.following }}
-                |  人
+                strong {{ user.following }}
+                |
+                | 人
             .meta-line(v-if='user.gender?.name')
               FnbIcon: IFasVenusMars
               | {{ user.gender.name }}
@@ -57,7 +65,7 @@
               | {{ user.region?.name }}
             .meta-line(v-if='user.webpage')
               FnbIcon: IFasHome
-              a(:href='user.webpage', rel='noopener noreferrer', target='_blank') {{ user.webpage }}
+              a(:href='user.webpage' rel='noopener noreferrer' target='_blank') {{ user.webpage }}
           .user-comment(v-if='user.comment')
             hr
             p.comment-text {{ user.comment }}
@@ -71,8 +79,8 @@
             template(v-if='!isSelfUserPage')
               FnbButton(
                 :loading='loadingUserFollow',
-                :variant='user.isFollowed ? "success" : "default"',
-                @click='handleUserFollow',
+                :variant='user.isFollowed ? "success" : "default"'
+                @click='handleUserFollow'
                 size='sm'
               )
                 template(#icon)
@@ -85,18 +93,15 @@
 
       //- Right: Artworks
       .user-content
-        FnbTabs(
-          v-model='tab',
-          :tabs='tabsList'
-        )
+        FnbTabs(:tabs='tabsList' v-model='tab')
           template(#panel-illusts)
             .fnb-empty(v-if='user.illusts && !user.illusts.length') 用户没有插画作品 (｡•́︿•̀｡)
             .user-illust(v-else)
-              ArtworkListByUser(:user-id='user.userId', work-category='illust')
+              ArtworkListByUser(:user-id='user.userId' work-category='illust')
           template(#panel-mangas)
             .fnb-empty(v-if='!user.manga?.length') 用户没有漫画作品 (*/ω＼*)
             .user-manga(v-else)
-              ArtworkListByUser(:user-id='user.userId', work-category='manga')
+              ArtworkListByUser(:user-id='user.userId' work-category='manga')
           template(#panel-novels)
             .fnb-empty(v-if='!user.novels?.length') 用户没有小说作品 (｡•́︿•̀｡)
             .user-novels(v-else)
@@ -104,49 +109,52 @@
           template(#panel-public_bookmarks)
             ArtworkList(
               :list='[]',
-              :loading='8',
+              :loading='8'
               v-if='!publicBookmarks?.length && loadingPublicBookmarks'
             )
             .fnb-empty(v-else-if='!publicBookmarks?.length') {{ emptyPublicBookmarksText }}
-            .user-bookmarks(v-else)
+            .user-bookmarks.bookmark-grid(ref='publicBookmarkGridRef' v-else)
               ArtworkList(:list='publicBookmarks')
-              .more-btn.align-center(
-                v-if='publicBookmarks.length && hasMorePublicBookmarks'
+              FnbPagination.bookmark-pagination(
+                :item-count='totalPublicBookmarks',
+                :page='publicBookmarkPage',
+                :page-size='BOOKMARK_PAGE_SIZE'
+                @update:page='changePublicBookmarkPage'
               )
-                ShowMore(
-                  :loading='loadingPublicBookmarks',
-                  :method='() => getBookmarks(false)',
-                  :text='loadingPublicBookmarks ? "正在加载" : "加载更多"'
-                )
-          template(#panel-hidden_bookmarks, v-if='isSelfUserPage')
+          template(#panel-hidden_bookmarks v-if='isSelfUserPage')
             ArtworkList(
               :list='[]',
-              :loading='8',
+              :loading='8'
               v-if='!hiddenBookmarks?.length && loadingHiddenBookmarks'
             )
             .fnb-empty(v-else-if='!hiddenBookmarks?.length') 没有隐藏的小秘密 இ௰இ
-            .user-bookmarks(v-else)
+            .user-bookmarks.bookmark-grid(ref='hiddenBookmarkGridRef' v-else)
               ArtworkList(:list='hiddenBookmarks')
-              .more-btn.align-center(
-                v-if='hiddenBookmarks.length && hasMoreHiddenBookmarks'
+              FnbPagination.bookmark-pagination(
+                :item-count='totalHiddenBookmarks',
+                :page='hiddenBookmarkPage',
+                :page-size='BOOKMARK_PAGE_SIZE'
+                @update:page='changeHiddenBookmarkPage'
               )
-                ShowMore(
-                  :loading='loadingHiddenBookmarks',
-                  :method='() => getBookmarks(true)',
-                  :text='loadingHiddenBookmarks ? "正在加载" : "加载更多"'
-                )
 
     //- User detail dialog
-    .fnb-dialog-overlay(v-if='showUserMore', @click.self='showUserMore = false')
+    .fnb-dialog-overlay(@click.self='showUserMore = false' v-if='showUserMore')
       .fnb-dialog-card
-        button.fnb-dialog-card__close(@click='showUserMore = false', aria-label='关闭') ×
+        button.fnb-dialog-card__close(
+          @click='showUserMore = false'
+          aria-label='关闭'
+        ) ×
         .fnb-dialog-card__header 用户资料
         .fnb-dialog-card__body
           .info-modal
             .modal-top
-              a.modal-avatar(:href='user.imageBig', target='_blank', title='查看头像')
+              a.modal-avatar(
+                :href='user.imageBig'
+                target='_blank'
+                title='查看头像'
+              )
                 img(:src='user.imageBig')
-                .premium-icon(v-if='user.premium', title='该用户订阅了高级会员')
+                .premium-icon(title='该用户订阅了高级会员' v-if='user.premium')
                   FnbIcon: IFasParking
               .modal-name {{ user.name }}
             section.user-bio
@@ -156,10 +164,10 @@
               hr
               h4 工作环境
               FnbImage(
-                v-if='user.workspace.wsUrl',
                 :preview-src='user.workspace.wsBigUrl',
-                :src='user.workspace.wsUrl',
+                :src='user.workspace.wsUrl'
                 lazy
+                v-if='user.workspace.wsUrl'
               )
               FnbTable
                 tbody
@@ -170,7 +178,9 @@
               hr
               h4 Debug Info
               details
-                pre(style='overflow: auto; background: var(--fnb-bg); padding: 4px') {{ JSON.stringify(user, null, 2) }}
+                pre(
+                  style='overflow: auto; background: var(--fnb-bg); padding: 4px'
+                ) {{ JSON.stringify(user, null, 2) }}
 </template>
 
 <script lang="ts" setup>
@@ -182,7 +192,6 @@ import ArtworkList from '~/components/Artwork/ArtworkList.vue'
 import ArtworkListByUser from '~/components/Artwork/ArtworkListByUser.vue'
 import ErrorPage from '~/components/ErrorPage.vue'
 import NovelList from '~/components/Novel/NovelList.vue'
-import ShowMore from '~/components/ShowMore.vue'
 import IFasBirthdayCake from '~icons/fa-solid/birthday-cake'
 import IFasCheck from '~icons/fa-solid/check'
 import IFasHome from '~icons/fa-solid/home'
@@ -193,6 +202,11 @@ import IFasVenusMars from '~icons/fa-solid/venus-mars'
 import { useUserStore } from '~/stores/session'
 import { useUserProfileStore } from '~/stores/user-profile'
 import type { ArtworkInfo, User } from '~/types'
+import {
+  BOOKMARK_PAGE_SIZE,
+  bookmarkPageOffset,
+  isArtworkGridTab,
+} from '~/utils/refineModernArtwork'
 import { setTitle } from '~/utils/setTitle'
 import { effect } from 'vue'
 
@@ -206,27 +220,23 @@ const isSelfUserPage = computed(() => user.value?.userId === userStore.userId)
 const publicBookmarks = ref<ArtworkInfo[]>([])
 const loadingPublicBookmarks = ref(false)
 const totalPublicBookmarks = ref(0)
-const hasMorePublicBookmarks = computed(
-  () =>
-    publicBookmarks.value.length &&
-    publicBookmarks.value.length < totalPublicBookmarks.value
-)
+const publicBookmarkPage = ref(1)
+const publicBookmarkCache = new Map<number, ArtworkInfo[]>()
 
 const hiddenBookmarks = ref<ArtworkInfo[]>([])
 const loadingHiddenBookmarks = ref(false)
 const totalHiddenBookmarks = ref(0)
-const hasMoreHiddenBookmarks = computed(
-  () =>
-    hiddenBookmarks.value.length &&
-    hiddenBookmarks.value.length < totalHiddenBookmarks.value
-)
+const hiddenBookmarkPage = ref(1)
+const hiddenBookmarkCache = new Map<number, ArtworkInfo[]>()
+const publicBookmarkGridRef = ref<HTMLElement | null>(null)
+const hiddenBookmarkGridRef = ref<HTMLElement | null>(null)
 
 enum UserTabs {
   illusts = 'illusts',
   mangas = 'mangas',
   novels = 'novels',
   public_bookmarks = 'public_bookmarks',
-  hidden_bookmarks = 'hidden_bookmarks'
+  hidden_bookmarks = 'hidden_bookmarks',
 }
 
 const tab = ref<string>()
@@ -234,7 +244,9 @@ const error = ref('')
 const showUserMore = ref(false)
 useBodyScrollLock(showUserMore)
 const route = useRoute()
-const router = useRouter()
+const isArtworkGridView = computed(() =>
+  isArtworkGridTab(tab.value || String(route.query.tab || ''))
+)
 
 const emptyPublicBookmarksText = computed(() =>
   isSelfUserPage.value
@@ -283,6 +295,10 @@ async function init(id: string | number, initTab?: UserTabs): Promise<void> {
   hiddenBookmarks.value = []
   totalPublicBookmarks.value = 0
   totalHiddenBookmarks.value = 0
+  publicBookmarkPage.value = 1
+  hiddenBookmarkPage.value = 1
+  publicBookmarkCache.clear()
+  hiddenBookmarkCache.clear()
 
   try {
     loadingUser.value = true
@@ -323,29 +339,56 @@ function userMore(): void {
   showUserMore.value = true
 }
 
-async function getBookmarks(hidden?: boolean): Promise<void> {
+async function getBookmarks(hidden = false, page = 1): Promise<void> {
   const curUser = user.value
   if (!curUser) return
 
   const curLoading = hidden ? loadingHiddenBookmarks : loadingPublicBookmarks
   const curList = hidden ? hiddenBookmarks : publicBookmarks
   const curTotal = hidden ? totalHiddenBookmarks : totalPublicBookmarks
+  const curPage = hidden ? hiddenBookmarkPage : publicBookmarkPage
+  const cache = hidden ? hiddenBookmarkCache : publicBookmarkCache
+
+  const cached = cache.get(page)
+  if (cached) {
+    curList.value = cached
+    curPage.value = page
+    return
+  }
 
   if (curLoading.value) return
 
   try {
     curLoading.value = true
     const data = await userProfileStore.fetchBookmarks(curUser.userId, {
-      offset: curList.value.length,
-      hidden: !!hidden,
+      offset: bookmarkPageOffset(page),
+      hidden,
     })
     curTotal.value = data.total
-    curList.value = curList.value.concat(data.works)
+    cache.set(page, data.works)
+    curList.value = data.works
+    curPage.value = page
   } catch (err) {
     console.warn('failed to fetch bookmarks', err)
   } finally {
     curLoading.value = false
   }
+}
+
+async function changePublicBookmarkPage(page: number): Promise<void> {
+  await getBookmarks(false, page)
+  publicBookmarkGridRef.value?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  })
+}
+
+async function changeHiddenBookmarkPage(page: number): Promise<void> {
+  await getBookmarks(true, page)
+  hiddenBookmarkGridRef.value?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  })
 }
 
 watch(tab, (newTab) => {
@@ -359,10 +402,10 @@ watch(tab, (newTab) => {
   history.replaceState(history.state, '', '' + url)
 
   if (newTab === UserTabs.public_bookmarks && isPublicBookmarkEmpty) {
-    getBookmarks(false)
+    getBookmarks(false, 1)
   }
   if (newTab === UserTabs.hidden_bookmarks && isHiddenBookmarkEmpty) {
-    getBookmarks(true)
+    getBookmarks(true, 1)
   }
 })
 
@@ -428,6 +471,54 @@ onMounted(async () => {
   @media (max-width: 768px) {
     grid-template-columns: 1fr;
   }
+
+  &.artwork-grid-layout {
+    grid-template-columns: minmax(0, 1fr);
+
+    .user-content {
+      width: 100%;
+    }
+  }
+}
+
+.bookmark-grid {
+  scroll-margin-top: 100px;
+
+  :deep(.artworks-list) {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 1.25rem;
+    justify-content: stretch;
+  }
+
+  :deep(.artworks-list > li) {
+    width: auto;
+    max-width: none;
+    min-width: 0;
+  }
+
+  @media (max-width: 1180px) {
+    :deep(.artworks-list) {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 820px) {
+    :deep(.artworks-list) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 560px) {
+    :deep(.artworks-list) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+  }
+}
+
+.bookmark-pagination {
+  margin: 2rem 0 0.5rem;
 }
 
 // ── Left Sidebar ──

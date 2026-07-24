@@ -1,7 +1,7 @@
 <template lang="pug">
 .comments-area(v-if='disabled')
   p.comments-closed 作者关闭了评论区
-.comments-area(v-else, ref='commentsArea')
+.comments-area(ref='commentsArea' v-else)
   //- CommentSubmit(:id="id" @push-comment="pushComment")
   em.stats
     | 共{{ count || comments.length || 0 }}条评论
@@ -10,19 +10,17 @@
     comment(
       :author-id='authorId',
       :comment='item',
-      :type='type',
+      :type='type'
       v-for='item in comments'
     )
-    .show-more.align-center
+    .show-more.comment-more
       FnbButton(
         :loading='loading'
         @click='async () => await init(id)'
         size='sm'
         v-if='comments.length && hasNext'
       )
-        template(#icon)
-          IFasPlus
-        | {{ loading ? '正在加载' : '查看更多' }}
+        | {{ loading ? '正在加载' : '浏览更多' }}
   .align-center(v-if='!comments.length && loading')
     placeholder
 </template>
@@ -30,7 +28,6 @@
 <script lang="ts" setup>
 import Comment from './Comment.vue'
 import type { Comments } from '~/types'
-import IFasPlus from '~icons/fa-solid/plus'
 import { useArtworkStore } from '~/stores/artwork'
 import { useNovelStore } from '~/stores/novel'
 
@@ -99,6 +96,12 @@ const ob = useIntersectionObserver(
 .comments-list {
   list-style: none;
   padding-left: 0;
+}
+
+.comment-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
 }
 
 .comments-closed {

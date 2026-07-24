@@ -18,7 +18,6 @@
 
 <script lang="ts" setup>
 import { useUserStore } from '~/stores/session'
-import { getCsrfToken } from '~/composables/userData'
 
 const store = useUserStore()
 
@@ -41,20 +40,12 @@ async function submit(): Promise<void> {
   if (loading.value) return
   try {
     loading.value = true
-    const { data } = await axios.post(
-      `/ajax/illusts/comments/post`,
-      {
-        type: 'comment',
-        illust_id: props.id,
-        author_user_id: store.userId,
-        comment,
-      },
-      {
-        headers: {
-          'X-CSRF-TOKEN': getCsrfToken() || '',
-        },
-      }
-    )
+    const { data } = await axios.post(`/ajax/illusts/comments/post`, {
+      type: 'comment',
+      illust_id: props.id,
+      author_user_id: store.userId,
+      comment: comment.value,
+    })
     comment.value = ''
     emit('push-comment', {
       img: store.userProfileImg,

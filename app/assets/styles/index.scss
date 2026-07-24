@@ -69,6 +69,63 @@ body {
   display: none !important;
 }
 
+// Shared Pixiv-style media card: artwork first, metadata below.
+// Use these classes for artwork recommendations, related works, and discovery grids.
+.fnb-media-card {
+  display: block;
+  min-width: 0;
+  color: var(--pf-text);
+  background: transparent;
+
+  &__media {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    aspect-ratio: 1 / 1;
+    background: var(--fnb-skeleton);
+    border: 1px solid var(--pf-line);
+    border-radius: 16px;
+    box-shadow: 0 4px 14px rgb(46 34 54 / 8%);
+  }
+
+  &__body {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    padding: 10px 2px 2px;
+  }
+
+  &__title,
+  &__author {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  &__author {
+    color: var(--pf-muted);
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+
+    &::after {
+      display: none;
+    }
+  }
+}
+
 @media screen and (max-width: 800px) {
   .container {
     margin-left: 2rem;

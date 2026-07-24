@@ -1,60 +1,43 @@
 import type { PixivUser } from '~/types'
 
-const TOKEN_KEY = 'pixivnow:token'
-const CSRF_KEY = 'pixivnow:csrf'
+let authenticatedSession = false
 
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-export function getCsrfToken(): string | null {
-  return sessionStorage.getItem(CSRF_KEY)
-}
-
-export function existsSessionId(): boolean {
-  if (getToken()) {
-    return true
-  } else {
-    sessionStorage.removeItem(CSRF_KEY)
-    return false
-  }
+export function hasAuthenticatedSession(): boolean {
+  return authenticatedSession
 }
 
 export async function initUser(): Promise<PixivUser> {
-  const pixivClient = usePixivClient()
   try {
-    const data = await pixivClient._getSessionUser()
-    if (data.token) {
-      console.log('session ID认证成功', data)
-      sessionStorage.setItem(CSRF_KEY, data.token)
-      return data.userData
-    } else {
-      sessionStorage.removeItem(CSRF_KEY)
-      return Promise.reject('无效的session ID')
-    }
-  } catch (err) {
-    sessionStorage.removeItem(CSRF_KEY)
-    return Promise.reject(err)
+    const data = await $fetch<{ userData: PixivUser }>('/api/auth/session', {
+      headers: { 'Cache-Control': 'no-store' },
+    })
+    authenticatedSession = true
+    return data.userData
+  } catch (error) {
+    authenticatedSession = false
+    throw error
   }
 }
 
-export function login(token: string): Promise<PixivUser> {
-  if (!validateSessionId(token)) {
-    console.error('访问令牌格式错误')
-    return Promise.reject('访问令牌格式错误')
+export async function login(phpsessid: string): Promise<PixivUser> {
+  if (!validateSessionId(phpsessid)) {
+    throw new Error('访问令牌格式错误')
   }
-  localStorage.setItem(TOKEN_KEY, token)
-  return initUser()
+
+  const data = await $fetch<{ userData: PixivUser }>('/api/auth/session', {
+    method: 'POST',
+    body: { phpsessid },
+  })
+  authenticatedSession = true
+  return data.userData
 }
 
-export function logout(): boolean {
-  const token = getToken()
-  if (token && confirm(`您要移除您的令牌吗？\n${token}`)) {
-    localStorage.removeItem(TOKEN_KEY)
-    sessionStorage.removeItem(CSRF_KEY)
-    return true
-  }
-  return false
+export async function logout(): Promise<boolean> {
+  if (!confirm('确定要断开当前 Pixiv 账户连接吗？')) return false
+
+  await $fetch('/api/auth/session', { method: 'DELETE' })
+  authenticatedSession = false
+  return true
 }
 
 export function validateSessionId(token: string): boolean {
@@ -74,7 +57,7 @@ export function exampleSessionId(): string {
       const charIndex = Math.floor((i * strSet.length) / 256)
       final.push(strSet[charIndex])
     }
-    return final.join('')
+    return `${uid[0]}_${final.join('')}`
   })()
-  return `${uid[0]}_${secret}`
+  return secret
 }

@@ -1,127 +1,128 @@
 <template lang="pug">
-header.global-navbar(:class='{ "not-at-top": notAtTop, hidden, "side-nav-opened": sideNavStore.isOpened }')
-  .flex
-    button.side-nav-toggle.plain(
-      aria-label='打开导航菜单'
-      title='导航菜单'
-      @click='toggleSideNav'
-      :class='{ "is-active": sideNavStore.isOpened }'
-    )
-      IFasBars(aria-hidden='true')
-
-    .logo-area
-      RouterLink.plain(to='/')
-        img.site-logo(:src='SiteLogo')
-
-    .flex.search-area(v-if='$route.name !== "search"')
-      .search-full.align-right.flex-1
-        .header-search
-          FnbSelect.search-scope(
-            v-if='wide',
-            :model-value='searchType',
-            :options='contentOptions',
-            @update:model-value='searchType = $event'
-          )
-          SearchBox(:type='effectiveType', :no-icon='wide')
-      .search-icon.align-right.flex-1
-        button.pointer.plain(
-          aria-label='搜索'
-          title='搜索'
-          @click='openSideNav'
+header.global-navbar(
+  :class='{ "is-artwork-route": route.name === "artworks", "not-at-top": notAtTop, "side-nav-opened": sideNavStore.isOpened }'
+)
+  .navbar-inner
+    .brand-controls
+      button.side-nav-toggle(
+        :aria-expanded='sideNavStore.isOpened',
+        :aria-label='sideNavStore.isOpened ? "关闭导航菜单" : "打开导航菜单"',
+        :class='{ "is-active": sideNavStore.isOpened }'
+        @click='toggleSideNav'
+        title='导航菜单'
+      )
+        ITablerLayoutSidebarLeftCollapse(
+          aria-hidden='true'
+          v-if='sideNavStore.isOpened'
         )
-          IFasSearch(aria-hidden='true')
-          | &nbsp;搜索
-    .flex.search-area(v-else)
+        ITablerMenu2(aria-hidden='true' v-else)
 
-    #global-nav__user-area.user-area
-      .user-link(ref='userLinkRef')
-        button.dropdown-btn.plain.pointer(
-          :aria-expanded='showUserDropdown'
-          :aria-label='userStore.isLoggedIn ? "用户菜单: " + userStore.userName : "用户菜单"'
-          :class='{ "show-user": showUserDropdown }'
-          :title='userStore.isLoggedIn ? userStore.userId + " (" + userStore.userPixivId + ")" : "未登入"'
-          @click='showUserDropdown = !showUserDropdown'
+      RouterLink.brand-logo(aria-label='PixivFun 首页' to='/')
+        img.brand-logo__image(:src='logoUrl' alt='')
+
+      nav.user-shortcuts(aria-label='个人快捷入口' v-if='userStore.isLoggedIn')
+        RouterLink.header-shortcut(
+          :to='`/users/${userStore.userId}?tab=public_bookmarks`'
+          title='收藏'
         )
-          img.avatar(
-            :alt='userStore.isLoggedIn ? userStore.userName : "未登入"'
-            :src='userStore.isLoggedIn ? userStore.userProfileImg : noProfileImg'
+          ITablerBookmark(aria-hidden='true')
+          span.shortcut-label 收藏
+        RouterLink.header-shortcut(
+          :to='`/users/${userStore.userId}/following`'
+          title='关注'
+        )
+          ITablerUsers(aria-hidden='true')
+          span.shortcut-label 关注
+
+    .search-area(v-if='$route.name !== "search"')
+      .header-search
+        FnbSelect.search-scope(
+          :model-value='searchType',
+          :options='contentOptions'
+          @update:model-value='searchType = $event'
+          v-if='wide'
+        )
+        SearchBox(
+          :no-icon='wide',
+          :type='effectiveType'
+          placeholder='搜索作品、用户或输入 id:作品编号'
+        )
+
+    .header-tools
+      ArtworkDetailStyleToggle(v-if='isDevelopment')
+      ThemeToggle
+
+      .user-area
+        .user-link(ref='userLinkRef')
+          button.dropdown-btn(
+            :aria-expanded='showUserDropdown',
+            :aria-label='userStore.isLoggedIn ? `用户菜单：${userStore.userName}` : "游客菜单"',
+            :class='{ "show-user": showUserDropdown }',
+            :title='userStore.isLoggedIn ? `${userStore.userId} (${userStore.userPixivId})` : "未登录"'
+            @click='showUserDropdown = !showUserDropdown'
           )
+            img.avatar(
+              :alt='userStore.isLoggedIn ? userStore.userName : "游客"',
+              :src='userStore.isLoggedIn ? userStore.userProfileImg : noProfileImg'
+            )
 
-        .dropdown-content(:class='{ visible: showUserDropdown }')
-          ul
-              //- notLogIn
-              li(v-if='!userStore.isLoggedIn')
+          .dropdown-content(:class='{ visible: showUserDropdown }')
+            ul
+              li
                 .nav-user-card
-                  .top
-                    .banner-bg
-                    img.avatar(:src='noProfileImg')
+                  img.avatar(
+                    :alt='userStore.isLoggedIn ? userStore.userName : "游客"',
+                    :src='userStore.isLoggedIn ? userStore.userProfileImgBig : noProfileImg'
+                  )
                   .details
-                    a.user-name 游客
-                    .uid 绑定令牌，同步您的 Pixiv 信息！
+                    strong.user-name(v-if='userStore.isLoggedIn') {{ userStore.userName }}
+                    strong.user-name(v-else) 游客
+                    .uid(v-if='userStore.isLoggedIn') @{{ userStore.userPixivId }}
+                    .uid(v-else) 绑定令牌，同步 Pixiv 信息
 
-              //- isLogedIn
+              li
+                RouterLink(:to='accountPath') 账户连接
               li(v-if='userStore.isLoggedIn')
-                .nav-user-card
-                  .top
-                    .banner-bg
-                    RouterLink.plain.name(:to='"/users/" + userStore.userId')
-                      img.avatar(:src='userStore.userProfileImgBig')
-                  .details
-                    RouterLink.plain.user-name(
-                      :to='"/users/" + userStore.userId'
-                    ) {{ userStore.userName }}
-                    .uid @{{ userStore.userPixivId }}
-
-              li(v-if='userStore.isLoggedIn')
-                RouterLink.plain(
-                  :to='`/users/${userStore.userId}?tab=public_bookmarks`'
-                ) 公开收藏
-              li(v-if='userStore.isLoggedIn')
-                RouterLink.plain(
-                  :to='`/users/${userStore.userId}?tab=hidden_bookmarks`'
-                ) 私密收藏
-              li(v-if='userStore.isLoggedIn')
-                RouterLink.plain(
-                  :to='`/users/${userStore.userId}/following`'
-                ) 我的关注
-              li(v-if='$route.path !== "/login"')
-                RouterLink.plain(:to='"/login?back=" + $route.path') {{ userStore.isLoggedIn ? '查看令牌' : '用户登入' }}
-              li.theme-row
-                span.theme-row__label 主题
-                ThemeToggle
-              li(v-if='userStore.isLoggedIn')
-                a.plain(@click='logoutUser') 用户登出
+                button.dropdown-action(@click='logoutUser' type='button') 用户登出
 </template>
 
 <script lang="ts" setup>
 import SearchBox from './SearchBox.vue'
+import {
+  IconBookmark as ITablerBookmark,
+  IconLayoutSidebarLeftCollapse as ITablerLayoutSidebarLeftCollapse,
+  IconMenu2 as ITablerMenu2,
+  IconUsers as ITablerUsers,
+} from '@tabler/icons-vue'
+import logoUrl from '~/assets/PixivFun.png'
 import { contentOptions } from '~/utils/searchOptions'
-import IFasBars from '~icons/fa-solid/bars'
-import IFasSearch from '~icons/fa-solid/search'
 import { logout } from '~/composables/userData'
-import SiteLogo from '~/assets/PixivNow.svg'
 import { useSideNavStore, useUserStore } from '~/stores/session'
 import { pximgS } from '~/utils/pximg'
+import { createLoginPath } from '~/utils/loginNavigation'
 
 const noProfileImg = pximgS('common/images/no_profile.png')
-
-const hidden = ref(false)
 const notAtTop = ref(false)
 const showUserDropdown = ref(false)
 const userLinkRef = ref<HTMLElement | null>(null)
 const sideNavStore = useSideNavStore()
 const userStore = useUserStore()
-
+const toast = useToast()
 const searchType = ref('artworks')
 const wide = useMediaQuery('(min-width: 768px)')
-const effectiveType = computed(() => (wide.value ? searchType.value : 'artworks'))
+const effectiveType = computed(() =>
+  wide.value ? searchType.value : 'artworks'
+)
+const route = useRoute()
+const accountPath = computed(() =>
+  userStore.isLoggedIn ? '/login' : createLoginPath(route.fullPath)
+)
+const { isDevelopment } = useArtworkDetailStyle()
 
-// Close dropdown when clicking outside .user-link
 onClickOutside(userLinkRef, () => {
   showUserDropdown.value = false
 })
 
-// Close dropdown on route change
 const router = useRouter()
 router.afterEach(() => {
   showUserDropdown.value = false
@@ -131,23 +132,13 @@ function toggleSideNav() {
   sideNavStore.toggle()
 }
 
-function openSideNav() {
-  sideNavStore.open()
-}
-
-function logoutUser() {
-  if (logout()) {
-    userStore.logout()
+async function logoutUser() {
+  try {
+    if (await logout()) userStore.logout()
+  } catch {
+    toast.error('退出失败，请稍后重试')
   }
 }
-
-watch(hidden, (value) => {
-  if (value) {
-    document.body.classList.add('global-navbar_hidden')
-  } else {
-    document.body.classList.remove('global-navbar_hidden')
-  }
-})
 
 useEventListener(window, 'scroll', () => {
   notAtTop.value = document.documentElement.scrollTop > 50
@@ -155,301 +146,417 @@ useEventListener(window, 'scroll', () => {
 </script>
 
 <style lang="scss">
-
 .global-navbar {
-  background-color: var(--fnb-brand);
-  padding: 0.4rem 1rem;
-  color: var(--fnb-on-brand);
-  display: flex;
-  align-items: center;
   position: sticky;
-  height: 60px;
-  width: 100%;
-  box-sizing: border-box;
-  white-space: nowrap;
+  z-index: 130;
   top: 0;
-  z-index: 100;
-  transition: all 0.8s ease;
-  border-bottom: 3px solid var(--fnb-border);
+  width: 100%;
+  height: 64px;
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border-bottom: 1px solid var(--pf-line);
+  transition:
+    color 220ms ease,
+    background 220ms ease,
+    border-color 220ms ease;
 
-  .flex {
-    display: flex;
-    width: 100%;
-    gap: 1rem;
+  &.is-artwork-route {
+    position: relative;
+  }
+
+  .navbar-inner {
+    display: grid;
+    grid-template-columns: minmax(280px, auto) minmax(240px, 640px) auto;
     align-items: center;
+    gap: 20px;
+    width: 100%;
+    height: 100%;
+    padding: 0 20px;
+  }
+
+  .brand-controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    justify-self: start;
+  }
+
+  .user-shortcuts,
+  .header-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .header-shortcut {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 0 10px;
+    color: var(--pf-muted);
+    border-radius: 9px;
+    font-size: 0.82rem;
+    font-weight: 650;
+    text-decoration: none;
+
+    &:hover,
+    &.router-link-active {
+      color: var(--pf-blue);
+      background: var(--pf-soft-blue);
+    }
+
+    svg {
+      width: 18px;
+      height: 18px;
+    }
+  }
+
+  .side-nav-toggle,
+  .dropdown-btn,
+  .dropdown-action {
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
   }
 
   .side-nav-toggle {
-    border: none;
-    background: none;
-    padding: 0;
-    font: inherit;
-    font-size: 1.2rem;
-    text-align: center;
-    color: var(--fnb-on-brand);
-    cursor: pointer;
-    width: 2.4rem;
-    height: 2.4rem;
-    border-radius: var(--fnb-radius);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border-radius: 9px;
 
-    &:hover, &.is-active {
-      background-color: var(--fnb-highlight);
-      color: var(--fnb-on-light);
+    svg {
+      width: 28px;
+      height: 28px;
+    }
+
+    &:hover,
+    &.is-active {
+      background: rgb(255 255 255 / 14%);
     }
 
     &:focus-visible {
-      outline: 2px solid var(--fnb-on-brand);
+      outline: 2px solid currentColor;
       outline-offset: 2px;
     }
   }
 
-  .logo-area {
-    a {
-      display: block;
-      line-height: 0;
-    }
-    .site-logo {
-      height: 2.6rem;
-      width: auto;
-    }
+  .brand-logo {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+  }
+
+  .brand-logo__image {
+    display: block;
+    width: 112px;
+    height: auto;
   }
 
   .search-area {
-    flex: 1;
+    min-width: 0;
+    opacity: 1;
+    transition: opacity 220ms ease;
   }
 
-  // Scope selector + search input merged into one pill
   .header-search {
     display: flex;
     align-items: stretch;
     width: 100%;
-    background: var(--fnb-surface);
-    @include fnb-border-sm;
-    @include fnb-shadow-sm;
-    border-radius: var(--fnb-radius-sm);
-    // header sets color:#fff and .align-right — reset inside the pill
-    color: var(--fnb-text);
-    text-align: left;
+    min-height: 40px;
+    overflow: visible;
+    color: var(--pf-text);
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-line);
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgb(32 48 71 / 8%);
 
     .search-scope {
+      flex: 0 0 auto;
       min-width: auto;
-      flex-shrink: 0;
     }
 
     .fnb-select-trigger {
-      border: none;
-      box-shadow: none;
-      border-right: 2px solid var(--fnb-border);
-      border-radius: var(--fnb-radius-sm) 0 0 var(--fnb-radius-sm);
-      background: transparent;
       height: 100%;
+      padding-inline: 12px;
+      background: transparent;
+      border: 0;
+      border-right: 1px solid var(--pf-line);
+      border-radius: 10px 0 0 10px;
+      box-shadow: none;
 
       &:hover {
+        color: var(--pf-blue);
+        background: var(--pf-soft-blue);
+        box-shadow: none;
         transform: none;
-        background: var(--fnb-highlight);
-        color: var(--fnb-on-light);
       }
+    }
+
+    .fnb-select-dropdown {
+      border: 1px solid var(--pf-line);
+      border-radius: 10px;
+      box-shadow: var(--pf-card-shadow);
     }
 
     .search-box {
       flex: 1;
+      min-width: 0;
 
       input {
-        border: none;
-        box-shadow: none;
+        height: 100%;
+        color: var(--pf-text);
         background: transparent;
-        color: var(--fnb-text);
-        text-align: left;
+        border: 0;
+        border-radius: 0 10px 10px 0;
+        box-shadow: none;
       }
     }
   }
 
-  .user-area {
-    .avatar {
-      height: 2rem;
-      width: 2rem;
-      @include fnb-border-sm;
+  .header-tools {
+    justify-self: end;
+  }
+
+  .user-link {
+    position: relative;
+  }
+
+  .dropdown-btn {
+    display: flex;
+    align-items: center;
+    border-radius: 999px;
+
+    &:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: 3px;
+    }
+  }
+
+  .avatar {
+    display: block;
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    background: #e7eff5;
+    border: 2px solid #fff;
+    border-radius: 999px;
+  }
+
+  .dropdown-btn .avatar {
+    box-shadow: 0 3px 12px rgb(25 35 48 / 18%);
+    transition:
+      box-shadow 180ms ease,
+      transform 180ms ease;
+  }
+
+  .dropdown-btn:hover .avatar,
+  .dropdown-btn.show-user .avatar {
+    box-shadow: 0 0 0 3px rgb(35 136 255 / 28%);
+    transform: translateY(-1px);
+  }
+
+  .dropdown-content {
+    position: absolute;
+    top: 52px;
+    right: 0;
+    width: 240px;
+    color: var(--pf-text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-8px);
+    transition:
+      opacity 180ms ease,
+      transform 180ms ease;
+
+    &.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
     }
 
-    .user-link {
-      position: relative;
+    ul {
+      overflow: hidden;
+      margin: 0;
+      padding: 8px;
+      list-style: none;
+      background: var(--pf-surface);
+      border: 1px solid var(--pf-line);
+      border-radius: 16px;
+      box-shadow: var(--pf-card-shadow);
+    }
 
-      .dropdown-btn {
-        border: none;
-        background: none;
-        padding: 0;
-        font: inherit;
-        cursor: pointer;
-        list-style: none;
-        display: flex;
-        align-items: center;
+    li > a,
+    .dropdown-action {
+      display: block;
+      width: 100%;
+      padding: 9px 10px;
+      color: var(--pf-text);
+      border-radius: 8px;
+      text-align: left;
+      text-decoration: none;
 
-        &:focus-visible {
-          outline: 2px solid var(--fnb-on-brand);
-          outline-offset: 2px;
-        }
-
-        .avatar {
-          box-shadow: 0 0 0 2px var(--fnb-on-brand);
-          transition: box-shadow 0.24s ease;
-        }
-
-        &.show-user {
-          .avatar {
-            box-shadow: 0 0 0 2px var(--fnb-highlight);
-          }
-        }
-      }
-
-      .dropdown-content {
-        position: absolute;
-        top: 1.4rem;
-        right: 0;
-        padding: 0;
-        padding-top: 0.4rem;
-        width: 200px;
-        opacity: 0;
-        transform: translateY(-0.5rem);
-        pointer-events: none;
-        transition: opacity 0.25s ease, transform 0.25s ease;
-
-        &.visible {
-          opacity: 1;
-          transform: translateY(0);
-          pointer-events: auto;
-        }
-
-        ul {
-          list-style: none;
-          padding: 4px;
-          background-color: var(--fnb-surface);
-          @include fnb-border;
-          @include fnb-shadow;
-
-          li > * {
-            padding: 0.5rem;
-          }
-
-          li a {
-            display: block;
-            cursor: pointer;
-
-            &:hover {
-              background-color: var(--fnb-highlight);
-              color: var(--fnb-on-light);
-            }
-          }
-        }
+      &:hover {
+        color: var(--pf-blue);
+        background: var(--pf-soft-blue);
       }
     }
   }
 
   .nav-user-card {
-    border-bottom: 1px solid var(--fnb-border);
-    position: relative;
-
-    .top {
-      position: relative;
-
-      .banner-bg {
-        position: absolute;
-        top: calc(-0.4rem - 6px);
-        left: -12px;
-        height: 56px;
-        width: calc(100% + 24px);
-        background-color: color-mix(in srgb, var(--fnb-brand) 10%, transparent);
-        z-index: 0;
-      }
-
-      a {
-        display: inline !important;
-        position: relative;
-        z-index: 1;
-      }
-    }
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px 12px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--pf-line);
 
     .avatar {
-      width: 68px;
-      height: 68px;
+      width: 48px;
+      height: 48px;
+      border-color: var(--pf-line);
     }
 
     .details {
-      .user-name {
-        font-size: 1rem;
-      }
-
-      .uid {
-        font-size: 0.8rem;
-        color: var(--fnb-text-muted);
-      }
+      min-width: 0;
     }
-  }
 
-  .theme-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
+    .user-name {
+      display: block;
+      overflow: hidden;
+      color: var(--pf-text);
+      font-size: 0.94rem;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
-  .theme-row__label {
-    font-weight: 700;
-  }
-
-  .search-icon {
-    display: none;
-
-    button {
-      border: none;
-      background: none;
-      padding: 0;
-      font: inherit;
-      color: var(--fnb-on-brand);
-      cursor: pointer;
-
-      &:focus-visible {
-        outline: 2px solid var(--fnb-on-brand);
-        outline-offset: 2px;
-      }
+    .uid {
+      overflow: hidden;
+      color: var(--pf-muted);
+      font-size: 0.72rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 }
 
-// Home page: transparent navbar, search hidden until scrolled
-[data-route="home"] {
+@media (max-width: 1080px) {
   .global-navbar {
-    background: none;
-    border-bottom-color: transparent;
-
-    .search-area {
-      opacity: 0;
-      transition: opacity 0.4s ease;
-      pointer-events: none;
+    .navbar-inner {
+      grid-template-columns: minmax(220px, auto) minmax(180px, 1fr) auto;
+      gap: 12px;
     }
 
-    &.not-at-top, &.side-nav-opened {
-      background-color: var(--fnb-brand);
-      border-bottom-color: var(--fnb-border);
-
-      .search-area {
-        opacity: 1;
-        pointer-events: all;
-      }
-    }
-  }
-}
-
-@media (max-width: 450px) {
-  .global-navbar {
-    .search-full {
+    .shortcut-label {
       display: none;
     }
 
-    .search-icon {
-      display: block;
+    .header-shortcut {
+      justify-content: center;
+      width: 34px;
+      padding: 0;
+    }
+  }
+}
+
+@media (max-width: 760px) {
+  .global-navbar {
+    .navbar-inner {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      padding-inline: 12px;
+    }
+
+    .search-area {
+      display: none;
+    }
+
+    .brand-logo__image {
+      width: 96px;
+    }
+  }
+}
+
+@media (max-width: 620px) {
+  .global-navbar {
+    .user-shortcuts,
+    .artwork-style-control {
+      display: none;
+    }
+
+    .brand-controls {
+      gap: 10px;
+    }
+
+    .header-tools {
+      gap: 6px;
+    }
+  }
+}
+
+[data-route='home'] {
+  .global-navbar {
+    color: #fff;
+    background: rgb(11 20 26 / 42%);
+    border-bottom-color: transparent;
+    backdrop-filter: blur(8px);
+
+    .search-area {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    &.not-at-top,
+    &.side-nav-opened {
+      background: rgb(11 20 26 / 88%);
+      border-bottom-color: rgb(255 255 255 / 12%);
+    }
+
+    &.not-at-top {
+      .search-area {
+        opacity: 1;
+        pointer-events: auto;
+      }
+    }
+  }
+}
+
+@media (max-width: 760px) {
+  .global-navbar {
+    .navbar-inner {
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      padding-inline: 14px;
+    }
+
+    .brand-logo__image {
+      width: 100px;
+    }
+
+    .search-area {
+      min-width: 0;
+    }
+
+    .header-search {
+      min-height: 38px;
+    }
+  }
+}
+
+@media (max-width: 560px) {
+  .global-navbar {
+    .navbar-inner {
+      grid-template-columns: 1fr auto;
+    }
+
+    .search-area {
+      display: none;
     }
   }
 }

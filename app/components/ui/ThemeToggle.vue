@@ -1,63 +1,56 @@
 <template lang="pug">
-.theme-toggle(role='group' aria-label='主题切换')
-  button.theme-toggle__seg(
-    v-for='opt in options'
-    :key='opt.value'
-    type='button'
-    :class='{ "theme-toggle__seg--active": mode === opt.value }'
-    :aria-label='opt.label'
-    :title='opt.label'
-    :aria-pressed='mode === opt.value'
-    @click='setTheme(opt.value)'
-  )
-    component(:is='opt.icon' :size='18' :stroke-width='2.5')
+button.theme-toggle(
+  :aria-label='label',
+  :title='label'
+  @click='toggleTheme'
+  type='button'
+)
+  component(:is='icon', :size='20', :stroke-width='2')
 </template>
 
 <script lang="ts" setup>
-import { IconSun, IconMoon, IconDeviceDesktop } from '@tabler/icons-vue'
-import type { ThemeMode } from '~/composables/useTheme'
+import { IconMoon, IconSun } from '@tabler/icons-vue'
+import { nextExplicitTheme } from '~/utils/refineModernArtwork'
 
-const { mode, setTheme } = useTheme()
+const colorMode = useColorMode()
+const { setTheme } = useTheme()
 
-const options: { value: ThemeMode; label: string; icon: unknown }[] = [
-  { value: 'light', label: '亮色', icon: IconSun },
-  { value: 'dark', label: '暗色', icon: IconMoon },
-  { value: 'auto', label: '跟随系统', icon: IconDeviceDesktop },
-]
+const targetTheme = computed(() => nextExplicitTheme(colorMode.value))
+const label = computed(() =>
+  targetTheme.value === 'dark' ? '切换到暗色主题' : '切换到亮色主题'
+)
+const icon = computed(() => (targetTheme.value === 'dark' ? IconMoon : IconSun))
+
+function toggleTheme() {
+  setTheme(targetTheme.value)
+}
 </script>
 
 <style scoped lang="scss">
 .theme-toggle {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  @include fnb-border-sm;
-  background: var(--fnb-surface);
-}
-
-.theme-toggle__seg {
-  display: inline-flex;
+  display: grid;
   align-items: center;
   justify-content: center;
-  width: 1.9rem;
-  height: 1.6rem;
+  width: 36px;
+  height: 36px;
   padding: 0;
+  color: var(--pf-muted);
   background: transparent;
-  border: 2px solid transparent;
-  border-radius: 0;
-  color: var(--fnb-text-muted);
+  border: 0;
+  border-radius: 50%;
   cursor: pointer;
-  transition: color 150ms, background 150ms;
+  transition:
+    color 150ms,
+    background 150ms;
 
-  &:hover:not(.theme-toggle__seg--active) {
-    color: var(--fnb-text);
-    background: color-mix(in srgb, var(--fnb-brand) 15%, var(--fnb-surface));
+  &:hover {
+    color: var(--pf-pink);
+    background: var(--pf-soft-pink);
   }
 
-  &--active {
-    color: var(--fnb-on-brand);
-    background: var(--fnb-brand);
-    border-color: var(--fnb-border);
+  &:focus-visible {
+    outline: 2px solid var(--pf-pink);
+    outline-offset: 2px;
   }
 }
 </style>

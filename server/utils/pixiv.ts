@@ -1,11 +1,10 @@
 import type { H3Event } from 'h3'
 import colors from 'picocolors'
+import { createPixivRequestHeaders } from './pixiv-headers'
+import { getPixivSession } from './pixiv-session'
 
 export const PROD = process.env.NODE_ENV === 'production'
 export const DEV = !PROD
-export const PROXY_USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
-
 export const PXIMG_BASEURL_I = (() => {
   const i =
     process.env.NUXT_PUBLIC_PXIMG_BASEURL_I || process.env.VITE_PXIMG_BASEURL_I
@@ -17,27 +16,6 @@ export const PXIMG_BASEURL_S = (() => {
     process.env.NUXT_PUBLIC_PXIMG_BASEURL_S || process.env.VITE_PXIMG_BASEURL_S
   return s ? s.replace(/\/$/, '') + '/' : '/~/'
 })()
-
-export class CookieUtils {
-  static toJSON(raw: string): Record<string, string> {
-    const result: Record<string, string> = {}
-    if (!raw) return result
-    for (const pair of raw.split(';')) {
-      const idx = pair.indexOf('=')
-      if (idx === -1) continue
-      const key = pair.slice(0, idx).trim()
-      const val = pair.slice(idx + 1).trim()
-      if (key) result[key] = val
-    }
-    return result
-  }
-  static toString(obj: Record<string, string>): string {
-    return Object.entries(obj)
-      .filter(([, v]) => v != null && v !== '')
-      .map(([k, v]) => `${k}=${v}`)
-      .join('; ')
-  }
-}
 
 // --- Proxy-aware fetch ---
 
@@ -72,37 +50,21 @@ interface PixivFetchOptions {
   data?: any
 }
 
-export function buildPixivHeaders(event: H3Event): Record<string, string> {
-  const headers: Record<string, string> = {}
-  const incomingHeaders = getHeaders(event)
-  for (const [k, v] of Object.entries(incomingHeaders)) {
-    if (typeof v === 'string') headers[k] = v
-  }
-
-  // Extract auth info
-  const token = (headers['authorization'] || '').replace(/^Bearer\s+/i, '')
-  const cookies = CookieUtils.toJSON(headers['cookie'] || '')
-  const csrfToken = headers['x-csrf-token'] ?? cookies.CSRFTOKEN ?? ''
-  if (token) {
-    cookies.PHPSESSID = token
-  }
-
-  // Override headers for Pixiv
-  Object.assign(headers, {
-    origin: 'https://www.pixiv.net',
-    referer: 'https://www.pixiv.net/',
-    'user-agent': PROXY_USER_AGENT,
-    cookie: CookieUtils.toString(cookies),
-  })
-  headers['accept-language'] ??=
-    'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6'
-  if (csrfToken) {
-    headers['x-csrf-token'] = csrfToken
-  }
-  delete headers['authorization']
-  // host is auto-set by fetch from URL; forbidden header in edge runtimes
-  delete headers['host']
-  return headers
+export function buildPixivHeaders(
+  event: H3Event,
+  method = event.method
+): Record<string, string> {
+  const session = getPixivSession(event)
+  return createPixivRequestHeaders(
+    getHeaders(event),
+    session
+      ? {
+          phpsessid: session.phpsessid,
+          csrfToken: session.csrfToken,
+        }
+      : null,
+    method
+  )
 }
 
 export async function pixivFetch(
@@ -126,7 +88,7 @@ export async function pixivFetch(
     }
   }
 
-  const headers = buildPixivHeaders(event)
+  const headers = buildPixivHeaders(event, method)
 
   // Prepare body
   let body: string | undefined
@@ -142,11 +104,6 @@ export async function pixivFetch(
       colors.green(`[${method}] <`),
       colors.cyan(url.pathname + url.search)
     )
-    console.info({
-      params: opts.params,
-      data: opts.data,
-      cookies: CookieUtils.toJSON(headers.cookie || ''),
-    })
   }
 
   const response = await proxyAwareFetch(url.toString(), {
@@ -162,16 +119,9 @@ export async function pixivFetch(
     : await response.text()
 
   if (DEV) {
-    const out =
-      typeof data === 'object'
-        ? JSON.stringify(data, null, 2)
-        : String(data).trim()
     console.info(
       colors.green(`[SEND ${response.status}] >`),
-      colors.cyan(url.pathname),
-      `\n${colors.yellow(typeof data)} ${
-        out.length >= 200 ? out.slice(0, 200).trim() + '\n...' : out
-      }`
+      colors.cyan(url.pathname)
     )
   }
 

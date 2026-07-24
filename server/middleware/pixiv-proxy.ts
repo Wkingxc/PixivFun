@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const reqUrl = getRequestURL(event)
-  const headers = buildPixivHeaders(event)
+  const headers = buildPixivHeaders(event, event.method)
   const body = event.method !== 'GET' ? await readRawBody(event) : undefined
 
   return proxyPass(event, {

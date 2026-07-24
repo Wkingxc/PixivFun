@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="app/assets/PixivNow.svg" alt="PixivNow Logo" width="200"/>
+<img src="app/assets/PixivFun.png" alt="PixivFun Logo" width="200"/>
 
 PixivNow - Now, everyone can enjoy Pixiv!
 
@@ -13,6 +13,10 @@ PixivNow - Now, everyone can enjoy Pixiv!
 获取当前仓库代码并进入项目根目录后运行：
 
 ```bash
+# 仅首次部署且 .env 不存在时执行
+cp .env.sample .env
+openssl rand -hex 32
+# 将输出填入 .env 的 NUXT_SESSION_SECRET
 docker compose up -d
 ```
 
@@ -44,6 +48,7 @@ node .output/server/index.mjs
 
 | 变量                              | 说明                       | 默认值 |
 | --------------------------------- | -------------------------- | ------ |
+| `NUXT_SESSION_SECRET`             | 加密本站登录会话的服务端密钥（至少 32 字符，生产环境必填） | 开发环境临时生成 |
 | `NUXT_PUBLIC_PXIMG_BASEURL_I`     | i.pximg.net 图片代理地址   | `/-/`  |
 | `NUXT_PUBLIC_PXIMG_BASEURL_S`     | s.pximg.net 图片代理地址   | `/~/`  |
 | `NUXT_PUBLIC_GOOGLE_ANALYTICS_ID` | Google Analytics ID        | —      |
@@ -51,18 +56,39 @@ node .output/server/index.mjs
 
 Docker 部署时可在 `docker-compose.yml` 中添加 `environment` 配置。
 
+### 登录会话密钥（首次部署必须配置）
+
+`NUXT_SESSION_SECRET` 是 PixivFun 用于加密本站登录 Cookie 的服务端密钥，不是 Pixiv 的 `PHPSESSID`。首次部署时生成一次并写入项目根目录的 `.env`：
+
+```bash
+openssl rand -hex 32
+```
+
+```env
+NUXT_SESSION_SECRET="粘贴上一步生成的 64 位随机字符串"
+```
+
+`.env` 已被 Git 忽略，不要提交或分享。服务重启时必须继续使用同一个值；修改或丢失该密钥会使已有登录会话失效，需要重新登录。
+
 ## API
 
 > AJAX API 的请求格式与示例：[pixiv-web-api.md](docs/pixiv-web-api.md)
 
 ### 鉴权
 
-通过以下方式传递用户 token 鉴权（二选一）：
-
-- Header `Authorization`
-- Cookie `PHPSESSID`
+在 `/login` 页面提交一次 `PHPSESSID` 后，服务端验证凭据并设置加密的 HttpOnly 本站会话 Cookie。浏览器不会在 `localStorage`、URL 或后续请求头中保存和发送原始 Pixiv 凭据；代理会在服务端自动为 `/ajax/*` 等请求注入 Pixiv Cookie 和写操作所需的 CSRF token。
 
 请求路径 `/ajax/*` 的返回结果与 `https://pixiv.net/ajax/*` 行为一致。
+
+本站会话默认有效 30 天，但 Pixiv 源会话可能更早失效。更换 `NUXT_SESSION_SECRET` 会立即使已有本站会话失效。
+
+会话 Cookie 会在 HTTPS 部署中自动启用 `Secure`。普通 HTTP 也可用于本机或受信任局域网中的个人部署，但通过公网访问时应配置 HTTPS。
+
+### `/api/auth/session`
+
+- `POST`：提交 `{ "phpsessid": "..." }`，验证成功后建立加密本站会话。
+- `GET`：返回当前会话中的 Pixiv 用户信息，不返回任何凭据。
+- `DELETE`：清除当前本站会话。
 
 ### `/api/illust/random`
 
@@ -80,7 +106,7 @@ Docker 部署时可在 `docker-compose.yml` 中添加 `environment` 配置。
 
 ### `/api/user`
 
-辅助接口，通过传入的 token，返回当前登录用户信息 (globalData->userData)。
+兼容入口。根据本站 HttpOnly 会话返回当前 Pixiv 用户信息，不接受查询参数或请求头令牌。
 
 ## UI风格指南
 

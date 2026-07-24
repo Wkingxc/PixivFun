@@ -1,46 +1,49 @@
 <template lang="pug">
-.ranking-carousel(
-  @mouseenter='pause',
-  @mouseleave='resume'
-)
+.ranking-carousel(@mouseenter='pause' @mouseleave='resume')
+  .featured-heading
+    strong
+      ITablerSparkles(aria-hidden='true')
+      | 今日推荐
   .slides
     RouterLink.slide(
-      v-for='(artwork, i) in artworks',
-      :key='artwork.id',
       :class='{ active: i === current }',
+      :key='artwork.id',
       :to='"/artworks/" + artwork.id'
+      v-for='(artwork, i) in artworks'
     )
       DeferLoad.slide-bg(:src='getImageUrl(artwork)')
       .slide-overlay
       .slide-content
-        .rank \#{{ artwork.rank }}
         .slide-title {{ artwork.title }}
         .slide-meta
-          span.author @{{ artwork.userName }}
+          span.author by {{ artwork.userName }}
           span.views
             ITablerEye
             | {{ formatCount(artwork.viewCount) }}
   .controls
-    button.arrow.prev(@click='prev', aria-label='上一张')
+    button.arrow.prev(@click='prev' aria-label='上一张')
       ITablerChevronLeft
     .dots
       button.dot(
-        v-for='(_, i) in artworks',
-        :key='i',
-        :class='{ active: i === current }',
         :aria-label='"第 " + (i + 1) + " 张"',
+        :class='{ active: i === current }',
+        :key='i'
         @click='goTo(i)'
+        v-for='(_, i) in artworks'
       )
-    button.arrow.next(@click='next', aria-label='下一张')
+    button.arrow.next(@click='next' aria-label='下一张')
       ITablerChevronRight
-  .ranking-link
-    RouterLink(to='/ranking') 查看完整排行榜 →
 </template>
 
 <script lang="ts" setup>
 import DeferLoad from '~/components/DeferLoad.vue'
 import { toRegularUrl } from '~/utils/pximg'
-import { IconEye as ITablerEye, IconChevronLeft as ITablerChevronLeft, IconChevronRight as ITablerChevronRight } from '@tabler/icons-vue'
+import {
+  IconChevronLeft as ITablerChevronLeft,
+  IconChevronRight as ITablerChevronRight,
+  IconEye as ITablerEye,
+  IconSparkles as ITablerSparkles,
+} from '@tabler/icons-vue'
 import type { RankedArtworkInfo } from '~/types'
 
 const props = defineProps<{ artworks: RankedArtworkInfo[] }>()
@@ -59,7 +62,8 @@ function next() {
 
 function prev() {
   if (!props.artworks.length) return
-  current.value = (current.value - 1 + props.artworks.length) % props.artworks.length
+  current.value =
+    (current.value - 1 + props.artworks.length) % props.artworks.length
 }
 
 function goTo(i: number) {
@@ -71,7 +75,10 @@ function startTimer() {
 }
 
 function pause() {
-  if (timer) { clearInterval(timer); timer = null }
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
 }
 
 function resume() {
@@ -85,24 +92,46 @@ function formatCount(n: number) {
 }
 
 onMounted(startTimer)
-onBeforeUnmount(() => { if (timer) clearInterval(timer) })
+onBeforeUnmount(() => {
+  if (timer) clearInterval(timer)
+})
 </script>
 
 <style scoped lang="scss">
 .ranking-carousel {
-  @include fnb-border;
-  @include fnb-shadow;
   position: relative;
   overflow: hidden;
   height: 360px;
-  background: #000;
+  color: var(--pf-text);
+  background: #dfeaf7;
+  border: 1px solid var(--pf-line);
+  border-radius: 20px;
+  box-shadow: var(--pf-card-shadow);
   max-width: 100%;
   box-sizing: border-box;
 }
 
-@media (max-width: 768px) {
-  .ranking-carousel {
-    height: 280px;
+.featured-heading {
+  position: absolute;
+  z-index: 4;
+  top: 20px;
+  left: 20px;
+  display: block;
+  max-width: calc(100% - 40px);
+  text-shadow: 0 1px 12px rgb(255 255 255 / 80%);
+
+  strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 1.125rem;
+    font-weight: 700;
+
+    svg {
+      width: 18px;
+      height: 18px;
+      color: var(--pf-pink);
+    }
   }
 }
 
@@ -139,30 +168,31 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 .slide-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(transparent 40%, rgba(0, 0, 0, 0.7));
+  background: rgb(19 31 44 / 12%);
   z-index: 1;
 }
 
 .slide-content {
   position: relative;
   z-index: 2;
-  padding: 1.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
   width: 100%;
-
-  .rank {
-    font-family: var(--fnb-font-display);
-    font-size: 2.5rem;
-    font-weight: 900;
-    line-height: 1;
-    color: var(--fnb-highlight);
-    text-shadow: 3px 3px 0 #000;
-  }
+  color: #fff;
+  background: linear-gradient(
+    to top,
+    rgb(10 13 20 / 78%),
+    rgb(10 13 20 / 42%),
+    transparent
+  );
 
   .slide-title {
-    font-size: 1.25rem;
-    font-weight: 900;
-    margin: 0.25rem 0;
-    text-shadow: 1px 1px 0 #000;
+    min-width: 0;
+    font-size: 1rem;
+    font-weight: 650;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -170,10 +200,10 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 
   .slide-meta {
     display: flex;
-    gap: 1rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-    opacity: 0.9;
+    align-items: center;
+    gap: 12px;
+    color: rgb(255 255 255 / 82%);
+    font-size: 0.75rem;
 
     .views {
       display: inline-flex;
@@ -185,82 +215,95 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 
 .controls {
   position: absolute;
-  bottom: 0;
+  top: 50%;
   left: 0;
   right: 0;
   z-index: 3;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  background: rgba(0, 0, 0, 0.3);
+  justify-content: space-between;
+  padding: 0 16px;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .arrow {
-  background: none;
-  border: 2px solid #fff;
-  color: #fff;
-  width: 28px;
-  height: 28px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  color: #765c78;
+  background: rgb(255 255 255 / 84%);
+  border: 1px solid rgb(255 255 255 / 90%);
+  border-radius: 999px;
+  box-shadow: 0 4px 18px rgb(67 41 68 / 12%);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 0.75rem;
-  padding: 0;
-  box-shadow: none;
-  transition: background 0.15s;
+  pointer-events: auto;
+  transition:
+    background 150ms ease,
+    transform 150ms ease;
 
   &:hover {
-    background: var(--fnb-bookmark);
-    border-color: var(--fnb-bookmark);
-    translate: 0;
-    box-shadow: none;
+    color: #fff;
+    background: var(--pf-pink);
+    transform: scale(1.04);
   }
 }
 
 .dots {
+  position: absolute;
+  top: 112px;
+  left: 50%;
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 7px;
+  pointer-events: auto;
+  transform: translateX(-50%);
 }
 
 .dot {
-  width: 10px;
-  height: 10px;
-  border: 2px solid #fff;
-  background: transparent;
+  width: 7px;
+  height: 7px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 70%);
   padding: 0;
   cursor: pointer;
   box-shadow: none;
-  transition: background 0.15s;
+  transition:
+    background 150ms ease,
+    transform 150ms ease;
 
   &.active {
-    background: var(--fnb-bookmark);
-    border-color: var(--fnb-bookmark);
+    width: 9px;
+    height: 9px;
+    background: var(--pf-pink);
   }
 
   &:hover {
     background: #fff;
-    translate: 0;
-    box-shadow: none;
+    transform: scale(1.15);
   }
 }
 
-.ranking-link {
-  position: absolute;
-  bottom: 0.75rem;
-  right: 1rem;
-  z-index: 3;
-  font-size: 0.8rem;
-  font-weight: 700;
+@media (max-width: 720px) {
+  .ranking-carousel {
+    height: 320px;
+  }
 
-  a {
-    color: var(--fnb-highlight);
-    text-decoration: none;
+  .featured-heading {
+    top: 16px;
+    left: 16px;
+  }
 
-    &:hover {
-      text-decoration: underline;
+  .slide-content {
+    gap: 10px;
+    padding: 10px 14px;
+
+    .slide-meta .author {
+      display: none;
     }
   }
 }

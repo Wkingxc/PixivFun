@@ -14,7 +14,7 @@ mixin GoToPixivSettings
     Card(title='使用方法')
       h3 针对开发者
       p PixivNow 通过对 Pixiv 网页端请求的兼容与转发获取数据，主要接入点为 #[code /ajax/]。
-      p 在需要登录态的请求中，您可以通过 #[code Authorization] 请求头或 #[code PHPSESSID] cookie 提供登录 cookie，并通过 #[code X-CSRF-TOKEN] 请求头提供 CSRF 令牌。代理会在请求源站时按需转发这些信息。
+      p 用户在登录页提交一次 #[code PHPSESSID] 后，服务端会验证并建立加密的 HttpOnly 本站会话。后续请求由代理在服务端自动附加 Pixiv Cookie 和写操作所需的 CSRF token，前端不再传递原始凭据。
       p 关于 AJAX API 的请求格式与示例，请参考开源仓库中 #[code docs] 文件夹中的文档。
       h3 关于 R18 / NSFW 内容
       +GoToPixivSettings
@@ -38,8 +38,9 @@ mixin GoToPixivSettings
       p 持有它的人可能在一定范围内以您的身份访问对应服务。因此，除非您充分信任当前网站的运营方，否则不要提交 cookie。
       p 我们建议您使用专门的 Pixiv 账号，并避免在该账号上绑定过多个人信息或重要资源。
       h3 PixivNow 会窃取我的个人信息吗？
-      p 本仓库公开的默认实现#[strong 不会]以业务目的主动持久化、出售或共享您的 cookie 或个人信息；cookie 仅用于向 Pixiv 源站发起必要请求。
+      p 本仓库公开的默认实现会把凭据加密封装在仅服务端可读取的本站 Cookie 中，#[strong 不会]把原始凭据写入浏览器可读存储，也不会以业务目的出售或共享您的 cookie 或个人信息；凭据仅用于向 Pixiv 源站发起必要请求。
       p 但服务器在转发请求时不可避免地会接触这些信息。具体部署实例的日志、监控、反向代理配置和二次修改，都可能改变实际行为。
+      p 个人部署必须配置至少 32 字符的 #[code NUXT_SESSION_SECRET]。更换此密钥会使现有本站登录会话立即失效。
       h3 开源是否等于安全？
       p #[strong 不等于。]开源便于审计，但不能证明您访问的每一个实例都运行着未经修改且配置安全的代码。任何人都可以部署修改过的 PixivNow 实例，并诱导用户提交 cookie。
       h3 简单来说

@@ -1,6 +1,5 @@
 import axios, { type AxiosInstance } from 'axios'
-import nprogress from 'nprogress'
-import { getToken, getCsrfToken } from '~/composables/userData'
+import { hasAuthenticatedSession } from '~/composables/userData'
 import { createPximgReplacer } from '~/utils/pximg'
 import { buildDiscoveryUsers, type DiscoveryUsersBody } from './discovery-users'
 import type {
@@ -96,35 +95,6 @@ export class PixivWebClient {
         'Content-Type': 'application/json',
       },
     })
-
-    this.http.interceptors.request.use((config) => {
-      nprogress.start()
-
-      config.headers = config.headers || {}
-
-      const token = getToken()
-      if (token) {
-        config.headers['Authorization'] = token
-      }
-
-      const csrfToken = getCsrfToken()
-      if (csrfToken && config.method?.toLowerCase() === 'post') {
-        config.headers['X-CSRF-TOKEN'] = csrfToken
-      }
-
-      return config
-    })
-
-    this.http.interceptors.response.use(
-      (res) => {
-        nprogress.done()
-        return res
-      },
-      (err) => {
-        nprogress.done()
-        return Promise.reject(err)
-      }
-    )
   }
 
   // ── Internal helpers ──────────────────────────────────────────────
@@ -149,11 +119,7 @@ export class PixivWebClient {
   private async postFormData(
     url: string,
     data:
-      | string
-      | string[][]
-      | Record<string, string>
-      | URLSearchParams
-      | undefined
+      string | string[][] | Record<string, string> | URLSearchParams | undefined
   ) {
     return this.http.post(url, new URLSearchParams(data).toString(), {
       headers: {
@@ -210,9 +176,7 @@ export class PixivWebClient {
     return this.unwrap(data)
   }
 
-  async getNovelSeriesContentTitles(
-    id: string
-  ): Promise<NovelContentTitle[]> {
+  async getNovelSeriesContentTitles(id: string): Promise<NovelContentTitle[]> {
     const { data } = await this.http.get<PixivResponse<NovelContentTitle[]>>(
       `/ajax/novel/series/${id}/content_titles`
     )
@@ -230,9 +194,7 @@ export class PixivWebClient {
     return { novels: body.novels ?? [], nextIds: body.nextIds ?? [] }
   }
 
-  async getNovelRecommendMore(
-    ids: string[]
-  ): Promise<{ novels: NovelInfo[] }> {
+  async getNovelRecommendMore(ids: string[]): Promise<{ novels: NovelInfo[] }> {
     const searchParams = new URLSearchParams()
     for (const id of ids) {
       searchParams.append('novelIds[]', id)
@@ -257,7 +219,7 @@ export class PixivWebClient {
     mode?: string
     limit?: number
   }): Promise<ArtworkInfo[]> {
-    const hasAuth = !!getToken()
+    const hasAuth = hasAuthenticatedSession()
     if (hasAuth) {
       const { data } = await this.http.get<
         PixivResponse<{ thumbnails: { illust: ArtworkInfoOrAd[] } }>
@@ -268,7 +230,9 @@ export class PixivWebClient {
         },
       })
       const body = this.unwrap(data)
-      return body.thumbnails.illust.filter((item): item is ArtworkInfo => 'id' in item)
+      return body.thumbnails.illust.filter(
+        (item): item is ArtworkInfo => 'id' in item
+      )
     } else {
       const { data } = await this.http.get<
         PixivResponse<{ illusts: ArtworkInfoOrAd[] }>
@@ -321,9 +285,7 @@ export class PixivWebClient {
     return this.unwrap(data)
   }
 
-  async getDiscoveryUsers(params: {
-    limit?: number
-  }): Promise<UserListItem[]> {
+  async getDiscoveryUsers(params: { limit?: number }): Promise<UserListItem[]> {
     const { data } = await this.http.get<PixivResponse<DiscoveryUsersBody>>(
       '/ajax/discovery/users',
       {
@@ -357,7 +319,13 @@ export class PixivWebClient {
 
   async searchArtworks(
     keyword: string,
-    params?: { p?: number; mode?: string; s_mode?: string; order?: string; ai_type?: string }
+    params?: {
+      p?: number
+      mode?: string
+      s_mode?: string
+      order?: string
+      ai_type?: string
+    }
   ): Promise<{ data: ArtworkInfo[]; total: number }> {
     const { data } = await this.http.get<
       PixivResponse<{
@@ -403,7 +371,13 @@ export class PixivWebClient {
 
   async searchManga(
     keyword: string,
-    params?: { p?: number; mode?: string; s_mode?: string; order?: string; ai_type?: string }
+    params?: {
+      p?: number
+      mode?: string
+      s_mode?: string
+      order?: string
+      ai_type?: string
+    }
   ): Promise<{ data: ArtworkInfo[]; total: number }> {
     const { data } = await this.http.get<
       PixivResponse<{
@@ -431,7 +405,10 @@ export class PixivWebClient {
     }
   ): Promise<{ data: NovelInfo[]; total: number }> {
     const searchParams = {
-      ...this.buildSearchParams({ ...params, s_mode: params?.s_mode ?? 's_tag' }),
+      ...this.buildSearchParams({
+        ...params,
+        s_mode: params?.s_mode ?? 's_tag',
+      }),
       ...(params?.work_lang ? { work_lang: params.work_lang } : {}),
     }
     const { data } = await this.http.get<
@@ -469,39 +446,37 @@ export class PixivWebClient {
     const transformed = this.transform(data)
     return {
       date: transformed.date_range_text || transformed.date,
-      contents: transformed.contents.map(
-        (item): RankedArtworkInfo => ({
-          id: `${item.illust_id}`,
-          title: item.title,
-          description: '',
-          createDate: item.date,
-          updateDate: item.date,
-          illustType: +item.illust_type as 0 | 1 | 2,
-          restrict: 0,
-          xRestrict: item.illust_content_type.sexual,
-          sl: 0,
-          userId: `${item.user_id}`,
-          userName: item.user_name,
-          alt: item.title,
-          width: item.width,
-          height: item.height,
-          pageCount: +item.illust_page_count,
-          isBookmarkable: true,
-          bookmarkData: null,
-          titleCaptionTranslation: {
-            workTitle: null,
-            workCaption: null,
-          },
-          isUnlisted: false,
-          aiType: 0,
-          url: item.url,
-          tags: item.tags,
-          profileImageUrl: item.profile_img,
-          type: 'illust',
-          rank: item.rank,
-          viewCount: item.view_count,
-        })
-      ),
+      contents: transformed.contents.map((item): RankedArtworkInfo => ({
+        id: `${item.illust_id}`,
+        title: item.title,
+        description: '',
+        createDate: item.date,
+        updateDate: item.date,
+        illustType: +item.illust_type as 0 | 1 | 2,
+        restrict: 0,
+        xRestrict: item.illust_content_type.sexual,
+        sl: 0,
+        userId: `${item.user_id}`,
+        userName: item.user_name,
+        alt: item.title,
+        width: item.width,
+        height: item.height,
+        pageCount: +item.illust_page_count,
+        isBookmarkable: true,
+        bookmarkData: null,
+        titleCaptionTranslation: {
+          workTitle: null,
+          workCaption: null,
+        },
+        isUnlisted: false,
+        aiType: 0,
+        url: item.url,
+        tags: item.tags,
+        profileImageUrl: item.profile_img,
+        type: 'illust',
+        rank: item.rank,
+        viewCount: item.view_count,
+      })),
     }
   }
 
@@ -524,40 +499,38 @@ export class PixivWebClient {
       body.date ?? (body.start && body.end ? `${body.start}～${body.end}` : '')
     return {
       date,
-      contents: (body.display_a?.rank_a ?? []).map(
-        (item): RankedNovelInfo => ({
-          id: `${item.id}`,
-          title: item.title,
-          description: item.comment ?? '',
-          createDate: item.create_date ?? '',
-          updateDate: item.create_date ?? '',
-          restrict: +item.restrict as 0,
-          xRestrict: +item.x_restrict as 0 | 1 | 2,
-          userId: `${item.user_id}`,
-          userName: item.user_name,
-          isBookmarkable: true,
-          bookmarkData: null,
-          titleCaptionTranslation: {
-            workTitle: null,
-            workCaption: null,
-          },
-          isUnlisted: false,
-          aiType: +item.ai_type,
-          url: item.url,
-          tags: item.tag_a ?? [],
-          profileImageUrl: item.profile_img,
-          type: 'novel',
-          genre: item.genre,
-          textCount: item.character_count,
-          wordCount: item.word_count,
-          readingTime: item.reading_time,
-          isOriginal: item.is_original,
-          bookmarkCount: item.bookmark_count,
-          language: item.language,
-          marker: item.marker,
-          rank: item.rank,
-        })
-      ),
+      contents: (body.display_a?.rank_a ?? []).map((item): RankedNovelInfo => ({
+        id: `${item.id}`,
+        title: item.title,
+        description: item.comment ?? '',
+        createDate: item.create_date ?? '',
+        updateDate: item.create_date ?? '',
+        restrict: +item.restrict as 0,
+        xRestrict: +item.x_restrict as 0 | 1 | 2,
+        userId: `${item.user_id}`,
+        userName: item.user_name,
+        isBookmarkable: true,
+        bookmarkData: null,
+        titleCaptionTranslation: {
+          workTitle: null,
+          workCaption: null,
+        },
+        isUnlisted: false,
+        aiType: +item.ai_type,
+        url: item.url,
+        tags: item.tag_a ?? [],
+        profileImageUrl: item.profile_img,
+        type: 'novel',
+        genre: item.genre,
+        textCount: item.character_count,
+        wordCount: item.word_count,
+        readingTime: item.reading_time,
+        isOriginal: item.is_original,
+        bookmarkCount: item.bookmark_count,
+        language: item.language,
+        marker: item.marker,
+        rank: item.rank,
+      })),
     }
   }
 
@@ -769,12 +742,10 @@ export class PixivWebClient {
 
   async _getSessionUser(): Promise<{
     userData: PixivUser
-    token: string
   }> {
     const { data } = await this.http.get<{
       userData: PixivUser
-      token: string
-    }>('/api/user', { headers: { 'Cache-Control': 'no-store' } })
+    }>('/api/auth/session', { headers: { 'Cache-Control': 'no-store' } })
     return this.transform(data)
   }
 }

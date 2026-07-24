@@ -25,13 +25,23 @@ defineProps<{
 <style scoped lang="scss">
 li {
   a {
-    padding: 0.8rem 1.6rem;
-    display: block;
-    color: var(--fnb-text);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 38px;
+    padding: 0 10px;
+    color: var(--pf-text);
+    border-radius: 8px;
+    font-size: 0.94rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition:
+      color 150ms ease,
+      background 150ms ease;
 
     &:hover {
-      background-color: var(--fnb-highlight);
-      color: var(--fnb-on-light);
+      color: var(--pf-blue);
+      background: var(--pf-soft-blue);
     }
 
     &.not-allowed {
@@ -39,13 +49,18 @@ li {
       text-decoration: line-through;
     }
 
-    .svg--ListLink {
-      width: 2em;
+    &.router-link-exact-active {
+      color: var(--pf-blue);
+      background: var(--pf-soft-pink);
+      border-radius: 12px;
+      font-weight: 650;
     }
   }
 }
 
 :slotted(svg) {
-  width: 2em;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
 }
 </style>
