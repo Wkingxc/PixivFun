@@ -33,12 +33,16 @@
           :title='item.alt'
           lazyload
         )
+        ArtworkViewedOverlay(
+          :artwork-id='item.id',
+          :disabled='markerDisabled || item.type === "novel"'
+        )
         .type-ugoira(
           v-if='item.type !== "novel" && item.illustType === IllustType.UGOIRA'
         ): IPlayCircle
     .artwork-info.fnb-media-card__body
-      .title.fnb-media-card__title
-        RouterLink(:to='workLink') {{ item.title }}
+      .title.fnb-media-card__title(:class='{ "is-viewed": markTitle }')
+        RouterLink(:style='titleStyle', :to='workLink') {{ item.title }}
       .author.fnb-media-card__author(:title='item.userName')
         RouterLink(:to='"/users/" + item.userId')
           img.avatar(:src='item.profileImageUrl' lazyload)
@@ -60,12 +64,17 @@ const props = defineProps<{
   item?: ArtworkInfo
   loading?: boolean
   imageZoom?: boolean
+  markerDisabled?: boolean
 }>()
 
 const item = toRef(props, 'item')
 const loading = toRef(props, 'loading')
 
 const artworkStore = useArtworkStore()
+const { markTitle, titleStyle } = useArtworkViewedState(
+  () => item.value?.id,
+  () => !!props.markerDisabled || item.value?.type === 'novel'
+)
 const workLink = computed(() =>
   item.value?.type === 'novel'
     ? `/novels/${item.value.id}`
@@ -157,17 +166,12 @@ async function handleBookmark() {
     color: #fff;
     opacity: 0.75;
     transform: translate(-50%, -50%);
-    transition: all 0.25s ease-in-out;
   }
 
   &:hover a,
   & a.router-link-active {
     &::before {
       background-color: rgba(0, 0, 0, 0.2);
-    }
-    .type-ugoira {
-      opacity: 0;
-      transform: translate(-50%, -50%) scale(1.5);
     }
   }
 

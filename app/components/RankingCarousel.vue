@@ -12,9 +12,10 @@
       v-for='(artwork, i) in artworks'
     )
       DeferLoad.slide-bg(:src='getImageUrl(artwork)')
+      ArtworkViewedOverlay(:artwork-id='artwork.id')
       .slide-overlay
       .slide-content
-        .slide-title {{ artwork.title }}
+        .slide-title(:style='titleStyle(artwork.id)') {{ artwork.title }}
         .slide-meta
           span.author by {{ artwork.userName }}
           span.views
@@ -45,8 +46,10 @@ import {
   IconSparkles as ITablerSparkles,
 } from '@tabler/icons-vue'
 import type { RankedArtworkInfo } from '~/types'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 
 const props = defineProps<{ artworks: RankedArtworkInfo[] }>()
+const localPersistence = useLocalPersistenceStore()
 
 const current = ref(0)
 let timer: ReturnType<typeof setInterval> | null = null
@@ -54,6 +57,27 @@ let timer: ReturnType<typeof setInterval> | null = null
 function getImageUrl(artwork: RankedArtworkInfo): string {
   return toRegularUrl(artwork.url)
 }
+
+function titleStyle(id: string | number) {
+  if (
+    !localPersistence.isArtworkViewed(id) ||
+    !localPersistence.viewedMarker.markArtworkTitle
+  ) {
+    return undefined
+  }
+  const { r, g, b, a } = localPersistence.viewedMarker.artworkVisitedColor
+  return { color: `rgb(${r} ${g} ${b} / ${a})` }
+}
+
+watch(
+  () => props.artworks,
+  (items) => {
+    void localPersistence
+      .ensureArtworkStatuses(items.map((item) => item.id))
+      .catch(() => {})
+  },
+  { immediate: true }
+)
 
 function next() {
   if (!props.artworks.length) return
@@ -163,6 +187,10 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.slide :deep(.artwork-viewed-overlay) {
+  z-index: 1;
 }
 
 .slide-overlay {

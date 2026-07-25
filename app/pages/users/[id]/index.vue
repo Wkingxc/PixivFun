@@ -1,5 +1,7 @@
 <template lang="pug">
 #user-view
+  ArtworkMarkerControl(v-if='showArtworkMarkerControl')
+
   //- Loading
   section.loading(v-if='loadingUser')
     .cover-banner.no-cover
@@ -109,12 +111,16 @@
           template(#panel-public_bookmarks)
             ArtworkList(
               :list='[]',
-              :loading='8'
+              :loading='8',
+              :marker-disabled='isSelfUserPage'
               v-if='!publicBookmarks?.length && loadingPublicBookmarks'
             )
             .fnb-empty(v-else-if='!publicBookmarks?.length') {{ emptyPublicBookmarksText }}
             .user-bookmarks.bookmark-grid(ref='publicBookmarkGridRef' v-else)
-              ArtworkList(:list='publicBookmarks')
+              ArtworkList(
+                :list='publicBookmarks',
+                :marker-disabled='isSelfUserPage'
+              )
               FnbPagination.bookmark-pagination(
                 :item-count='totalPublicBookmarks',
                 :page='publicBookmarkPage',
@@ -125,11 +131,12 @@
             ArtworkList(
               :list='[]',
               :loading='8'
+              marker-disabled
               v-if='!hiddenBookmarks?.length && loadingHiddenBookmarks'
             )
             .fnb-empty(v-else-if='!hiddenBookmarks?.length') 没有隐藏的小秘密 இ௰இ
             .user-bookmarks.bookmark-grid(ref='hiddenBookmarkGridRef' v-else)
-              ArtworkList(:list='hiddenBookmarks')
+              ArtworkList(:list='hiddenBookmarks' marker-disabled)
               FnbPagination.bookmark-pagination(
                 :item-count='totalHiddenBookmarks',
                 :page='hiddenBookmarkPage',
@@ -190,6 +197,7 @@ definePageMeta({
 })
 import ArtworkList from '~/components/Artwork/ArtworkList.vue'
 import ArtworkListByUser from '~/components/Artwork/ArtworkListByUser.vue'
+import ArtworkMarkerControl from '~/components/Artwork/ArtworkMarkerControl.vue'
 import ErrorPage from '~/components/ErrorPage.vue'
 import NovelList from '~/components/Novel/NovelList.vue'
 import IFasBirthdayCake from '~icons/fa-solid/birthday-cake'
@@ -244,6 +252,16 @@ const error = ref('')
 const showUserMore = ref(false)
 useBodyScrollLock(showUserMore)
 const route = useRoute()
+const showArtworkMarkerControl = computed(
+  () =>
+    !!user.value &&
+    !(
+      isSelfUserPage.value &&
+      [UserTabs.public_bookmarks, UserTabs.hidden_bookmarks].includes(
+        tab.value as UserTabs
+      )
+    )
+)
 const isArtworkGridView = computed(() =>
   isArtworkGridTab(tab.value || String(route.query.tab || ''))
 )
@@ -303,6 +321,9 @@ async function init(id: string | number, initTab?: UserTabs): Promise<void> {
   try {
     loadingUser.value = true
     user.value = await userProfileStore.fetchUser('' + id)
+    void $fetch(`/api/local/authors/${id}/visit`, { method: 'POST' }).catch(
+      () => {}
+    )
     tab.value = initTab || UserTabs.illusts
   } catch (err) {
     if (err instanceof Error) {

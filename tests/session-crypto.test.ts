@@ -53,11 +53,8 @@ test('短密钥被拒绝', () => {
   assert.throws(() => sealPixivSessionPayload(payload, 'too-short'), /32/)
 })
 
-test('生产环境拒绝缺失或过短的会话密钥', () => {
-  assert.throws(
-    () => resolveConfiguredSessionSecret('', true),
-    /NUXT_SESSION_SECRET/
-  )
+test('未配置会话密钥时允许自动生成，显式短密钥仍被拒绝', () => {
+  assert.equal(resolveConfiguredSessionSecret('', true), null)
   assert.throws(
     () => resolveConfiguredSessionSecret('too-short', true),
     /NUXT_SESSION_SECRET/

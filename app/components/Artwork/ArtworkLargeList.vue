@@ -7,7 +7,11 @@ Waterfall.artwork-large-list(
   ref='waterfallRef'
 )
   template(#default='{ item, index }')
-    ArtworkLargeCard(:illust='item', :key='index')
+    ArtworkLargeCard(
+      :illust='item',
+      :key='index',
+      :marker-disabled='markerDisabled'
+    )
 </template>
 
 <script lang="ts" setup>
@@ -15,10 +19,12 @@ import ArtworkLargeCard from './ArtworkLargeCard.vue'
 import type { ArtworkInfo, RankedArtworkInfo } from '~/types'
 import { Waterfall } from 'vue-waterfall-plugin-next'
 import 'vue-waterfall-plugin-next/dist/style.css'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 
 const props = defineProps<{
   rankList?: RankedArtworkInfo[]
   artworkList?: ArtworkInfo[]
+  markerDisabled?: boolean
 }>()
 const artworks = computed(() => {
   if (props.rankList) {
@@ -31,6 +37,18 @@ const artworks = computed(() => {
 })
 
 const waterfallRef = ref<any>()
+const localPersistence = useLocalPersistenceStore()
+
+watch(
+  artworks,
+  (items) => {
+    if (props.markerDisabled) return
+    void localPersistence
+      .ensureArtworkStatuses(items.map((item) => item.id))
+      .catch(() => {})
+  },
+  { immediate: true }
+)
 
 function resize() {
   waterfallRef.value?.renderer()

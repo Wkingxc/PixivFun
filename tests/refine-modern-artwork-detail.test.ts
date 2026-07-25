@@ -20,6 +20,7 @@ import {
   serializeArtworkDirectoryScroll,
 } from '../app/utils/artworkDirectoryNavigation.ts'
 import { shouldNavigateArtworkTag } from '../app/utils/artworkTagNavigation.ts'
+import { getOriginalImageViewerUrl } from '../app/utils/pximg.ts'
 import {
   clampReaderColumns,
   getArtworkDownloadFilename,
@@ -30,6 +31,15 @@ import {
   getViewerStepIndex,
   shouldOpenArtworkReaderFromKey,
 } from '../app/utils/artworkWaterfallReader.ts'
+
+test('单独打开原图时进入可声明独立 favicon 的查看页', () => {
+  assert.equal(
+    getOriginalImageViewerUrl(
+      '/-/img-original/img/2026/07/24/21/50/40/147583598_p0.jpg?cache=1'
+    ),
+    '/image-viewer?src=%2F-%2Fimg-original%2Fimg%2F2026%2F07%2F24%2F21%2F50%2F40%2F147583598_p0.jpg%3Fcache%3D1'
+  )
+})
 
 test('跨页面打开作品立即定位顶部且不使用平滑滚动', async () => {
   const result = await routerOptions.scrollBehavior!(

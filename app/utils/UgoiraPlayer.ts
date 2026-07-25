@@ -1,7 +1,11 @@
 import type { Artwork } from '~/types'
-import gifWorkerUrl from 'gif.js/dist/gif.worker.js?url'
 import { ZipDownloader, type ZipDownloaderOptions } from './ZipDownloader'
 import { replacePximgInObject } from './pximg'
+import {
+  getUgoiraDuration,
+  getUgoiraFrameIndexAtProgress,
+  getUgoiraPlaybackProgress,
+} from './ugoiraTimeline'
 
 /**
  * Public options
@@ -14,6 +18,11 @@ export interface UgoiraPlayerOptions {
   ) => void
   onDownloadComplete?: () => void
   onDownloadError?: (error: Error) => void
+  onPlaybackProgress?: (
+    progress: number,
+    frameIndex: number,
+    totalFrames: number
+  ) => void
   zipDownloaderOptions?: ZipDownloaderOptions
   requestTimeoutMs?: number
   preferImageBitmap?: boolean
@@ -34,14 +43,9 @@ export interface UgoiraMeta {
 
 /** Internal structures */
 interface CachedVisual {
-  /** kept for backward-compat paths (gif/mp4) */
   img?: HTMLImageElement
-  /** preferred for runtime drawing */
   bitmap?: ImageBitmap
-  /** object URL for cleanup */
   url: string
-  /** raw bytes for re-encode */
-  buf: Uint8Array
 }
 
 /** Player state */
@@ -70,6 +74,8 @@ export class UgoiraPlayer {
   private curFrame = 0
   private lastFrameTime = 0
   private nextFrameDue = 0
+  private animationFrameId: number | undefined
+  private lastProgressEmit = 0
 
   private cached: Map<string, CachedVisual> = new Map()
   private objectURLs: Set<string> = new Set()
@@ -99,7 +105,7 @@ export class UgoiraPlayer {
   ) {
     this._preferImageBitmap = options.preferImageBitmap ?? true
     this._playbackRate = options.playbackRate ?? 1
-    this._progressiveRender = options.progressiveRender ?? true
+    this._progressiveRender = options.progressiveRender ?? false
     this.reset(illust)
   }
 
@@ -119,6 +125,7 @@ export class UgoiraPlayer {
     this.curFrame = 0
     this.lastFrameTime = 0
     this.nextFrameDue = 0
+    this.lastProgressEmit = 0
 
     if (this.renderTimer) {
       clearTimeout(this.renderTimer)
@@ -137,9 +144,6 @@ export class UgoiraPlayer {
   // ====== getters (public API preserved) ======
   get isReady() {
     return !!this._meta && Object.keys(this.files).length > 0
-  }
-  get canExport() {
-    return this.isDownloadComplete && this.isReady
   }
   get downloadProgressPercent() {
     return this.downloadProgress
@@ -177,6 +181,12 @@ export class UgoiraPlayer {
   }
   get totalFrames() {
     return this._meta?.frames.length ?? 0
+  }
+  get durationMs() {
+    return getUgoiraDuration(this._meta?.frames ?? [])
+  }
+  get playbackProgressPercent() {
+    return getUgoiraPlaybackProgress(this._meta?.frames ?? [], this.curFrame)
   }
   get now() {
     return performance.now()
@@ -405,7 +415,7 @@ export class UgoiraPlayer {
     const url = URL.createObjectURL(blob)
     this.objectURLs.add(url)
 
-    const visual: CachedVisual = { url, buf, img: undefined, bitmap: undefined }
+    const visual: CachedVisual = { url, img: undefined, bitmap: undefined }
 
     // Prefer ImageBitmap for runtime rendering; keep HTMLImageElement for encoders
     if (this._preferImageBitmap && 'createImageBitmap' in window) {
@@ -430,84 +440,111 @@ export class UgoiraPlayer {
     return visual
   }
 
-  /** Back-compat helper returning HTMLImageElement (may synthesize from cache) */
-  private getImage(fileName: string): HTMLImageElement {
-    const cached = this.cached.get(fileName)
-    if (cached?.img) return cached.img
-
-    const buf = this.files[fileName]
-    if (!buf) throw new Error(`File ${fileName} not found`)
-
-    const blob = new Blob([new Uint8Array(buf)], { type: this.mimeType })
-    const url = URL.createObjectURL(blob)
-    this.objectURLs.add(url)
-
-    const img = new Image()
-    img.src = url
-
-    this.cached.set(fileName, { url, buf, img, bitmap: undefined })
-    return img
-  }
-
-  /** Back-compat async image getter */
-  private async getImageAsync(fileName: string): Promise<HTMLImageElement> {
-    const v = await this.getVisual(fileName)
-    if (v.img) return v.img
-    // need to synthesize <img> from existing blob URL for encoders
-    const img = new Image()
-    img.src = v.url
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve()
-      img.onerror = () => reject(new Error('image load error'))
-    })
-    v.img = img
-    return img
-  }
-
-  getRealFrameSize() {
-    if (!this.isReady) {
+  async preparePlayback() {
+    if (!this._meta || !this.isDownloadComplete) {
       throw new Error('Ugoira assets not ready, please fetch first')
     }
-    const firstFrame = this.getImage(this.meta!.frames[0].file)
-    return { width: firstFrame.width, height: firstFrame.height }
+    await Promise.all(
+      this._meta.frames.map((frame) => this.getVisual(frame.file))
+    )
+    this.renderPreparedFrame()
+    return this
   }
 
-  // ====== classic playback loop (preserved) ======
+  private renderPreparedFrame() {
+    if (!this.canvas || !this._meta) return
+    const frame = this._meta.frames[this.curFrame]
+    const visual = this.cached.get(frame.file)
+    const source = visual?.bitmap ?? visual?.img
+    if (!source) return
+    const ctx = this.canvas.getContext('2d')
+    ctx?.drawImage(
+      source as CanvasImageSource,
+      0,
+      0,
+      this.initWidth,
+      this.initHeight
+    )
+  }
+
+  private currentPlaybackProgress(now = this.now) {
+    if (!this._meta?.frames.length || !this.durationMs) return 0
+    const frame = this._meta.frames[this.curFrame]
+    const frameStart =
+      (getUgoiraPlaybackProgress(this._meta.frames, this.curFrame) / 100) *
+      this.durationMs
+    const remaining =
+      this.nextFrameDue > 0
+        ? Math.max(0, this.nextFrameDue - now) * this._playbackRate
+        : frame.delay
+    const elapsedInFrame = Math.min(
+      Math.max(0, frame.delay),
+      Math.max(0, frame.delay - remaining)
+    )
+    return ((frameStart + elapsedInFrame) / this.durationMs) * 100
+  }
+
+  private emitPlaybackProgress(progress = this.playbackProgressPercent) {
+    this.options.onPlaybackProgress?.(progress, this.curFrame, this.totalFrames)
+  }
+
+  // ====== playback loop ======
   private drawFrame() {
     if (!this.canvas || !this._meta || !this.isPlaying) return
 
-    const ctx = this.canvas.getContext('2d')!
-    const frame = this._meta.frames[this.curFrame]
-    const delay = Math.max(0, frame.delay / this._playbackRate)
-
     const now = this.now
-    if (this.nextFrameDue === 0) this.nextFrameDue = now + delay
-
-    if (now >= this.nextFrameDue) {
-      this.lastFrameTime = now
-      this.curFrame = (this.curFrame + 1) % this.totalFrames
-      this.nextFrameDue = now + delay
+    const currentFrame = this._meta.frames[this.curFrame]
+    if (this.nextFrameDue === 0) {
+      this.nextFrameDue =
+        now + Math.max(0, currentFrame.delay / this._playbackRate)
     }
 
-    // Render current frame
-    const img = this.getImage(frame.file)
-    ctx.drawImage(img, 0, 0, this.initWidth, this.initHeight)
+    if (now >= this.nextFrameDue) {
+      this.curFrame = (this.curFrame + 1) % this.totalFrames
+      const nextFrame = this._meta.frames[this.curFrame]
+      this.lastFrameTime = now
+      this.nextFrameDue =
+        now + Math.max(0, nextFrame.delay / this._playbackRate)
+    }
 
-    requestAnimationFrame(() => this.drawFrame())
+    this.renderPreparedFrame()
+    if (now - this.lastProgressEmit >= 50) {
+      this.lastProgressEmit = now
+      this.emitPlaybackProgress(this.currentPlaybackProgress(now))
+    }
+    this.animationFrameId = requestAnimationFrame(() => this.drawFrame())
   }
 
   // ====== controls ======
   play() {
+    if (this.animationFrameId !== undefined) {
+      cancelAnimationFrame(this.animationFrameId)
+    }
     this.isPlaying = true
     this.lastFrameTime = this.now
     this.nextFrameDue = 0
+    this.lastProgressEmit = 0
     this.state = PlayerState.Playing
+    this.emitPlaybackProgress()
     this.drawFrame()
   }
 
   pause() {
     this.isPlaying = false
+    if (this.animationFrameId !== undefined) {
+      cancelAnimationFrame(this.animationFrameId)
+      this.animationFrameId = undefined
+    }
     if (this.state !== PlayerState.Destroyed) this.state = PlayerState.Paused
+  }
+
+  seekToProgress(progress: number) {
+    if (!this._meta?.frames.length) return
+    this.curFrame = getUgoiraFrameIndexAtProgress(this._meta.frames, progress)
+    this.nextFrameDue = 0
+    this.lastProgressEmit = 0
+    this.renderPreparedFrame()
+    this.emitPlaybackProgress()
   }
 
   /** Cancel any in-flight downloads */
@@ -543,70 +580,5 @@ export class UgoiraPlayer {
     this.lastRenderedFrameIndex = -1
 
     this.state = PlayerState.Destroyed
-  }
-
-  // ====== encoders ======
-  private async genGifEncoder() {
-    const { width, height } = this.getRealFrameSize()
-    const GifJs = (await import('gif.js')).default
-    return new GifJs({
-      debug: import.meta.env.DEV,
-      workers: 5,
-      workerScript: gifWorkerUrl,
-      width,
-      height,
-    })
-  }
-
-  async renderGif(): Promise<Blob> {
-    if (!this.canExport) {
-      throw new Error(
-        'Cannot export: download not complete or assets not ready'
-      )
-    }
-
-    const encoder = await this.genGifEncoder()
-    const frames = this._meta!.frames
-
-    // Prepare HTMLImageElements for gif.js
-    const imageList = await Promise.all(
-      frames.map((f) => this.getImageAsync(f.file))
-    )
-
-    return new Promise<Blob>((resolve, reject) => {
-      try {
-        imageList.forEach((img, idx) => {
-          encoder.addFrame(img, { delay: Math.max(0, frames[idx].delay) })
-        })
-        encoder.on('finished', (blob: Blob) => {
-          // Best-effort worker cleanup (gif.js specific)
-          // @ts-ignore
-          encoder.freeWorkers?.forEach?.((w: Worker) => w?.terminate?.())
-          resolve(blob)
-        })
-        encoder.on('abort', () => reject(new Error('GIF encoding aborted')))
-        encoder.render()
-      } catch (e) {
-        reject(e as Error)
-      }
-    })
-  }
-
-  async renderMp4() {
-    if (!this.canExport) {
-      throw new Error(
-        'Cannot export: download not complete or assets not ready'
-      )
-    }
-
-    const { width, height } = this.getRealFrameSize()
-    const frames = this._meta!.frames.map((i) => ({
-      data: this.getImage(i.file).src!,
-      duration: Math.max(0, i.delay),
-    }))
-
-    const { encode } = await import('modern-mp4')
-    const buf = await encode({ frames, width, height, audio: false })
-    return new Blob([buf], { type: 'video/mp4' })
   }
 }

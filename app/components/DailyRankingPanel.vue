@@ -11,9 +11,11 @@ section.daily-ranking-panel(aria-labelledby='daily-ranking-title')
       v-for='(artwork, index) in artworks.slice(0, 4)'
     )
       span.rank-badge(:data-rank='index + 1') {{ index + 1 }}
-      DeferLoad.ranking-thumb(:src='getImageUrl(artwork)')
+      .ranking-thumb-wrap
+        DeferLoad.ranking-thumb(:src='getImageUrl(artwork)')
+        ArtworkViewedOverlay(:artwork-id='artwork.id')
       .ranking-copy
-        strong {{ artwork.title }}
+        strong(:style='titleStyle(artwork.id)') {{ artwork.title }}
         span by {{ artwork.userName }}
         span.likes
           ITablerHeart(aria-hidden='true')
@@ -35,11 +37,13 @@ import DeferLoad from '~/components/DeferLoad.vue'
 import { IconHeart as ITablerHeart } from '@tabler/icons-vue'
 import { toRegularUrl } from '~/utils/pximg'
 import type { RankedArtworkInfo } from '~/types'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 
-defineProps<{
+const props = defineProps<{
   artworks: RankedArtworkInfo[]
   loading: boolean
 }>()
+const localPersistence = useLocalPersistenceStore()
 
 function getImageUrl(artwork: RankedArtworkInfo): string {
   return toRegularUrl(artwork.url)
@@ -50,6 +54,27 @@ function formatCount(value: number): string {
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`
   return String(value)
 }
+
+function titleStyle(id: string | number) {
+  if (
+    !localPersistence.isArtworkViewed(id) ||
+    !localPersistence.viewedMarker.markArtworkTitle
+  ) {
+    return undefined
+  }
+  const { r, g, b, a } = localPersistence.viewedMarker.artworkVisitedColor
+  return { color: `rgb(${r} ${g} ${b} / ${a})` }
+}
+
+watch(
+  () => props.artworks,
+  (items) => {
+    void localPersistence
+      .ensureArtworkStatuses(items.map((item) => item.id))
+      .catch(() => {})
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped lang="scss">
@@ -151,6 +176,14 @@ function formatCount(value: number): string {
   background: var(--fnb-skeleton);
 }
 
+.ranking-thumb-wrap {
+  position: relative;
+  width: 112px;
+  height: 104px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
 .ranking-copy {
   display: grid;
   min-width: 0;
@@ -209,6 +242,11 @@ function formatCount(value: number): string {
   }
 
   .ranking-thumb {
+    width: 96px;
+    height: 88px;
+  }
+
+  .ranking-thumb-wrap {
     width: 96px;
     height: 88px;
   }

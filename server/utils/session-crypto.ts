@@ -21,10 +21,10 @@ export interface PixivSessionPayload {
 
 export function resolveConfiguredSessionSecret(
   configured: string,
-  production: boolean
+  _production: boolean
 ): string | null {
   if (configured.length >= MIN_SECRET_LENGTH) return configured
-  if (production) {
+  if (configured.length > 0) {
     throw new Error(
       `NUXT_SESSION_SECRET must contain at least ${MIN_SECRET_LENGTH} characters`
     )

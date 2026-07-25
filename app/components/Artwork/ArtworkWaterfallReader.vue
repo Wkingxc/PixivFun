@@ -294,6 +294,7 @@ import {
 import INotoCherryBlossom from '~icons/noto-v1/cherry-blossom'
 import { Waterfall } from 'vue-waterfall-plugin-next'
 import 'vue-waterfall-plugin-next/dist/style.css'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 
 const props = defineProps<{
   illustId: string
@@ -301,7 +302,6 @@ const props = defineProps<{
   title: string
 }>()
 
-const SETTINGS_KEY = 'pixivfun:artwork-waterfall-reader'
 const READER_GUTTER = 14
 const MOBILE_BREAKPOINT = 760
 const COLUMN_ANIMATION_MS = 360
@@ -318,6 +318,8 @@ type ReaderLayoutMode = 'masonry' | 'aligned'
 const layoutMode = ref<ReaderLayoutMode>('masonry')
 const readerViewportWidth = ref(1200)
 const downloading = ref(false)
+const localPersistenceStore = useLocalPersistenceStore()
+const settingsReady = ref(false)
 const downloadCompletedCount = ref(0)
 const downloadError = ref('')
 type PreloadState = 'idle' | 'loading' | 'loaded' | 'failed'
@@ -333,6 +335,7 @@ let activePreloadImage: HTMLImageElement | null = null
 let resolveActivePreload: ((loaded: boolean) => void) | null = null
 let menuCollapseTimer = 0
 let columnLayoutTimer = 0
+let progressPersistTimer = 0
 let downloadController: AbortController | null = null
 
 const qualityOptions: { label: string; value: ReaderImageQuality }[] = [
@@ -819,32 +822,21 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   window.addEventListener('resize', syncReaderViewport)
   syncReaderViewport()
   ensurePreloadStates()
-  try {
-    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')
-    if (Number.isFinite(saved.columns)) {
-      columns.value = clampReaderColumns(saved.columns)
-      layoutColumns.value = columns.value
-    }
-    if (['small', 'regular', 'original'].includes(saved.imageQuality)) {
-      imageQuality.value = saved.imageQuality
-    }
-    if (typeof saved.preloadOriginals === 'boolean') {
-      preloadOriginals.value = saved.preloadOriginals
-    }
-    if (typeof saved.doublePageMode === 'boolean') {
-      doublePageMode.value = saved.doublePageMode
-    }
-    if (['masonry', 'aligned'].includes(saved.layoutMode)) {
-      layoutMode.value = saved.layoutMode
-    }
-  } catch {
-    // Ignore invalid local preferences.
-  }
+  await localPersistenceStore.init().catch(() => {})
+  const saved = localPersistenceStore.preferences.artworkReader
+  columns.value = clampReaderColumns(saved.columns)
+  layoutColumns.value = columns.value
+  imageQuality.value = saved.imageQuality
+  preloadOriginals.value = saved.preloadOriginals
+  doublePageMode.value = saved.doublePageMode
+  layoutMode.value = saved.layoutMode
+  await nextTick()
+  settingsReady.value = true
 })
 
 watch(
@@ -853,17 +845,18 @@ watch(
     [nextColumns, nextQuality, nextPreload, nextDoublePage, nextLayoutMode],
     previous
   ) => {
-    if (!import.meta.client) return
-    localStorage.setItem(
-      SETTINGS_KEY,
-      JSON.stringify({
-        columns: nextColumns,
-        imageQuality: nextQuality,
-        preloadOriginals: nextPreload,
-        doublePageMode: nextDoublePage,
-        layoutMode: nextLayoutMode,
+    if (!settingsReady.value) return
+    void localPersistenceStore
+      .patchPreferences({
+        artworkReader: {
+          columns: nextColumns,
+          imageQuality: nextQuality,
+          preloadOriginals: nextPreload,
+          doublePageMode: nextDoublePage,
+          layoutMode: nextLayoutMode,
+        },
       })
-    )
+      .catch(() => {})
     if (!previous || nextPreload === previous[2] || !active.value) return
     if (nextPreload) {
       void startOriginalPreload(currentPageIndex.value)
@@ -879,6 +872,19 @@ watch(layoutMode, async (nextMode) => {
   waterfallRef.value?.renderer?.()
 })
 
+watch(currentPageIndex, (index) => {
+  if (!active.value || !settingsReady.value) return
+  window.clearTimeout(progressPersistTimer)
+  progressPersistTimer = window.setTimeout(() => {
+    void localPersistenceStore
+      .recordArtworkVisit(props.illustId, {
+        lastPage: index + 1,
+        pageCount: props.pages.length,
+      })
+      .catch(() => {})
+  }, 500)
+})
+
 watch(
   () => props.illustId,
   () => {
@@ -891,6 +897,7 @@ onBeforeUnmount(() => {
   stopOriginalPreload()
   cancelMenuCollapse()
   if (columnLayoutTimer) window.clearTimeout(columnLayoutTimer)
+  if (progressPersistTimer) window.clearTimeout(progressPersistTimer)
   downloadController?.abort()
   window.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('resize', syncReaderViewport)

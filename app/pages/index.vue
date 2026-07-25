@@ -13,9 +13,6 @@
         FnbTag(@click='$router.push("/ranking")' clickable)
           ITablerChartBar(aria-hidden='true')
           | 排行榜
-        FnbTag(@click='$router.push("/following/latest")' clickable)
-          ITablerUsers(aria-hidden='true')
-          | 关注更新
         FnbTag(@click='scrollToDiscovery' clickable)
           ITablerCompass(aria-hidden='true')
           | 探索
@@ -138,12 +135,12 @@ import {
   IconRefresh as ITablerRefresh,
   IconArrowsShuffle as ITablerShuffle,
   IconSparkles as ITablerSparkles,
-  IconUsers as ITablerUsers,
   IconX as ITablerX,
 } from '@tabler/icons-vue'
 import { useHomeStore } from '~/stores/home'
 import { useDiscoveryStore } from '~/stores/discovery'
 import { useUserStore } from '~/stores/session'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 import { toRegularUrl } from '~/utils/pximg'
 import { setTitle } from '~/utils/setTitle'
 
@@ -161,6 +158,7 @@ const discoveryStore = useDiscoveryStore()
 const userStore = useUserStore()
 const route = useRoute()
 const router = useRouter()
+const localPersistenceStore = useLocalPersistenceStore()
 const discoverRef = ref<HTMLElement | null>(null)
 
 const randomBg = computed(() => homeStore.randomBg)
@@ -180,11 +178,12 @@ const discoveryModeOptions = [
   { label: 'R18', value: 'r18' },
 ]
 
-const savedDiscoveryTab = useLocalStorage('pixivnow:discovery-tab', 'all')
-const savedDiscoveryMode = useLocalStorage('pixivnow:discovery-mode', 'all')
-const discoveryTab = ref((route.query.tab as string) || savedDiscoveryTab.value)
+const discoveryTab = ref(
+  (route.query.tab as string) || localPersistenceStore.preferences.discovery.tab
+)
 const discoveryMode = ref(
-  (route.query.mode as string) || savedDiscoveryMode.value
+  (route.query.mode as string) ||
+    localPersistenceStore.preferences.discovery.mode
 )
 
 discoveryStore.discoveryMode = discoveryMode.value
@@ -227,7 +226,13 @@ function syncDiscoveryQuery() {
 
 function changeDiscoveryTab(tab: string) {
   discoveryTab.value = tab
-  savedDiscoveryTab.value = tab
+  void localPersistenceStore
+    .patchPreferences({
+      discovery: {
+        tab: tab as 'all' | 'novel',
+      },
+    })
+    .catch(() => {})
   syncDiscoveryQuery()
   if (tab === 'novel' && !discoveryStore.novelDiscoveryList.length) {
     discoveryStore.fetchNovelDiscovery()
@@ -236,7 +241,13 @@ function changeDiscoveryTab(tab: string) {
 
 function changeDiscoveryMode(mode: string) {
   discoveryMode.value = mode
-  savedDiscoveryMode.value = mode
+  void localPersistenceStore
+    .patchPreferences({
+      discovery: {
+        mode: mode as 'all' | 'safe' | 'r18',
+      },
+    })
+    .catch(() => {})
   discoveryStore.discoveryMode = mode
   syncDiscoveryQuery()
   refreshDiscovery()

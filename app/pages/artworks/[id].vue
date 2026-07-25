@@ -183,6 +183,11 @@
     v-if='!loading && !error && illust && !isUgoira && pages.length'
   )
 
+  ArtworkMarkerControl(
+    :artwork-id='illust.illustId'
+    v-if='!loading && !error && illust'
+  )
+
   //- Error
   section.error(v-if='error')
     ErrorPage(:description='error' title='出大问题')
@@ -197,6 +202,7 @@ import ArtTag from '~/components/ArtTag.vue'
 import ArtworkList from '~/components/Artwork/ArtworkList.vue'
 import ArtworkDetailModern from '~/components/Artwork/ArtworkDetailModern.vue'
 import ArtworkWaterfallReader from '~/components/Artwork/ArtworkWaterfallReader.vue'
+import ArtworkMarkerControl from '~/components/Artwork/ArtworkMarkerControl.vue'
 import AuthorCard from '~/components/AuthorCard.vue'
 import Card from '~/components/Card.vue'
 import CommentArea from '~/components/Comment/CommentArea.vue'
@@ -214,6 +220,7 @@ import IFasThumbsUp from '~icons/fa-solid/thumbs-up'
 import type { Artwork, ArtworkGallery, User } from '~/types'
 import { useUserStore } from '~/stores/session'
 import { useArtworkStore } from '~/stores/artwork'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 import { useUserProfileStore } from '~/stores/user-profile'
 import { effect } from 'vue'
 import { setTitle } from '~/utils/setTitle'
@@ -233,6 +240,7 @@ const likeLoading = ref(false)
 const route = useRoute()
 const userStore = useUserStore()
 const artworkStore = useArtworkStore()
+const localPersistenceStore = useLocalPersistenceStore()
 const userProfileStore = useUserProfileStore()
 const { style: artworkDetailStyle } = useArtworkDetailStyle()
 const { style: directoryTuningStyle } = useArtworkDirectoryTuning()
@@ -325,6 +333,9 @@ async function init(id: string): Promise<void> {
     illust.value = cachedArtwork
     pages.value = cachedPages
     loading.value = false
+    void localPersistenceStore
+      .recordArtworkVisit(id, { pageCount: cachedPages.length })
+      .catch(() => {})
     await restoreDirectoryScroll(id, directoryScrollTop)
     return
   }
@@ -336,6 +347,9 @@ async function init(id: string): Promise<void> {
     ])
     illust.value = artworkData
     pages.value = pagesData
+    void localPersistenceStore
+      .recordArtworkVisit(id, { pageCount: pagesData.length })
+      .catch(() => {})
   } catch (err) {
     console.warn('illust fetch error', `#${id}`, err)
     if (err instanceof Error) {

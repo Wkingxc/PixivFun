@@ -1,7 +1,11 @@
 <template lang="pug">
 #following-latest-view.body-inner
+  ArtworkMarkerControl
   h1 已关注用户的作品
-  ArtworkList(:list='followingStore.latestIllusts', :loading='followingStore.latestLoading && !followingStore.latestIllusts.length')
+  ArtworkList(
+    :list='followingStore.latestIllusts',
+    :loading='followingStore.latestLoading && !followingStore.latestIllusts.length'
+  )
   ShowMore(
     :loading='followingStore.latestLoading',
     :method='handleFetch',
@@ -17,6 +21,7 @@ definePageMeta({
 })
 import { useUserStore } from '~/stores/session'
 import { useFollowingStore } from '~/stores/following'
+import ArtworkMarkerControl from '~/components/Artwork/ArtworkMarkerControl.vue'
 
 onMounted(() => {
   setTitle('New Artworks from Following Users')

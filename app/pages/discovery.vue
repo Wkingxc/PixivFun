@@ -3,22 +3,23 @@
   .discover-header
     h2
       FnbIcon: ITablerCompass
-      |  探索发现
+      |
+      | 探索发现
     .discover-controls
       .tab-nav
         RouterLink.tab-item(
-          v-for='t in tabs',
+          :class='{ active: activeKey === t.key }',
           :key='t.key',
-          :to='t.to',
-          :class='{ active: activeKey === t.key }'
+          :to='t.to'
+          v-for='t in tabs'
         ) {{ t.label }}
       FnbSelect(
-        v-if='showModeSelect && userStore.isLoggedIn',
         :model-value='discoveryMode',
-        :options='discoveryModeOptions',
+        :options='discoveryModeOptions'
         @update:model-value='changeMode'
+        v-if='showModeSelect && userStore.isLoggedIn'
       )
-      FnbButton(:loading='isLoading', @click='refresh', size='sm')
+      FnbButton(:loading='isLoading' @click='refresh' size='sm')
         template(#icon): IFasRandom
         | {{ isLoading ? '加载中' : '换一批' }}
   NuxtPage
@@ -29,6 +30,7 @@ import IFasRandom from '~icons/fa-solid/random'
 import { IconCompass as ITablerCompass } from '@tabler/icons-vue'
 import { useDiscoveryStore } from '~/stores/discovery'
 import { useUserStore } from '~/stores/session'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 import { setTitle } from '~/utils/setTitle'
 
 definePageMeta({ name: 'discovery' })
@@ -36,6 +38,7 @@ definePageMeta({ name: 'discovery' })
 const discoveryStore = useDiscoveryStore()
 const userStore = useUserStore()
 const route = useRoute()
+const localPersistenceStore = useLocalPersistenceStore()
 
 const discoveryModeOptions = [
   { label: '混池', value: 'all' },
@@ -43,8 +46,7 @@ const discoveryModeOptions = [
   { label: 'R18', value: 'r18' },
 ]
 
-const savedDiscoveryMode = useLocalStorage('pixivnow:discovery-mode', 'all')
-const discoveryMode = ref(savedDiscoveryMode.value)
+const discoveryMode = ref(localPersistenceStore.preferences.discovery.mode)
 discoveryStore.discoveryMode = discoveryMode.value
 
 const tabs = [
@@ -75,7 +77,11 @@ function refresh() {
 
 function changeMode(mode: string) {
   discoveryMode.value = mode
-  savedDiscoveryMode.value = mode
+  void localPersistenceStore
+    .patchPreferences({
+      discovery: { mode: mode as 'all' | 'safe' | 'r18' },
+    })
+    .catch(() => {})
   discoveryStore.discoveryMode = mode
   refresh()
 }
@@ -125,7 +131,9 @@ onMounted(() => setTitle('探索发现'))
   font-weight: 700;
   color: var(--fnb-text-muted);
   text-decoration: none;
-  transition: color 150ms, background 150ms;
+  transition:
+    color 150ms,
+    background 150ms;
 
   &:hover {
     color: var(--fnb-text);

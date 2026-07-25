@@ -10,10 +10,10 @@ section.artwork-modern(
           UgoiraViewer(:illust='illust')
         template(v-else)
           a.modern-image-link(
-            :href='page.urls.original',
+            :href='getOriginalImageViewerUrl(page.urls.original)',
             :key='index'
             target='_blank'
-            title='点击下载原图'
+            title='在新标签页查看原图'
             v-for='(page, index) in visiblePages'
           )
             DeferLoad.modern-image(
@@ -217,6 +217,7 @@ import DeferLoad from '~/components/DeferLoad.vue'
 import PixivLikeIcon from '~/components/icons/PixivLikeIcon.vue'
 import PixivShareIcon from '~/components/icons/PixivShareIcon.vue'
 import type { Artwork, ArtworkGallery, ArtworkInfo, User } from '~/types'
+import { getOriginalImageViewerUrl } from '~/utils/pximg'
 import { getVisibleArtworkPages } from '~/utils/refineModernArtwork'
 import {
   IconCheck as ITablerCheck,

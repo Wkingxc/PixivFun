@@ -4,6 +4,10 @@
     RouterLink.plain(:to='"/artworks/" + illust.id')
       .thumb(:style='thumbStyle')
         DeferLoad.image(:alt='illust.title', :src='illust.url')
+        ArtworkViewedOverlay(
+          :artwork-id='illust.id',
+          :disabled='markerDisabled'
+        )
       .page-count(
         :title='"共 " + illust.pageCount + " 张"'
         v-if='+illust.pageCount > 1'
@@ -16,8 +20,8 @@
       ) {{ illust.rank }}
       .type-ugoira(v-if='illust.illustType === IllustType.UGOIRA'): IPlayCircle
   .bottom
-    h3.title.plain(:title='illust.title')
-      RouterLink(:to='"/artworks/" + illust.id') {{ illust.title }}
+    h3.title.plain(:class='{ "is-viewed": markTitle }', :title='illust.title')
+      RouterLink(:style='titleStyle', :to='"/artworks/" + illust.id') {{ illust.title }}
     .author(:title='illust.userName')
       RouterLink(:to='"/users/" + illust.userId')
         img.avatar(
@@ -40,7 +44,13 @@ import IPlayCircle from '~icons/fa-solid/play-circle'
 
 const props = defineProps<{
   illust: ArtworkInfo & { rank?: number; viewCount?: number }
+  markerDisabled?: boolean
 }>()
+
+const { markTitle, titleStyle } = useArtworkViewedState(
+  () => props.illust.id,
+  () => !!props.markerDisabled
+)
 
 // Preserve the artwork's natural aspect ratio (the list is a waterfall,
 // so there is no need to crop to a square). Reserve the height up-front
@@ -104,6 +114,7 @@ h3 {
     padding: 0 7px;
     font-size: 0.75rem;
     border-radius: 9px;
+    z-index: 6;
     [data-icon] {
       width: 14px;
       height: 14px;
@@ -125,6 +136,7 @@ h3 {
     height: 1.8rem;
     text-align: center;
     line-height: 1.7;
+    z-index: 6;
     &.gold {
       background-color: var(--fnb-highlight);
       color: var(--fnb-on-light);
@@ -146,6 +158,7 @@ h3 {
     height: 100%;
     left: 0;
     top: 0;
+    z-index: 5;
     svg {
       position: absolute;
       bottom: 50%;

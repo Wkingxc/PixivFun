@@ -5,7 +5,7 @@ import {
 
 export default defineEventHandler((event) => {
   assertSameOrigin(event)
-  clearPixivSession(event)
+  clearPixivSession(event, true)
   setResponseStatus(event, 204)
   return null
 })

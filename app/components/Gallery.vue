@@ -3,9 +3,9 @@
   .center-img(:class='showAll ? "show-all" : "show-single"')
     div(:data-pic-index='index' v-for='(item, index) in pages')
       a.image-container(
-        :href='item.urls.original'
+        :href='getOriginalImageViewerUrl(item.urls.original)'
         target='_blank'
-        title='点击下载原图'
+        title='在新标签页查看原图'
         v-if='picShow === index'
       )
         DeferLoad.img(
@@ -33,6 +33,7 @@
 <script lang="ts" setup>
 import DeferLoad from './DeferLoad.vue'
 import type { ArtworkGallery } from '~/types'
+import { getOriginalImageViewerUrl } from '~/utils/pximg'
 
 defineProps<{ pages: ArtworkGallery[] }>()
 const showAll = ref(false)

@@ -10,9 +10,7 @@ const PXIMG_S = 'https://s.pximg.net/'
 export function createPximgReplacer(baseUrlI: string, baseUrlS: string) {
   function replacePximgUrl(str: string): string {
     if (!str.includes('pximg.net')) return str
-    return str
-      .replaceAll(PXIMG_I, baseUrlI)
-      .replaceAll(PXIMG_S, baseUrlS)
+    return str.replaceAll(PXIMG_I, baseUrlI).replaceAll(PXIMG_S, baseUrlS)
   }
 
   function replacePximgInObject<T>(obj: T): T {
@@ -81,6 +79,16 @@ export function pximgI(path: string): string {
 export function pximgS(path: string): string {
   const { baseUrlS } = getDefaultBaseUrls()
   return baseUrlS + path
+}
+
+/**
+ * Open an original image through the lightweight same-origin viewer.
+ *
+ * Native browser image documents reuse a cached origin favicon, so they cannot
+ * reliably pick up the dedicated original-image icon after it changes.
+ */
+export function getOriginalImageViewerUrl(imageUrl: string): string {
+  return `/image-viewer?src=${encodeURIComponent(imageUrl)}`
 }
 
 // ── URL conversion utilities ─────────────────────────────────────────

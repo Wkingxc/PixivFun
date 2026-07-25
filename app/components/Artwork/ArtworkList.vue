@@ -5,19 +5,25 @@ Component.artworks-list(:class='{ inline }', :is='inline ? "div" : "ul"')
       ArtworkCard(loading)
   template(v-else)
     li(:key='item.id' v-for='item in artworks')
-      ArtworkCard(:image-zoom='imageZoom', :item='item')
+      ArtworkCard(
+        :image-zoom='imageZoom',
+        :item='item',
+        :marker-disabled='markerDisabled'
+      )
 </template>
 
 <script lang="ts" setup>
 import ArtworkCard from './ArtworkCard.vue'
 import { isArtwork } from '~/utils'
 import type { ArtworkInfo, ArtworkInfoOrAd } from '~/types'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 
 const props = defineProps<{
   list: ArtworkInfoOrAd[]
   loading?: boolean | number
   inline?: boolean
   imageZoom?: boolean
+  markerDisabled?: boolean
 }>()
 
 const skeletonNumber = computed(() =>
@@ -27,6 +33,20 @@ const skeletonNumber = computed(() =>
 const artworks = computed(() => {
   return props.list.filter((item): item is ArtworkInfo => isArtwork(item))
 })
+
+const localPersistence = useLocalPersistenceStore()
+watch(
+  artworks,
+  (items) => {
+    if (props.markerDisabled) return
+    void localPersistence
+      .ensureArtworkStatuses(
+        items.filter((item) => item.type !== 'novel').map((item) => item.id)
+      )
+      .catch(() => {})
+  },
+  { immediate: true }
+)
 </script>
 
 <style lang="scss">

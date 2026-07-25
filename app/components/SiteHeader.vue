@@ -33,6 +33,9 @@ header.global-navbar(
         )
           ITablerUsers(aria-hidden='true')
           span.shortcut-label 关注
+        RouterLink.header-shortcut(title='关注更新' to='/following/latest')
+          ITablerPhoto(aria-hidden='true')
+          span.shortcut-label 关注更新
 
     .search-area(v-if='$route.name !== "search"')
       .header-search
@@ -92,6 +95,7 @@ import {
   IconBookmark as ITablerBookmark,
   IconLayoutSidebarLeftCollapse as ITablerLayoutSidebarLeftCollapse,
   IconMenu2 as ITablerMenu2,
+  IconPhoto as ITablerPhoto,
   IconUsers as ITablerUsers,
 } from '@tabler/icons-vue'
 import logoUrl from '~/assets/PixivFun.png'

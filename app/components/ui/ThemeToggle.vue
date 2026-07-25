@@ -11,9 +11,11 @@ button.theme-toggle(
 <script lang="ts" setup>
 import { IconMoon, IconSun } from '@tabler/icons-vue'
 import { nextExplicitTheme } from '~/utils/refineModernArtwork'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 
 const colorMode = useColorMode()
 const { setTheme } = useTheme()
+const localPersistence = useLocalPersistenceStore()
 
 const targetTheme = computed(() => nextExplicitTheme(colorMode.value))
 const label = computed(() =>
@@ -23,6 +25,9 @@ const icon = computed(() => (targetTheme.value === 'dark' ? IconMoon : IconSun))
 
 function toggleTheme() {
   setTheme(targetTheme.value)
+  void localPersistence
+    .patchPreferences({ appearance: { theme: targetTheme.value } })
+    .catch(() => {})
 }
 </script>
 

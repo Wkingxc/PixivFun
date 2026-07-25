@@ -1,76 +1,89 @@
 <template lang="pug">
-#ugoira-viewer
-  canvas.media(
-    :height='illust?.height',
-    :width='illust.width'
-    ref='canvasRef'
-    v-if='firstLoaded'
-  )
-  DeferLoad.media(
-    :height='illust.height',
-    :src='illust.urls.regular',
-    :style='{ cursor: isLoading ? "wait" : "pointer" }',
-    :width='illust.width'
-    @click='handleInit(false)'
-    loading='lazy'
-    v-else
-  )
-  FnbProgress(
-    :height='6',
-    :percentage='+downloadProgress.toFixed(2)',
-    :style='{ left: 0, right: 0, position: "absolute", ...(isLoading ? { top: "calc(100% + 4px)", opacity: "1", transitionDuration: "0.25s" } : { top: "calc(100% - 4px)", opacity: "0", transitionDelay: "3s", transitionDuration: "0.5s" }) }'
-  )
-  FnbFloatButton(
-    :bottom='20',
-    :right='20',
-    :style='{ cursor: isLoading ? "wait" : "pointer", opacity: 0.75 }'
-  )
-    //- main button
-    template(v-if='!firstLoaded')
-      svg.spin-icon(v-if='isLoading' viewBox='0 0 24 24' width='20' height='20')
-        circle(cx='12' cy='12' r='10' fill='none' stroke='currentColor' stroke-width='3' stroke-dasharray='31.4 31.4' stroke-linecap='round')
-      IPlay(v-else)
-    template(v-else)
-      IDownload
-    //- menu (before first load)
-    template(#menu v-if='!firstLoaded')
-      button.ugoira-menu-btn(@click='handleInit(true)' title='加载原画' v-if='!isLoading')
-        IconPhotoSpark
-      button.ugoira-menu-btn(@click='handleInit(false)' title='加载普通画质')
-        svg.spin-icon(v-if='isLoading' viewBox='0 0 24 24' width='20' height='20')
-          circle(cx='12' cy='12' r='10' fill='none' stroke='currentColor' stroke-width='3' stroke-dasharray='31.4 31.4' stroke-linecap='round')
-        IconPhotoScan(v-else)
-    //- menu (after first load)
-    template(#menu v-if='firstLoaded')
-      button.ugoira-menu-btn(@click='handleJumpToCover' title='查看封面'): IconPhotoDown
-      button.ugoira-menu-btn(@click='handleDownloadGif' title='下载GIF')
-        svg.spin-icon(v-if='isLoadingGif || isLoading' viewBox='0 0 24 24' width='20' height='20')
-          circle(cx='12' cy='12' r='10' fill='none' stroke='currentColor' stroke-width='3' stroke-dasharray='31.4 31.4' stroke-linecap='round')
-        template(v-else): IconGif
-      button.ugoira-menu-btn(@click='handleDownloadMp4' title='下载MP4')
-        svg.spin-icon(v-if='isLoadingMp4 || isLoading' viewBox='0 0 24 24' width='20' height='20')
-          circle(cx='12' cy='12' r='10' fill='none' stroke='currentColor' stroke-width='3' stroke-dasharray='31.4 31.4' stroke-linecap='round')
-        template(v-else): IconMovie
-      button.ugoira-menu-btn(@click='handleInit(true)' title='加载原画' v-if='!isHQLoaded')
-        svg.spin-icon(v-if='isLoading' viewBox='0 0 24 24' width='20' height='20')
-          circle(cx='12' cy='12' r='10' fill='none' stroke='currentColor' stroke-width='3' stroke-dasharray='31.4 31.4' stroke-linecap='round')
-        template(v-else): IconPhotoSpark
+#ugoira-viewer(:class='{ "is-loading": isLoading, "is-ready": firstLoaded }')
+  .ugoira-frame
+    canvas.media(
+      :height='illust.height',
+      :width='illust.width'
+      ref='canvasRef'
+      v-show='firstLoaded && !isLoading'
+    )
+    DeferLoad.media(
+      :height='illust.height',
+      :src='illust.urls.regular',
+      :width='illust.width'
+      loading='lazy'
+      v-if='!firstLoaded || isLoading'
+    )
 
-  .badge {{ firstLoaded ? (isHQLoaded ? 'HQ' : 'NQ') : 'Cover' }}
+    .ugoira-top-controls
+      .ugoira-quality-switch(aria-label='动图画质')
+        button(
+          :class='{ active: !isHQLoaded }',
+          :disabled='isLoading'
+          @click='changeQuality(false)'
+          type='button'
+        ) 普通
+        button(
+          :class='{ active: isHQLoaded }',
+          :disabled='isLoading'
+          @click='changeQuality(true)'
+          type='button'
+        ) 原画
+      button.ugoira-progress-switch(
+        :aria-pressed='showPlaybackControls',
+        :class='{ active: showPlaybackControls }'
+        @click='showPlaybackControls = !showPlaybackControls'
+        type='button'
+      ) 进度条
+
+    .ugoira-loading(aria-live='polite' role='status' v-if='isLoading')
+      .ugoira-loading__copy
+        span 正在加载动图帧
+        strong {{ roundedDownloadProgress }}%
+      .ugoira-loading__track(
+        :aria-valuenow='roundedDownloadProgress'
+        aria-label='动图帧加载进度'
+        aria-valuemax='100'
+        aria-valuemin='0'
+        role='progressbar'
+      )
+        span(:style='{ width: `${roundedDownloadProgress}%` }')
+      small(v-if='totalFrameCount') 已处理 {{ loadedFrameCount }} / {{ totalFrameCount }} 帧
+
+  .ugoira-toolbar(v-if='showPlaybackControls')
+    button.ugoira-control(
+      :aria-label='isPlaying ? "暂停动图" : "继续播放动图"',
+      :disabled='isLoading || !firstLoaded'
+      @click='handlePause'
+      type='button'
+    )
+      ITablerPlayerPause(aria-hidden='true' v-if='isPlaying')
+      ITablerPlayerPlay(aria-hidden='true' v-else)
+      span {{ isPlaying ? '暂停' : '继续' }}
+
+    .ugoira-playback
+      input(
+        :disabled='isLoading || !firstLoaded',
+        :value='playbackProgress'
+        @input='handleSeek'
+        aria-label='动图播放进度'
+        max='100'
+        min='0'
+        step='0.1'
+        type='range'
+      )
+      .ugoira-playback__meta
+        span {{ isLoading ? '加载完成后自动播放' : '循环播放' }}
+        span(v-if='playbackTotalFrames') 第 {{ playbackFrameIndex + 1 }} / {{ playbackTotalFrames }} 帧
 </template>
 
 <script lang="ts" setup>
 import type { Artwork } from '~/types'
 import { UgoiraPlayer } from '~/utils/UgoiraPlayer'
 import DeferLoad from './DeferLoad.vue'
-import IPlay from '~icons/fa-solid/play'
-import IDownload from '~icons/fa-solid/download'
 import {
-  IconGif,
-  IconMovie,
-  IconPhotoScan,
-  IconPhotoSpark,
-  IconPhotoDown,
+  IconPlayerPause as ITablerPlayerPause,
+  IconPlayerPlay as ITablerPlayerPlay,
 } from '@tabler/icons-vue'
 
 const props = defineProps<{
@@ -86,17 +99,33 @@ const firstLoaded = ref(false)
 const isLoading = ref(false)
 const canvasRef = ref<HTMLCanvasElement>()
 const downloadProgress = ref(0)
+const loadedFrameCount = ref(0)
+const totalFrameCount = ref(0)
+const isHQLoaded = ref(false)
+const playbackProgress = ref(0)
+const playbackFrameIndex = ref(0)
+const playbackTotalFrames = ref(0)
+const showPlaybackControls = ref(false)
 const player = computed(() => {
   const p = new UgoiraPlayer(props.illust, {
+    progressiveRender: false,
     onDownloadProgress: (progress, frameIndex, totalFrames) => {
       downloadProgress.value = progress
+      loadedFrameCount.value = Math.round((progress / 100) * totalFrames)
+      totalFrameCount.value = totalFrames
       console.log(
-        `下载进度: ${progress.toFixed(1)}% (${frameIndex + 1}/${totalFrames})`
+        `下载进度: ${progress.toFixed(1)}%（帧 ${frameIndex + 1}，已处理 ${loadedFrameCount.value}/${totalFrames}）`
       )
     },
     onDownloadComplete: () => {
       console.log('所有帧下载完成')
-      isLoading.value = false
+      downloadProgress.value = 100
+      loadedFrameCount.value = totalFrameCount.value
+    },
+    onPlaybackProgress: (progress, frameIndex, totalFrames) => {
+      playbackProgress.value = progress
+      playbackFrameIndex.value = frameIndex
+      playbackTotalFrames.value = totalFrames
     },
     onDownloadError: (error) => {
       console.error('下载失败:', error)
@@ -105,6 +134,8 @@ const player = computed(() => {
       firstLoaded.value = false
       isHQLoaded.value = false
       downloadProgress.value = 0
+      loadedFrameCount.value = 0
+      totalFrameCount.value = 0
       isLoading.value = false
 
       // 清理播放器状态
@@ -116,29 +147,37 @@ const player = computed(() => {
   emit('on:player', p)
   return p
 })
-const isPlaying = ref(true)
+const isPlaying = ref(false)
+const roundedDownloadProgress = computed(() =>
+  Math.round(downloadProgress.value)
+)
 
-const isHQLoaded = ref(false)
 async function handleInit(originalQuality?: boolean) {
   if (isLoading.value) return
   isLoading.value = true
+  isPlaying.value = false
   downloadProgress.value = 0
+  loadedFrameCount.value = 0
+  totalFrameCount.value = 0
+  playbackProgress.value = 0
+  playbackFrameIndex.value = 0
+  playbackTotalFrames.value = 0
 
   try {
     player.value.destroy()
     await player.value.fetchMeta()
 
-    // 立即设置 canvas 和标记为已加载，这样下载过程中就可以开始渲染
+    // 下载期间继续显示封面，准备完成后再切换到 canvas。
     firstLoaded.value = true
-    if (originalQuality) isHQLoaded.value = true
+    isHQLoaded.value = !!originalQuality
     await nextTick()
     player.value.setupCanvas(canvasRef.value!)
 
-    // 开始下载帧，下载过程中会自动渲染到 canvas
     await player.value.fetchFrames(originalQuality)
-
-    // 下载完成后开始正常播放
+    await player.value.preparePlayback()
     player.value.play()
+    isPlaying.value = true
+    isLoading.value = false
   } catch (error) {
     console.error('Ugoira 初始化失败:', error)
 
@@ -146,7 +185,13 @@ async function handleInit(originalQuality?: boolean) {
     firstLoaded.value = false
     isHQLoaded.value = false
     downloadProgress.value = 0
+    loadedFrameCount.value = 0
+    totalFrameCount.value = 0
+    playbackProgress.value = 0
+    playbackFrameIndex.value = 0
+    playbackTotalFrames.value = 0
     isLoading.value = false
+    isPlaying.value = false
 
     // 清理播放器状态
     player.value.destroy()
@@ -156,6 +201,7 @@ async function handleInit(originalQuality?: boolean) {
 }
 
 function handlePause() {
+  if (isLoading.value || !firstLoaded.value) return
   if (isPlaying.value) {
     player.value.pause()
   } else {
@@ -164,81 +210,19 @@ function handlePause() {
   isPlaying.value = !isPlaying.value
 }
 
-function handleJumpToCover() {
-  const a = document.createElement('a')
-  a.href = props.illust.urls.original
-  a.target = '_blank'
-  a.click()
+function changeQuality(originalQuality: boolean) {
+  if (isLoading.value) return
+  if (firstLoaded.value && isHQLoaded.value === originalQuality) return
+  void handleInit(originalQuality)
 }
 
-const isLoadingGif = ref(false)
-const gifBlob = ref<Blob>()
-async function handleDownloadGif() {
-  if (!player.value.canExport) return
-  const filename = `${props.illust.illustId}.ugoira.gif`
-
-  if (gifBlob.value) {
-    downloadBlob(gifBlob.value, filename)
-    return
-  }
-
-  if (isLoadingGif.value) return
-
-  // 检查是否可以导出
-  if (!player.value.canExport) {
-    console.warn('下载未完成，无法导出 GIF')
-    return
-  }
-
-  isLoadingGif.value = true
-
-  try {
-    const blob = await player.value.renderGif()
-    gifBlob.value = blob
-    downloadBlob(blob, filename)
-  } finally {
-    isLoadingGif.value = false
-  }
+function handleSeek(event: Event) {
+  player.value.seekToProgress(Number((event.target as HTMLInputElement).value))
 }
 
-const isLoadingMp4 = ref(false)
-const mp4Blob = ref<Blob>()
-async function handleDownloadMp4() {
-  if (!player.value.canExport) return
-  const filename = `${props.illust.illustId}.ugoira.mp4`
-
-  if (mp4Blob.value) {
-    downloadBlob(mp4Blob.value, filename)
-    return
-  }
-
-  if (isLoadingMp4.value) return
-
-  // 检查是否可以导出
-  if (!player.value.canExport) {
-    console.warn('下载未完成，无法导出 MP4')
-    return
-  }
-
-  isLoadingMp4.value = true
-
-  try {
-    const blob = await player.value.renderMp4()
-    mp4Blob.value = blob
-    downloadBlob(blob, filename)
-  } finally {
-    isLoadingMp4.value = false
-  }
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
+onMounted(() => {
+  void handleInit(false)
+})
 
 onBeforeUnmount(() => {
   player.value.destroy()
@@ -247,69 +231,244 @@ onBeforeUnmount(() => {
 
 <style scoped lang="scss">
 #ugoira-viewer {
-  display: inline-block;
+  display: grid;
+  gap: 12px;
+  width: min(100%, 1040px);
+  line-height: 1.4;
+}
+
+.ugoira-frame {
   position: relative;
-  transform: translate(0);
-  line-height: 0;
+  display: grid;
+  width: 100%;
+  min-height: min(62vh, 520px);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 35%, rgb(255 255 255 / 9%), transparent 42%),
+    color-mix(in srgb, var(--pf-bg) 82%, #111);
+  border: 1px solid var(--pf-line);
+  border-radius: 16px;
+  place-items: center;
 }
 
 .media {
-  border-radius: var(--fnb-radius);
-  @include fnb-border;
-  @include fnb-shadow-sm;
-  transition: box-shadow 0.24s ease-in-out;
-  max-width: 100%;
-  max-height: 60vh;
+  display: block;
   width: auto;
+  max-width: 100%;
   height: auto;
-  &:hover {
-    box-shadow: var(--fnb-shadow);
+  max-height: 76vh;
+  object-fit: contain;
+}
+
+.ugoira-top-controls {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ugoira-quality-switch {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--pf-surface) 88%, transparent);
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 16%);
+  backdrop-filter: blur(10px);
+
+  button {
+    min-width: 48px;
+    height: 30px;
+    padding: 0 10px;
+    color: var(--pf-muted);
+    background: transparent;
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.7rem;
+    font-weight: 750;
+
+    &.active {
+      color: #fff;
+      background: var(--pf-pink);
+    }
+
+    &:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
   }
 }
 
-.controller {
-  position: absolute;
-  bottom: 1rem;
-  right: 1rem;
-}
+.ugoira-progress-switch {
+  height: 38px;
+  padding: 0 13px;
+  color: var(--pf-muted);
+  background: color-mix(in srgb, var(--pf-surface) 88%, transparent);
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 16%);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 750;
 
-.badge {
-  color: var(--fnb-text-muted);
-  font-size: 0.6rem;
-  background: rgba(150, 150, 150, 0.25);
-  padding: 0.1rem 0.25rem;
-  border-radius: var(--fnb-radius);
-  position: absolute;
-  right: 0.25rem;
-  top: 0.25rem;
-  line-height: 1;
-  user-select: none;
-  pointer-events: none;
-  z-index: 1;
+  &.active {
+    color: #fff;
+    background: var(--pf-pink);
+    border-color: transparent;
+  }
 }
 
 .spin-icon {
+  width: 20px;
+  height: 20px;
   animation: spin 1s linear infinite;
 }
 
-.ugoira-menu-btn {
-  @include fnb-border;
-  @include fnb-shadow-sm;
-  @include fnb-press;
-  width: 48px;
-  height: 48px;
+.ugoira-loading {
+  position: absolute;
+  z-index: 4;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  display: grid;
+  gap: 7px;
+  padding: 11px 13px;
+  color: #fff;
+  background: rgb(23 20 26 / 82%);
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+}
+
+.ugoira-loading__copy {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.ugoira-loading__track {
+  height: 6px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 18%);
+  border-radius: 999px;
+
+  span {
+    display: block;
+    height: 100%;
+    background: var(--pf-pink);
+    border-radius: inherit;
+    transition: width 160ms ease;
+  }
+}
+
+.ugoira-loading small {
+  color: rgb(255 255 255 / 68%);
+  font-size: 0.66rem;
+}
+
+.ugoira-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 14px;
+}
+
+.ugoira-control {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  background: var(--fnb-surface);
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 11px;
+  color: var(--pf-text);
+  background: var(--pf-bg);
+  border: 1px solid var(--pf-line);
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 1.25rem;
-  border-radius: var(--fnb-radius);
-  color: var(--fnb-text);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+
+  svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  &:hover:not(:disabled) {
+    color: #fff;
+    background: var(--pf-pink);
+    border-color: transparent;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+}
+
+.ugoira-playback {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+
+  input {
+    width: 100%;
+    margin: 0;
+    accent-color: var(--pf-pink);
+    cursor: pointer;
+  }
+
+  input:disabled {
+    cursor: wait;
+    opacity: 0.5;
+  }
+}
+
+.ugoira-playback__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--pf-muted);
+  font-size: 0.66rem;
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .ugoira-frame {
+    min-height: 320px;
+  }
+
+  .ugoira-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .ugoira-control {
+    justify-self: start;
+  }
 }
 </style>

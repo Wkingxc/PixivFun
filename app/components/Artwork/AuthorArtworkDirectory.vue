@@ -68,6 +68,7 @@ section.author-artwork-directory
               :src='artwork.url'
               lazyload
             )
+            ArtworkViewedOverlay(:artwork-id='artwork.id')
             span.directory-page-count(
               :aria-label='`${artwork.pageCount} 张图片`'
               v-if='artwork.pageCount > 1'
@@ -99,6 +100,7 @@ import {
   artworkDirectoryScrollKey,
   serializeArtworkDirectoryScroll,
 } from '~/utils/artworkDirectoryNavigation'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 
 const props = defineProps<{
   userId: string
@@ -107,6 +109,7 @@ const props = defineProps<{
 
 const pageSize = 6
 const pixivClient = usePixivClient()
+const localPersistence = useLocalPersistenceStore()
 const entries = ref<AuthorArtworkEntry[]>([])
 const currentArtworkPosition = ref<number | null>(null)
 const totalArtworkCount = ref(0)
@@ -143,6 +146,16 @@ const displayedArtworks = computed(() => {
         list.findIndex((item) => item.id === artwork.id) === index
     )
 })
+
+watch(
+  displayedArtworks,
+  (artworks) => {
+    void localPersistence
+      .ensureArtworkStatuses(artworks.map((artwork) => artwork.id))
+      .catch(() => {})
+  },
+  { immediate: true }
+)
 
 function preloadArtworkCovers(artworks: ArtworkInfo[]) {
   if (!import.meta.client) return
@@ -614,6 +627,7 @@ onBeforeUnmount(() => {
   font-weight: 750;
   line-height: 1;
   pointer-events: none;
+  z-index: 5;
   backdrop-filter: blur(5px);
 
   svg {

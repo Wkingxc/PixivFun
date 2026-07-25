@@ -34,8 +34,8 @@ aside.global-side-nav(
         .title 用户
         ul
           SideNavListLink(
+            :link='userStore.isLoggedIn ? "/login" : guestLoginPath',
             :text='userStore.isLoggedIn ? "查看令牌" : "设置令牌"'
-            :link='userStore.isLoggedIn ? "/login" : guestLoginPath'
           )
             ITablerKey.link-icon
           SideNavListLink(
@@ -48,8 +48,8 @@ aside.global-side-nav(
             text='我的关注'
           )
             ITablerHeart.link-icon
-          SideNavListLink(link='/following/latest' text='关注用户的作品')
-            ITablerUserPlus.link-icon
+          SideNavListLink(link='/following/latest' text='关注更新')
+            ITablerPhoto.link-icon
 
       .group
         .title PixivFun
@@ -77,7 +77,6 @@ import {
   IconPhoto as ITablerPhoto,
   IconSearch as ITablerSearch,
   IconUserCircle as ITablerUserCircle,
-  IconUserPlus as ITablerUserPlus,
   IconUsers as ITablerUsers,
 } from '@tabler/icons-vue'
 import { useSideNavStore, useUserStore } from '~/stores/session'
