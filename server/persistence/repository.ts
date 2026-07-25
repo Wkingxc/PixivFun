@@ -9,31 +9,22 @@ import {
   type LocalPreferences,
   type LocalPreferencesPatch,
 } from '../../shared/local-preferences.ts'
+import {
+  parsePixivFunData,
+  type PixivFunDataDocument,
+} from '../../shared/pixivfun-data.ts'
 import { normalizePixivId } from '../../shared/pixiv-resource.ts'
 
 export const DEFAULT_PROFILE_ID = 'local-default'
 
-export interface ArtworkReadingStatus {
-  state: 'viewed' | 'unread'
-  firstViewedAt: number
-  lastViewedAt: number
-  lastPage: number | null
-  pageCount: number | null
-}
-
 export interface MarkerImportResult {
   artworks: number
   authors: number
-  exclusions: number
-  settings: number
 }
 
 export interface PixivFunImportResult {
   artworks: number
   authorVisits: number
-  authorMarks: number
-  exclusions: number
-  settings: number
 }
 
 export interface LocalPersistenceRepositoryOptions {
@@ -43,18 +34,14 @@ export interface LocalPersistenceRepositoryOptions {
 
 interface MarkerRecord {
   id: string
-  visitedAt: number
 }
 
 interface NormalizedMarkerBackup {
-  settings: LocalPreferencesPatch
-  settingCount: number
   artworks: MarkerRecord[]
   authors: MarkerRecord[]
-  exclusions: Array<{ pattern: string; label: string; addedAt: number }>
 }
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 3
 const MAX_IMPORT_RECORDS = 200_000
 const MAX_BATCH_IDS = 500
 
@@ -74,49 +61,25 @@ const INITIAL_SCHEMA = `
     PRIMARY KEY (profile_id, namespace, key)
   );
 
-  CREATE TABLE artwork_reading_state (
+  CREATE TABLE artwork_visits (
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     artwork_id TEXT NOT NULL,
-    state TEXT NOT NULL CHECK (state IN ('viewed', 'unread')),
-    first_viewed_at INTEGER NOT NULL,
-    last_viewed_at INTEGER NOT NULL,
-    last_page INTEGER,
-    page_count INTEGER,
-    source TEXT NOT NULL,
     PRIMARY KEY (profile_id, artwork_id)
   );
-
-  CREATE INDEX artwork_reading_last_viewed_idx
-    ON artwork_reading_state(profile_id, last_viewed_at DESC);
 
   CREATE TABLE author_visits (
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     author_id TEXT NOT NULL,
-    first_visited_at INTEGER NOT NULL,
-    last_visited_at INTEGER NOT NULL,
-    source TEXT NOT NULL,
     PRIMARY KEY (profile_id, author_id)
   );
 
-  CREATE INDEX author_visits_last_visited_idx
-    ON author_visits(profile_id, last_visited_at DESC);
-
-  CREATE TABLE author_marks (
+  CREATE TABLE cloud_credentials (
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    author_id TEXT NOT NULL,
-    mark_type TEXT NOT NULL,
-    note TEXT,
-    created_at INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    sealed_payload TEXT NOT NULL,
+    key_id TEXT NOT NULL,
     updated_at INTEGER NOT NULL,
-    PRIMARY KEY (profile_id, author_id)
-  );
-
-  CREATE TABLE page_exclusions (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    pattern TEXT NOT NULL,
-    label TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    PRIMARY KEY (profile_id, pattern)
+    PRIMARY KEY (profile_id, provider)
   );
 
   CREATE TABLE credentials (
@@ -167,11 +130,11 @@ export class LocalPersistenceRepository {
   }
 
   private configure(): void {
+    this.database.exec('PRAGMA busy_timeout = 5000')
     this.database.exec(`
       PRAGMA foreign_keys = ON;
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
-      PRAGMA busy_timeout = 5000;
     `)
   }
 
@@ -199,7 +162,58 @@ export class LocalPersistenceRepository {
           .prepare(
             'INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)'
           )
-          .run(1, Date.now())
+          .run(SCHEMA_VERSION, Date.now())
+      })
+    } else if (row.version < 2) {
+      this.transaction(() => {
+        this.database.exec(`
+          CREATE TABLE artwork_visits_v2 (
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            artwork_id TEXT NOT NULL,
+            PRIMARY KEY (profile_id, artwork_id)
+          );
+          INSERT OR IGNORE INTO artwork_visits_v2(profile_id, artwork_id)
+            SELECT profile_id, artwork_id FROM artwork_reading_state;
+          DROP TABLE artwork_reading_state;
+          ALTER TABLE artwork_visits_v2 RENAME TO artwork_visits;
+
+          CREATE TABLE author_visits_v2 (
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            author_id TEXT NOT NULL,
+            PRIMARY KEY (profile_id, author_id)
+          );
+          INSERT OR IGNORE INTO author_visits_v2(profile_id, author_id)
+            SELECT profile_id, author_id FROM author_visits;
+          DROP TABLE author_visits;
+          ALTER TABLE author_visits_v2 RENAME TO author_visits;
+
+          DROP TABLE IF EXISTS author_marks;
+          DROP TABLE IF EXISTS page_exclusions;
+        `)
+        this.database
+          .prepare(
+            'INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)'
+          )
+          .run(2, Date.now())
+      })
+    }
+    if (row.version >= 1 && row.version < 3) {
+      this.transaction(() => {
+        this.database.exec(`
+          CREATE TABLE IF NOT EXISTS cloud_credentials (
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            provider TEXT NOT NULL,
+            sealed_payload TEXT NOT NULL,
+            key_id TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (profile_id, provider)
+          );
+        `)
+        this.database
+          .prepare(
+            'INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)'
+          )
+          .run(3, Date.now())
       })
     }
 
@@ -307,183 +321,45 @@ export class LocalPersistenceRepository {
     return count
   }
 
-  recordArtworkVisit(
-    artworkIdValue: unknown,
-    options: {
-      visitedAt?: number
-      lastPage?: number | null
-      pageCount?: number | null
-      source?: string
-    } = {}
-  ): ArtworkReadingStatus {
+  recordArtworkVisit(artworkIdValue: unknown): void {
     const artworkId = requirePixivId(artworkIdValue, 'artworkId')
-    const visitedAt = validTimestamp(
-      options.visitedAt ?? Date.now(),
-      'visitedAt'
-    )
-    const lastPage = nullableNonNegativeInteger(options.lastPage, 'lastPage')
-    const pageCount = nullableNonNegativeInteger(options.pageCount, 'pageCount')
     this.database
       .prepare(
-        `INSERT INTO artwork_reading_state(
-          profile_id, artwork_id, state, first_viewed_at, last_viewed_at,
-          last_page, page_count, source
-        ) VALUES (?, ?, 'viewed', ?, ?, ?, ?, ?)
-        ON CONFLICT(profile_id, artwork_id) DO UPDATE SET
-          first_viewed_at = MIN(first_viewed_at, excluded.first_viewed_at),
-          last_viewed_at = MAX(last_viewed_at, excluded.last_viewed_at),
-          last_page = COALESCE(excluded.last_page, last_page),
-          page_count = COALESCE(excluded.page_count, page_count),
-          source = excluded.source,
-          state = CASE
-            WHEN artwork_reading_state.state = 'unread' THEN 'unread'
-            ELSE 'viewed'
-          END`
+        `INSERT OR IGNORE INTO artwork_visits(profile_id, artwork_id)
+         VALUES (?, ?)`
       )
-      .run(
-        this.profileId,
-        artworkId,
-        visitedAt,
-        visitedAt,
-        lastPage,
-        pageCount,
-        options.source || 'pixivfun'
-      )
-    return this.getArtworkStatuses([artworkId])[artworkId]!
+      .run(this.profileId, artworkId)
   }
 
-  setArtworkState(
-    artworkIdValue: unknown,
-    state: 'viewed' | 'unread'
-  ): ArtworkReadingStatus {
-    const artworkId = requirePixivId(artworkIdValue, 'artworkId')
-    const now = Date.now()
-    this.database
-      .prepare(
-        `INSERT INTO artwork_reading_state(
-          profile_id, artwork_id, state, first_viewed_at, last_viewed_at,
-          last_page, page_count, source
-        ) VALUES (?, ?, ?, ?, ?, NULL, NULL, 'manual')
-        ON CONFLICT(profile_id, artwork_id) DO UPDATE SET
-          state = excluded.state,
-          last_viewed_at = excluded.last_viewed_at,
-          source = 'manual'`
-      )
-      .run(this.profileId, artworkId, state, now, now)
-    return this.getArtworkStatuses([artworkId])[artworkId]!
-  }
-
-  getArtworkStatuses(ids: unknown[]): Record<string, ArtworkReadingStatus> {
+  getVisitedArtworkIds(ids: unknown[]): string[] {
     const normalized = Array.from(
       new Set(ids.map((id) => requirePixivId(id, 'artworkId')))
     )
-    const result: Record<string, ArtworkReadingStatus> = {}
+    const visited = new Set<string>()
     for (let index = 0; index < normalized.length; index += MAX_BATCH_IDS) {
       const batch = normalized.slice(index, index + MAX_BATCH_IDS)
       if (!batch.length) continue
       const placeholders = batch.map(() => '?').join(', ')
       const rows = this.database
         .prepare(
-          `SELECT artwork_id, state, first_viewed_at, last_viewed_at,
-                  last_page, page_count
-           FROM artwork_reading_state
+          `SELECT artwork_id
+           FROM artwork_visits
            WHERE profile_id = ? AND artwork_id IN (${placeholders})`
         )
-        .all(this.profileId, ...batch) as Array<{
-        artwork_id: string
-        state: 'viewed' | 'unread'
-        first_viewed_at: number
-        last_viewed_at: number
-        last_page: number | null
-        page_count: number | null
-      }>
-      for (const row of rows) {
-        result[row.artwork_id] = {
-          state: row.state,
-          firstViewedAt: row.first_viewed_at,
-          lastViewedAt: row.last_viewed_at,
-          lastPage: row.last_page,
-          pageCount: row.page_count,
-        }
-      }
+        .all(this.profileId, ...batch) as Array<{ artwork_id: string }>
+      for (const row of rows) visited.add(row.artwork_id)
     }
-    return result
+    return normalized.filter((id) => visited.has(id))
   }
 
-  recordAuthorVisit(
-    authorIdValue: unknown,
-    visitedAtValue = Date.now(),
-    source = 'pixivfun'
-  ): void {
-    const authorId = requirePixivId(authorIdValue, 'authorId')
-    const visitedAt = validTimestamp(visitedAtValue, 'visitedAt')
-    this.database
-      .prepare(
-        `INSERT INTO author_visits(
-          profile_id, author_id, first_visited_at, last_visited_at, source
-        ) VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(profile_id, author_id) DO UPDATE SET
-          first_visited_at = MIN(first_visited_at, excluded.first_visited_at),
-          last_visited_at = MAX(last_visited_at, excluded.last_visited_at),
-          source = excluded.source`
-      )
-      .run(this.profileId, authorId, visitedAt, visitedAt, source)
-  }
-
-  setAuthorMark(
-    authorIdValue: unknown,
-    markType: string,
-    note: string | null = null
-  ): void {
-    const authorId = requirePixivId(authorIdValue, 'authorId')
-    if (!/^[a-z][a-z0-9_-]{0,31}$/i.test(markType)) {
-      throw new TypeError('markType is invalid')
-    }
-    if (note !== null && (typeof note !== 'string' || note.length > 2_000)) {
-      throw new TypeError('note is invalid')
-    }
-    const now = Date.now()
-    this.database
-      .prepare(
-        `INSERT INTO author_marks(
-          profile_id, author_id, mark_type, note, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(profile_id, author_id) DO UPDATE SET
-          mark_type = excluded.mark_type,
-          note = excluded.note,
-          updated_at = excluded.updated_at`
-      )
-      .run(this.profileId, authorId, markType, note, now, now)
-  }
-
-  removeAuthorMark(authorIdValue: unknown): void {
+  recordAuthorVisit(authorIdValue: unknown): void {
     const authorId = requirePixivId(authorIdValue, 'authorId')
     this.database
       .prepare(
-        'DELETE FROM author_marks WHERE profile_id = ? AND author_id = ?'
+        `INSERT OR IGNORE INTO author_visits(profile_id, author_id)
+         VALUES (?, ?)`
       )
       .run(this.profileId, authorId)
-  }
-
-  getAuthorMark(
-    authorIdValue: unknown
-  ): { markType: string; note: string | null; updatedAt: number } | null {
-    const authorId = requirePixivId(authorIdValue, 'authorId')
-    const row = this.database
-      .prepare(
-        `SELECT mark_type, note, updated_at
-         FROM author_marks
-         WHERE profile_id = ? AND author_id = ?`
-      )
-      .get(this.profileId, authorId) as
-      { mark_type: string; note: string | null; updated_at: number } | undefined
-    return row
-      ? {
-          markType: row.mark_type,
-          note: row.note,
-          updatedAt: row.updated_at,
-        }
-      : null
   }
 
   getCache(namespace: string, key: string, now = Date.now()): unknown | null {
@@ -612,173 +488,132 @@ export class LocalPersistenceRepository {
       .run(this.profileId)
   }
 
+  saveCloudCredential(input: {
+    provider: string
+    sealedPayload: string
+    keyId: string
+  }): void {
+    assertCloudProvider(input.provider)
+    if (!input.sealedPayload || !input.keyId) {
+      throw new TypeError('cloud credential payload is invalid')
+    }
+    this.database
+      .prepare(
+        `INSERT INTO cloud_credentials(
+          profile_id, provider, sealed_payload, key_id, updated_at
+        ) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, provider) DO UPDATE SET
+          sealed_payload = excluded.sealed_payload,
+          key_id = excluded.key_id,
+          updated_at = excluded.updated_at`
+      )
+      .run(
+        this.profileId,
+        input.provider,
+        input.sealedPayload,
+        input.keyId,
+        Date.now()
+      )
+  }
+
+  getCloudCredential(
+    provider: string
+  ): { sealedPayload: string; keyId: string } | null {
+    assertCloudProvider(provider)
+    const row = this.database
+      .prepare(
+        `SELECT sealed_payload, key_id
+         FROM cloud_credentials
+         WHERE profile_id = ? AND provider = ?`
+      )
+      .get(this.profileId, provider) as
+      { sealed_payload: string; key_id: string } | undefined
+    return row ? { sealedPayload: row.sealed_payload, keyId: row.key_id } : null
+  }
+
+  deleteCloudCredential(provider: string): void {
+    assertCloudProvider(provider)
+    this.database
+      .prepare(
+        'DELETE FROM cloud_credentials WHERE profile_id = ? AND provider = ?'
+      )
+      .run(this.profileId, provider)
+  }
+
   importMarkerBackup(input: unknown): MarkerImportResult {
     const backup = normalizeMarkerBackup(input)
     return this.transaction(() => {
-      const settings = this.writePreferences(backup.settings)
       for (const artwork of backup.artworks) {
-        this.recordArtworkVisit(artwork.id, {
-          visitedAt: artwork.visitedAt,
-          source: 'marker-import',
-        })
+        this.recordArtworkVisit(artwork.id)
       }
       for (const author of backup.authors) {
-        this.recordAuthorVisit(author.id, author.visitedAt, 'marker-import')
-      }
-      const exclusionStatement = this.database.prepare(
-        `INSERT INTO page_exclusions(
-          profile_id, pattern, label, created_at
-        ) VALUES (?, ?, ?, ?)
-        ON CONFLICT(profile_id, pattern) DO UPDATE SET
-          label = excluded.label,
-          created_at = MIN(created_at, excluded.created_at)`
-      )
-      for (const exclusion of backup.exclusions) {
-        exclusionStatement.run(
-          this.profileId,
-          exclusion.pattern,
-          exclusion.label,
-          exclusion.addedAt
-        )
+        this.recordAuthorVisit(author.id)
       }
       return {
         artworks: backup.artworks.length,
         authors: backup.authors.length,
-        exclusions: backup.exclusions.length,
-        settings: settings || backup.settingCount,
       }
     })
   }
 
-  exportData(): Record<string, unknown> {
-    const artworkRows = this.database
-      .prepare(
-        `SELECT artwork_id, state, first_viewed_at, last_viewed_at,
-                last_page, page_count, source
-         FROM artwork_reading_state WHERE profile_id = ?`
-      )
-      .all(this.profileId)
-    const authorVisits = this.database
-      .prepare(
-        `SELECT author_id, first_visited_at, last_visited_at, source
-         FROM author_visits WHERE profile_id = ?`
-      )
-      .all(this.profileId)
-    const authorMarks = this.database
-      .prepare(
-        `SELECT author_id, mark_type, note, created_at, updated_at
-         FROM author_marks WHERE profile_id = ?`
-      )
-      .all(this.profileId)
-    const exclusions = this.database
-      .prepare(
-        `SELECT pattern, label, created_at
-         FROM page_exclusions WHERE profile_id = ?`
-      )
-      .all(this.profileId)
+  exportData(): PixivFunDataDocument {
+    const visitedArtworkIds = (
+      this.database
+        .prepare(
+          `SELECT artwork_id
+           FROM artwork_visits
+           WHERE profile_id = ?
+           ORDER BY artwork_id`
+        )
+        .all(this.profileId) as Array<{ artwork_id: string }>
+    ).map((row) => row.artwork_id)
+    const visitedAuthorIds = (
+      this.database
+        .prepare(
+          `SELECT author_id
+           FROM author_visits
+           WHERE profile_id = ?
+           ORDER BY author_id`
+        )
+        .all(this.profileId) as Array<{ author_id: string }>
+    ).map((row) => row.author_id)
     return {
-      schemaVersion: 1,
       exportedAt: Date.now(),
-      preferences: this.getPreferences(),
-      artworkReadingState: artworkRows,
-      authorVisits,
-      authorMarks,
-      exclusions,
+      data: {
+        visitedArtworkIds,
+        visitedAuthorIds,
+      },
     }
   }
 
   importData(input: unknown): PixivFunImportResult {
-    const backup = normalizePixivFunBackup(input)
+    const backup = parsePixivFunData(input)
     return this.transaction(() => {
-      const settings = this.writePreferences(backup.preferences)
       const artworkStatement = this.database.prepare(
-        `INSERT INTO artwork_reading_state(
-          profile_id, artwork_id, state, first_viewed_at, last_viewed_at,
-          last_page, page_count, source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(profile_id, artwork_id) DO UPDATE SET
-          first_viewed_at = MIN(first_viewed_at, excluded.first_viewed_at),
-          last_viewed_at = MAX(last_viewed_at, excluded.last_viewed_at),
-          last_page = COALESCE(excluded.last_page, last_page),
-          page_count = COALESCE(excluded.page_count, page_count),
-          state = excluded.state,
-          source = excluded.source`
+        `INSERT OR IGNORE INTO artwork_visits(profile_id, artwork_id)
+         VALUES (?, ?)`
       )
-      for (const artwork of backup.artworks) {
-        artworkStatement.run(
-          this.profileId,
-          artwork.id,
-          artwork.state,
-          artwork.firstViewedAt,
-          artwork.lastViewedAt,
-          artwork.lastPage,
-          artwork.pageCount,
-          artwork.source
+      let artworks = 0
+      for (const artworkId of backup.data.visitedArtworkIds) {
+        artworks += Number(
+          artworkStatement.run(this.profileId, artworkId).changes
         )
       }
 
       const authorVisitStatement = this.database.prepare(
-        `INSERT INTO author_visits(
-          profile_id, author_id, first_visited_at, last_visited_at, source
-        ) VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(profile_id, author_id) DO UPDATE SET
-          first_visited_at = MIN(first_visited_at, excluded.first_visited_at),
-          last_visited_at = MAX(last_visited_at, excluded.last_visited_at),
-          source = excluded.source`
+        `INSERT OR IGNORE INTO author_visits(profile_id, author_id)
+         VALUES (?, ?)`
       )
-      for (const author of backup.authorVisits) {
-        authorVisitStatement.run(
-          this.profileId,
-          author.id,
-          author.firstVisitedAt,
-          author.lastVisitedAt,
-          author.source
-        )
-      }
-
-      const authorMarkStatement = this.database.prepare(
-        `INSERT INTO author_marks(
-          profile_id, author_id, mark_type, note, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(profile_id, author_id) DO UPDATE SET
-          mark_type = excluded.mark_type,
-          note = excluded.note,
-          updated_at = MAX(updated_at, excluded.updated_at)`
-      )
-      for (const mark of backup.authorMarks) {
-        authorMarkStatement.run(
-          this.profileId,
-          mark.id,
-          mark.markType,
-          mark.note,
-          mark.createdAt,
-          mark.updatedAt
-        )
-      }
-
-      const exclusionStatement = this.database.prepare(
-        `INSERT INTO page_exclusions(
-          profile_id, pattern, label, created_at
-        ) VALUES (?, ?, ?, ?)
-        ON CONFLICT(profile_id, pattern) DO UPDATE SET
-          label = excluded.label,
-          created_at = MIN(created_at, excluded.created_at)`
-      )
-      for (const exclusion of backup.exclusions) {
-        exclusionStatement.run(
-          this.profileId,
-          exclusion.pattern,
-          exclusion.label,
-          exclusion.createdAt
+      let authorVisits = 0
+      for (const authorId of backup.data.visitedAuthorIds) {
+        authorVisits += Number(
+          authorVisitStatement.run(this.profileId, authorId).changes
         )
       }
 
       return {
-        artworks: backup.artworks.length,
-        authorVisits: backup.authorVisits.length,
-        authorMarks: backup.authorMarks.length,
-        exclusions: backup.exclusions.length,
-        settings,
+        artworks,
+        authorVisits,
       }
     })
   }
@@ -792,7 +627,6 @@ export class LocalPersistenceRepository {
   getCounts(): {
     artworks: number
     authors: number
-    exclusions: number
   } {
     const count = (table: string): number => {
       const row = this.database
@@ -801,9 +635,8 @@ export class LocalPersistenceRepository {
       return row.count
     }
     return {
-      artworks: count('artwork_reading_state'),
+      artworks: count('artwork_visits'),
       authors: count('author_visits'),
-      exclusions: count('page_exclusions'),
     }
   }
 }
@@ -826,24 +659,14 @@ function validTimestamp(value: unknown, path: string): number {
   return Math.trunc(value)
 }
 
-function nullableNonNegativeInteger(
-  value: unknown,
-  path: string
-): number | null {
-  if (value === null || value === undefined) return null
-  if (
-    typeof value !== 'number' ||
-    !Number.isInteger(value) ||
-    value < 0 ||
-    value > 1_000_000
-  ) {
-    throw new TypeError(`${path} must be a non-negative integer`)
-  }
-  return value
-}
-
 function assertCacheKey(value: string, path: string): void {
   if (!value || value.length > 200) throw new TypeError(`${path} is invalid`)
+}
+
+function assertCloudProvider(value: string): void {
+  if (!/^[a-z0-9-]{1,64}$/.test(value)) {
+    throw new TypeError('cloud provider is invalid')
+  }
 }
 
 function normalizeMarkerBackup(input: unknown): NormalizedMarkerBackup {
@@ -860,11 +683,8 @@ function normalizeMarkerBackup(input: unknown): NormalizedMarkerBackup {
     throw new RangeError('marker backup contains too many records')
   }
   return {
-    settings: {},
-    settingCount: 0,
     artworks,
     authors,
-    exclusions: [],
   }
 }
 
@@ -886,196 +706,7 @@ function markerRecords(value: unknown, path: string): MarkerRecord[] {
     const id = requirePixivId(record.id ?? key, `${path}.${key}.id`)
     if (id !== key)
       throw new TypeError(`${path}.${key}.id does not match its key`)
-    records.push({
-      id,
-      visitedAt: validTimestamp(record.visitedAt, `${path}.${key}.visitedAt`),
-    })
+    records.push({ id })
   }
   return records
-}
-
-function normalizeExclusionPattern(input: string): string {
-  const url = new URL(input, 'http://localhost')
-  const path = url.pathname.replace(/\/+$/, '') || '/'
-  if (!path.startsWith('/') || path.length > 500) {
-    throw new TypeError('exclusion pattern is invalid')
-  }
-  return path
-}
-
-function normalizePixivFunBackup(input: unknown): {
-  preferences: LocalPreferencesPatch
-  artworks: Array<{
-    id: string
-    state: 'viewed' | 'unread'
-    firstViewedAt: number
-    lastViewedAt: number
-    lastPage: number | null
-    pageCount: number | null
-    source: string
-  }>
-  authorVisits: Array<{
-    id: string
-    firstVisitedAt: number
-    lastVisitedAt: number
-    source: string
-  }>
-  authorMarks: Array<{
-    id: string
-    markType: string
-    note: string | null
-    createdAt: number
-    updatedAt: number
-  }>
-  exclusions: Array<{ pattern: string; label: string; createdAt: number }>
-} {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw new TypeError('PixivFun backup must be an object')
-  }
-  const backup = input as Record<string, unknown>
-  if (backup.schemaVersion !== 1) {
-    throw new TypeError('unsupported PixivFun schemaVersion')
-  }
-  const preferences = normalizeLocalPreferencesPatch(backup.preferences)
-  const artworkRows = requiredArray(
-    backup.artworkReadingState,
-    'artworkReadingState'
-  )
-  const authorVisitRows = requiredArray(backup.authorVisits, 'authorVisits')
-  const authorMarkRows = requiredArray(backup.authorMarks, 'authorMarks')
-  const exclusionRows = requiredArray(backup.exclusions, 'exclusions')
-  if (
-    artworkRows.length +
-      authorVisitRows.length +
-      authorMarkRows.length +
-      exclusionRows.length >
-    MAX_IMPORT_RECORDS
-  ) {
-    throw new RangeError('PixivFun backup contains too many records')
-  }
-
-  const artworks = artworkRows.map((row, index) => {
-    const record = requiredRecord(row, `artworkReadingState.${index}`)
-    if (record.state !== 'viewed' && record.state !== 'unread') {
-      throw new TypeError(`artworkReadingState.${index}.state is invalid`)
-    }
-    const firstViewedAt = validTimestamp(
-      record.first_viewed_at,
-      `artworkReadingState.${index}.first_viewed_at`
-    )
-    const lastViewedAt = validTimestamp(
-      record.last_viewed_at,
-      `artworkReadingState.${index}.last_viewed_at`
-    )
-    if (lastViewedAt < firstViewedAt) {
-      throw new TypeError(
-        `artworkReadingState.${index} has an invalid time range`
-      )
-    }
-    return {
-      id: requirePixivId(
-        record.artwork_id,
-        `artworkReadingState.${index}.artwork_id`
-      ),
-      state: record.state,
-      firstViewedAt,
-      lastViewedAt,
-      lastPage: nullableNonNegativeInteger(
-        record.last_page,
-        `artworkReadingState.${index}.last_page`
-      ),
-      pageCount: nullableNonNegativeInteger(
-        record.page_count,
-        `artworkReadingState.${index}.page_count`
-      ),
-      source: validSource(record.source, `artworkReadingState.${index}.source`),
-    }
-  })
-
-  const authorVisits = authorVisitRows.map((row, index) => {
-    const record = requiredRecord(row, `authorVisits.${index}`)
-    const firstVisitedAt = validTimestamp(
-      record.first_visited_at,
-      `authorVisits.${index}.first_visited_at`
-    )
-    const lastVisitedAt = validTimestamp(
-      record.last_visited_at,
-      `authorVisits.${index}.last_visited_at`
-    )
-    if (lastVisitedAt < firstVisitedAt) {
-      throw new TypeError(`authorVisits.${index} has an invalid time range`)
-    }
-    return {
-      id: requirePixivId(record.author_id, `authorVisits.${index}.author_id`),
-      firstVisitedAt,
-      lastVisitedAt,
-      source: validSource(record.source, `authorVisits.${index}.source`),
-    }
-  })
-
-  const authorMarks = authorMarkRows.map((row, index) => {
-    const record = requiredRecord(row, `authorMarks.${index}`)
-    const markType = String(record.mark_type || '')
-    if (!/^[a-z][a-z0-9_-]{0,31}$/i.test(markType)) {
-      throw new TypeError(`authorMarks.${index}.mark_type is invalid`)
-    }
-    const note =
-      record.note === null
-        ? null
-        : typeof record.note === 'string' && record.note.length <= 2_000
-          ? record.note
-          : undefined
-    if (note === undefined) {
-      throw new TypeError(`authorMarks.${index}.note is invalid`)
-    }
-    return {
-      id: requirePixivId(record.author_id, `authorMarks.${index}.author_id`),
-      markType,
-      note,
-      createdAt: validTimestamp(
-        record.created_at,
-        `authorMarks.${index}.created_at`
-      ),
-      updatedAt: validTimestamp(
-        record.updated_at,
-        `authorMarks.${index}.updated_at`
-      ),
-    }
-  })
-
-  const exclusions = exclusionRows.map((row, index) => {
-    const record = requiredRecord(row, `exclusions.${index}`)
-    const pattern = normalizeExclusionPattern(String(record.pattern || ''))
-    return {
-      pattern,
-      label:
-        typeof record.label === 'string' && record.label.length <= 500
-          ? record.label
-          : pattern,
-      createdAt: validTimestamp(
-        record.created_at,
-        `exclusions.${index}.created_at`
-      ),
-    }
-  })
-  return { preferences, artworks, authorVisits, authorMarks, exclusions }
-}
-
-function requiredArray(value: unknown, path: string): unknown[] {
-  if (!Array.isArray(value)) throw new TypeError(`${path} must be an array`)
-  return value
-}
-
-function requiredRecord(value: unknown, path: string): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new TypeError(`${path} must be an object`)
-  }
-  return value as Record<string, unknown>
-}
-
-function validSource(value: unknown, path: string): string {
-  if (typeof value !== 'string' || !value || value.length > 64) {
-    throw new TypeError(`${path} is invalid`)
-  }
-  return value
 }

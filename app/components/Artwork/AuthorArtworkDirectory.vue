@@ -151,7 +151,7 @@ watch(
   displayedArtworks,
   (artworks) => {
     void localPersistence
-      .ensureArtworkStatuses(artworks.map((artwork) => artwork.id))
+      .ensureArtworkVisits(artworks.map((artwork) => artwork.id))
       .catch(() => {})
   },
   { immediate: true }

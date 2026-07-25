@@ -11,16 +11,6 @@ aside.global-side-nav(
 
     .list
       .group
-        .title 导航
-        ul
-          SideNavListLink(link='/' text='首页')
-            ITablerHome.link-icon
-          SideNavListLink(link='/ranking' text='排行榜')
-            ITablerCrown.link-icon
-          SideNavListLink(link='/search' text='搜索')
-            ITablerSearch.link-icon
-
-      .group
         .title 探索发现
         ul
           SideNavListLink(link='/discovery/artworks' text='插画·漫画')
@@ -31,25 +21,16 @@ aside.global-side-nav(
             ITablerUsers.link-icon
 
       .group
-        .title 用户
+        .title 数据
         ul
           SideNavListLink(
-            :link='userStore.isLoggedIn ? "/login" : guestLoginPath',
-            :text='userStore.isLoggedIn ? "查看令牌" : "设置令牌"'
+            @activate='closeSideNav'
+            download-link='/api/local/export'
+            text='导出访问记录'
           )
-            ITablerKey.link-icon
-          SideNavListLink(
-            :link='userStore.isLoggedIn ? `/users/${userStore.userId}` : guestLoginPath'
-            text='我的页面'
-          )
-            ITablerUserCircle.link-icon
-          SideNavListLink(
-            :link='userStore.isLoggedIn ? `/users/${userStore.userId}/following` : guestLoginPath'
-            text='我的关注'
-          )
-            ITablerHeart.link-icon
-          SideNavListLink(link='/following/latest' text='关注更新')
-            ITablerPhoto.link-icon
+            ITablerDownload.link-icon
+          li
+            GoogleDriveSync
 
       .group
         .title PixivFun
@@ -65,28 +46,20 @@ aside.global-side-nav(
 
 <script lang="ts" setup>
 import SideNavListLink from './SideNavListLink.vue'
+import GoogleDriveSync from './GoogleDriveSync.vue'
 import SearchBox from '../SearchBox.vue'
 import {
   IconBook2 as ITablerBook,
-  IconCrown as ITablerCrown,
+  IconDownload as ITablerDownload,
   IconExternalLink as ITablerExternalLink,
-  IconHeart as ITablerHeart,
-  IconHome as ITablerHome,
   IconInfoCircle as ITablerInfoCircle,
-  IconKey as ITablerKey,
   IconPhoto as ITablerPhoto,
-  IconSearch as ITablerSearch,
-  IconUserCircle as ITablerUserCircle,
   IconUsers as ITablerUsers,
 } from '@tabler/icons-vue'
-import { useSideNavStore, useUserStore } from '~/stores/session'
-import { createLoginPath } from '~/utils/loginNavigation'
+import { useSideNavStore } from '~/stores/session'
 
 const sideNavStore = useSideNavStore()
-const userStore = useUserStore()
-const route = useRoute()
 const router = useRouter()
-const guestLoginPath = computed(() => createLoginPath(route.fullPath))
 router.afterEach(() => sideNavStore.close())
 
 sideNavStore.$subscribe((_mutation, state): void => {

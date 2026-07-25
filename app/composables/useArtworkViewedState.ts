@@ -22,7 +22,7 @@ export function useArtworkViewedState(
     id,
     (value) => {
       if (value !== undefined && !toValue(disabled)) {
-        void store.ensureArtworkStatuses([value]).catch(() => {})
+        void store.ensureArtworkVisits([value]).catch(() => {})
       }
     },
     { immediate: true }

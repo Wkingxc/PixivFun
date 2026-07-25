@@ -10,7 +10,9 @@ export default defineEventHandler(async (event) => {
   }
   try {
     return {
-      statuses: useLocalPersistenceRepository().getArtworkStatuses(body.ids),
+      visitedIds: useLocalPersistenceRepository().getVisitedArtworkIds(
+        body.ids
+      ),
     }
   } catch (error) {
     throw createError({

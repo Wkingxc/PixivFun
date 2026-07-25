@@ -12,7 +12,6 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   try {
     return {
-      schemaVersion: 1,
       imported: useLocalPersistenceRepository().importData(body),
     }
   } catch (error) {

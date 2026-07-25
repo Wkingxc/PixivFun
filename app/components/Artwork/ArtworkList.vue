@@ -40,7 +40,7 @@ watch(
   (items) => {
     if (props.markerDisabled) return
     void localPersistence
-      .ensureArtworkStatuses(
+      .ensureArtworkVisits(
         items.filter((item) => item.type !== 'novel').map((item) => item.id)
       )
       .catch(() => {})

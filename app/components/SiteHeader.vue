@@ -86,6 +86,8 @@ header.global-navbar(
               li
                 RouterLink(:to='accountPath') 账户连接
               li(v-if='userStore.isLoggedIn')
+                RouterLink(:to='`/users/${userStore.userId}`') 我的页面
+              li(v-if='userStore.isLoggedIn')
                 button.dropdown-action(@click='logoutUser' type='button') 用户登出
 </template>
 

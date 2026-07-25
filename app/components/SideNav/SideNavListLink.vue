@@ -7,6 +7,13 @@ mixin content
 li
   RouterLink.plain(:to='link' v-if='link')
     +content
+  a.plain(
+    :href='downloadLink'
+    @click='$emit("activate")'
+    download
+    v-else-if='downloadLink'
+  )
+    +content
   a.plain(:href='externalLink' target='_blank' v-else-if='externalLink')
     +content
   a.plain.not-allowed(v-else)
@@ -17,9 +24,11 @@ li
 import IFasListUl from '~icons/fa-solid/list-ul'
 defineProps<{
   text: string
+  downloadLink?: string
   externalLink?: string
   link?: string
 }>()
+defineEmits<{ activate: [] }>()
 </script>
 
 <style scoped lang="scss">

@@ -4,19 +4,10 @@ import { assertSameOrigin } from '~~/server/utils/pixiv-session'
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
   const id = getRouterParam(event, 'id')
-  const body = await readBody<{
-    lastPage?: unknown
-    pageCount?: unknown
-  }>(event)
   try {
-    return {
-      status: useLocalPersistenceRepository().recordArtworkVisit(id, {
-        lastPage:
-          typeof body?.lastPage === 'number' ? body.lastPage : undefined,
-        pageCount:
-          typeof body?.pageCount === 'number' ? body.pageCount : undefined,
-      }),
-    }
+    useLocalPersistenceRepository().recordArtworkVisit(id)
+    setResponseStatus(event, 204)
+    return null
   } catch (error) {
     throw createError({
       statusCode: 400,

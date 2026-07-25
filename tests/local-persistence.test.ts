@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { test } from 'node:test'
 import { reactive } from 'vue'
 import { parsePixivResource } from '../shared/pixiv-resource.ts'
@@ -91,28 +94,14 @@ test('marker v1 只导入作品和作者且重复导入保持唯一记录', () =
     assert.deepEqual(first, {
       artworks: 2,
       authors: 1,
-      exclusions: 0,
-      settings: 0,
     })
     assert.deepEqual(second, first)
     assert.equal(repository.getCounts().artworks, 2)
     assert.equal(repository.getCounts().authors, 1)
-    assert.deepEqual(repository.getArtworkStatuses(['123', '456', '999']), {
-      '123': {
-        state: 'viewed',
-        firstViewedAt: 1_700_000_000_000,
-        lastViewedAt: 1_700_000_000_000,
-        lastPage: null,
-        pageCount: null,
-      },
-      '456': {
-        state: 'viewed',
-        firstViewedAt: 1_710_000_000_000,
-        lastViewedAt: 1_710_000_000_000,
-        lastPage: null,
-        pageCount: null,
-      },
-    })
+    assert.deepEqual(repository.getVisitedArtworkIds(['123', '456', '999']), [
+      '123',
+      '456',
+    ])
     assert.equal(
       repository.getPreferences().viewedMarker.artworkImageOverlayOpacity,
       0.54
@@ -122,23 +111,189 @@ test('marker v1 只导入作品和作者且重复导入保持唯一记录', () =
       databasePath: join(directory, 'restored.sqlite'),
     })
     try {
-      assert.deepEqual(restored.importData(repository.exportData()), {
+      const exported = repository.exportData()
+      assert.deepEqual(Object.keys(exported).sort(), ['data', 'exportedAt'])
+      assert.equal(typeof exported.exportedAt, 'number')
+      assert.deepEqual(exported.data, {
+        visitedArtworkIds: ['123', '456'],
+        visitedAuthorIds: ['123'],
+      })
+
+      assert.deepEqual(restored.importData(exported), {
         artworks: 2,
         authorVisits: 1,
-        authorMarks: 0,
-        exclusions: 0,
-        settings: 30,
       })
       assert.deepEqual(restored.getCounts(), {
         artworks: 2,
         authors: 1,
-        exclusions: 0,
       })
+
+      assert.deepEqual(
+        restored.importData({
+          exportedAt: 1_800_000_000_000,
+          data: {
+            visitedArtworkIds: ['789'],
+            visitedAuthorIds: ['456'],
+            futureDataType: { records: ['ignored-for-now'] },
+          },
+        }),
+        {
+          artworks: 1,
+          authorVisits: 1,
+        }
+      )
+      assert.deepEqual(restored.getVisitedArtworkIds(['789']), ['789'])
     } finally {
       restored.close()
     }
   } finally {
     repository.close()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('旧数据库升级后只保留作品和作者访问集合', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pixivfun-migrate-'))
+  const databasePath = join(directory, 'pixivfun.sqlite')
+  const legacy = new DatabaseSync(databasePath)
+  legacy.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE schema_migrations (
+      version INTEGER PRIMARY KEY,
+      applied_at INTEGER NOT NULL
+    );
+    INSERT INTO schema_migrations(version, applied_at) VALUES (1, 1);
+    CREATE TABLE profiles (
+      id TEXT PRIMARY KEY,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    INSERT INTO profiles(id, created_at, updated_at)
+      VALUES ('local-default', 1, 1);
+    CREATE TABLE artwork_reading_state (
+      profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+      artwork_id TEXT NOT NULL,
+      state TEXT NOT NULL,
+      first_viewed_at INTEGER NOT NULL,
+      last_viewed_at INTEGER NOT NULL,
+      last_page INTEGER,
+      page_count INTEGER,
+      source TEXT NOT NULL,
+      PRIMARY KEY (profile_id, artwork_id)
+    );
+    INSERT INTO artwork_reading_state VALUES
+      ('local-default', '123', 'viewed', 10, 20, 2, 4, 'pixivfun'),
+      ('local-default', '456', 'unread', 30, 40, NULL, NULL, 'manual');
+    CREATE TABLE author_visits (
+      profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+      author_id TEXT NOT NULL,
+      first_visited_at INTEGER NOT NULL,
+      last_visited_at INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      PRIMARY KEY (profile_id, author_id)
+    );
+    INSERT INTO author_visits VALUES
+      ('local-default', '789', 10, 20, 'pixivfun');
+    CREATE TABLE author_marks (
+      profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+      author_id TEXT NOT NULL,
+      mark_type TEXT NOT NULL,
+      note TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (profile_id, author_id)
+    );
+    CREATE TABLE page_exclusions (
+      profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+      pattern TEXT NOT NULL,
+      label TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (profile_id, pattern)
+    );
+  `)
+  legacy.close()
+
+  const repository = new LocalPersistenceRepository({ databasePath })
+  try {
+    assert.deepEqual(repository.getVisitedArtworkIds(['123', '456']), [
+      '123',
+      '456',
+    ])
+    assert.deepEqual(repository.getCounts(), {
+      artworks: 2,
+      authors: 1,
+    })
+  } finally {
+    repository.close()
+  }
+
+  const migrated = new DatabaseSync(databasePath)
+  try {
+    const columns = (table: string) =>
+      (
+        migrated.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+          name: string
+        }>
+      ).map((row) => row.name)
+    assert.deepEqual(columns('artwork_visits'), ['profile_id', 'artwork_id'])
+    assert.deepEqual(columns('author_visits'), ['profile_id', 'author_id'])
+    assert.equal(
+      migrated
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM sqlite_master
+           WHERE type = 'table'
+             AND name IN (
+               'artwork_reading_state',
+               'author_marks',
+               'page_exclusions'
+             )`
+        )
+        .get()!.count,
+      0
+    )
+  } finally {
+    migrated.close()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('短暂并发读锁释放后数据库仍可正常初始化', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pixivfun-locked-db-'))
+  const databasePath = join(directory, 'pixivfun.sqlite')
+  const database = new DatabaseSync(databasePath)
+  database.exec(
+    'CREATE TABLE sample(id INTEGER); INSERT INTO sample VALUES (1)'
+  )
+  database.close()
+
+  const reader = spawn(
+    process.execPath,
+    [
+      '-e',
+      `
+        const { DatabaseSync } = require('node:sqlite')
+        const database = new DatabaseSync(process.argv[1])
+        database.exec('BEGIN; SELECT * FROM sample')
+        process.stdout.write('ready')
+        setTimeout(() => {
+          database.exec('COMMIT')
+          database.close()
+        }, 250)
+      `,
+      databasePath,
+    ],
+    { stdio: ['ignore', 'pipe', 'inherit'] }
+  )
+
+  try {
+    await once(reader.stdout!, 'data')
+    const repository = new LocalPersistenceRepository({ databasePath })
+    repository.close()
+    const [exitCode] = await once(reader, 'exit')
+    assert.equal(exitCode, 0)
+  } finally {
+    if (reader.exitCode === null) reader.kill()
     rmSync(directory, { recursive: true, force: true })
   }
 })

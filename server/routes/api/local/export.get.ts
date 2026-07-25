@@ -4,7 +4,7 @@ export default defineEventHandler((event) => {
   setResponseHeader(
     event,
     'content-disposition',
-    `attachment; filename="pixivfun-backup-${new Date()
+    `attachment; filename="pixivfun-data-${new Date()
       .toISOString()
       .slice(0, 10)}.json"`
   )

@@ -335,7 +335,6 @@ let activePreloadImage: HTMLImageElement | null = null
 let resolveActivePreload: ((loaded: boolean) => void) | null = null
 let menuCollapseTimer = 0
 let columnLayoutTimer = 0
-let progressPersistTimer = 0
 let downloadController: AbortController | null = null
 
 const qualityOptions: { label: string; value: ReaderImageQuality }[] = [
@@ -872,19 +871,6 @@ watch(layoutMode, async (nextMode) => {
   waterfallRef.value?.renderer?.()
 })
 
-watch(currentPageIndex, (index) => {
-  if (!active.value || !settingsReady.value) return
-  window.clearTimeout(progressPersistTimer)
-  progressPersistTimer = window.setTimeout(() => {
-    void localPersistenceStore
-      .recordArtworkVisit(props.illustId, {
-        lastPage: index + 1,
-        pageCount: props.pages.length,
-      })
-      .catch(() => {})
-  }, 500)
-})
-
 watch(
   () => props.illustId,
   () => {
@@ -897,7 +883,6 @@ onBeforeUnmount(() => {
   stopOriginalPreload()
   cancelMenuCollapse()
   if (columnLayoutTimer) window.clearTimeout(columnLayoutTimer)
-  if (progressPersistTimer) window.clearTimeout(progressPersistTimer)
   downloadController?.abort()
   window.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('resize', syncReaderViewport)

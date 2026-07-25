@@ -70,7 +70,7 @@ watch(
   () => props.artworks,
   (items) => {
     void localPersistence
-      .ensureArtworkStatuses(items.map((item) => item.id))
+      .ensureArtworkVisits(items.map((item) => item.id))
       .catch(() => {})
   },
   { immediate: true }

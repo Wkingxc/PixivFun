@@ -183,10 +183,7 @@
     v-if='!loading && !error && illust && !isUgoira && pages.length'
   )
 
-  ArtworkMarkerControl(
-    :artwork-id='illust.illustId'
-    v-if='!loading && !error && illust'
-  )
+  ArtworkMarkerControl(v-if='!loading && !error && illust')
 
   //- Error
   section.error(v-if='error')
@@ -333,9 +330,7 @@ async function init(id: string): Promise<void> {
     illust.value = cachedArtwork
     pages.value = cachedPages
     loading.value = false
-    void localPersistenceStore
-      .recordArtworkVisit(id, { pageCount: cachedPages.length })
-      .catch(() => {})
+    void localPersistenceStore.recordArtworkVisit(id).catch(() => {})
     await restoreDirectoryScroll(id, directoryScrollTop)
     return
   }
@@ -347,9 +342,7 @@ async function init(id: string): Promise<void> {
     ])
     illust.value = artworkData
     pages.value = pagesData
-    void localPersistenceStore
-      .recordArtworkVisit(id, { pageCount: pagesData.length })
-      .catch(() => {})
+    void localPersistenceStore.recordArtworkVisit(id).catch(() => {})
   } catch (err) {
     console.warn('illust fetch error', `#${id}`, err)
     if (err instanceof Error) {

@@ -6,10 +6,8 @@ import {
   type LocalPreferences,
   type LocalPreferencesPatch,
 } from '~~/shared/local-preferences'
-import type { ArtworkReadingStatus } from '~~/server/persistence/repository'
 
 interface PreferencesResponse {
-  schemaVersion: 1
   preferences: LocalPreferences
 }
 
@@ -18,7 +16,7 @@ export const useLocalPersistenceStore = defineStore('local-persistence', () => {
     cloneLocalPreferences(DEFAULT_LOCAL_PREFERENCES)
   )
   const initialized = ref(false)
-  const artworkStatuses = reactive<Record<string, ArtworkReadingStatus>>({})
+  const visitedArtworkIds = reactive(new Set<string>())
   const checkedArtworkIds = new Set<string>()
   let initialization: Promise<void> | undefined
   let preferenceRevision = 0
@@ -134,7 +132,7 @@ export const useLocalPersistenceStore = defineStore('local-persistence', () => {
     for (const key of keysToRemove) localStorage.removeItem(key)
   }
 
-  async function ensureArtworkStatuses(
+  async function ensureArtworkVisits(
     ids: Array<string | number>
   ): Promise<void> {
     const pending = Array.from(
@@ -147,17 +145,14 @@ export const useLocalPersistenceStore = defineStore('local-persistence', () => {
         Array.from({ length: Math.ceil(pending.length / 500) }, (_, index) =>
           pending.slice(index * 500, index * 500 + 500)
         ).map((ids) =>
-          $fetch<{ statuses: Record<string, ArtworkReadingStatus> }>(
-            '/api/local/artworks/status',
-            {
-              method: 'POST',
-              body: { ids },
-            }
-          )
+          $fetch<{ visitedIds: string[] }>('/api/local/artworks/status', {
+            method: 'POST',
+            body: { ids },
+          })
         )
       )
       for (const response of responses) {
-        Object.assign(artworkStatuses, response.statuses)
+        response.visitedIds.forEach((id) => visitedArtworkIds.add(id))
       }
     } catch (error) {
       pending.forEach((id) => checkedArtworkIds.delete(id))
@@ -167,65 +162,37 @@ export const useLocalPersistenceStore = defineStore('local-persistence', () => {
 
   function isArtworkViewed(id: string | number | undefined): boolean {
     if (id === undefined) return false
-    return artworkStatuses[String(id)]?.state === 'viewed'
+    return visitedArtworkIds.has(String(id))
   }
 
-  async function recordArtworkVisit(
-    id: string | number,
-    progress?: { lastPage?: number; pageCount?: number }
-  ): Promise<void> {
+  async function recordArtworkVisit(id: string | number): Promise<void> {
     const artworkId = String(id)
-    const now = Date.now()
     checkedArtworkIds.add(artworkId)
-    artworkStatuses[artworkId] = {
-      state: 'viewed',
-      firstViewedAt: artworkStatuses[artworkId]?.firstViewedAt ?? now,
-      lastViewedAt: now,
-      lastPage:
-        progress?.lastPage ?? artworkStatuses[artworkId]?.lastPage ?? null,
-      pageCount:
-        progress?.pageCount ?? artworkStatuses[artworkId]?.pageCount ?? null,
-    }
-    const response = await $fetch<{ status: ArtworkReadingStatus }>(
-      `/api/local/artworks/${artworkId}/visit`,
-      {
-        method: 'POST',
-        body: progress || {},
-      }
-    )
-    artworkStatuses[artworkId] = response.status
+    visitedArtworkIds.add(artworkId)
+    await $fetch(`/api/local/artworks/${artworkId}/visit`, { method: 'POST' })
   }
 
-  async function setArtworkState(
-    id: string | number,
-    state: 'viewed' | 'unread'
-  ): Promise<void> {
-    const artworkId = String(id)
-    const response = await $fetch<{ status: ArtworkReadingStatus }>(
-      `/api/local/artworks/${artworkId}/state`,
-      {
-        method: 'PATCH',
-        body: { state },
-      }
-    )
-    checkedArtworkIds.add(artworkId)
-    artworkStatuses[artworkId] = response.status
+  async function refreshCheckedArtworkVisits(): Promise<void> {
+    const ids = Array.from(checkedArtworkIds)
+    ids.forEach((id) => visitedArtworkIds.delete(id))
+    checkedArtworkIds.clear()
+    await ensureArtworkVisits(ids)
   }
 
   return {
     preferences,
     initialized,
     viewedMarker,
-    artworkStatuses,
+    visitedArtworkIds,
     init,
     applyPreferencesPatch,
     persistPreferences,
     patchPreferences,
     migrateLegacyPreferences,
-    ensureArtworkStatuses,
+    ensureArtworkVisits,
     isArtworkViewed,
     recordArtworkVisit,
-    setArtworkState,
+    refreshCheckedArtworkVisits,
   }
 })
 

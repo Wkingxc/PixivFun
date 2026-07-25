@@ -55,15 +55,6 @@
           type='checkbox'
         )
 
-      button.current-state(
-        @click='toggleCurrentState'
-        type='button'
-        v-if='props.artworkId'
-      )
-        ITablerEyeOff(aria-hidden='true' v-if='currentViewed')
-        ITablerEye(aria-hidden='true' v-else)
-        | {{ currentViewed ? '将当前作品设为未读' : '将当前作品设为已读' }}
-
   button.artwork-marker-trigger(
     :aria-expanded='open',
     :class='{ active: open }'
@@ -79,19 +70,15 @@
 <script lang="ts" setup>
 import {
   IconColorSwatch as ITablerColorSwatch,
-  IconEye as ITablerEye,
-  IconEyeOff as ITablerEyeOff,
   IconX as ITablerX,
 } from '@tabler/icons-vue'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
 import type { LocalPreferences } from '~~/shared/local-preferences'
 
-const props = defineProps<{ artworkId?: string }>()
 const store = useLocalPersistenceStore()
 const open = ref(false)
 let persistTimer: ReturnType<typeof setTimeout> | undefined
 const marker = computed(() => store.viewedMarker)
-const currentViewed = computed(() => store.isArtworkViewed(props.artworkId))
 const colorHex = computed(() => {
   const { r, g, b } = marker.value.artworkVisitedColor
   return `#${[r, g, b]
@@ -151,13 +138,6 @@ function changeOpacity(event: Event) {
     },
     true
   )
-}
-
-function toggleCurrentState() {
-  if (!props.artworkId) return
-  void store
-    .setArtworkState(props.artworkId, currentViewed.value ? 'unread' : 'viewed')
-    .catch(() => {})
 }
 
 onBeforeUnmount(() => {
@@ -292,24 +272,6 @@ onBeforeUnmount(() => {
       text-align: right;
     }
   }
-}
-
-.current-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  width: 100%;
-  min-height: 36px;
-  margin-top: 10px;
-  color: var(--pf-text);
-  background: var(--pf-bg);
-  border: 1px solid var(--pf-line);
-  border-radius: 10px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.72rem;
-  font-weight: 700;
 }
 
 .marker-panel-enter-active,
