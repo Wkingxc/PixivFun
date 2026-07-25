@@ -20,6 +20,16 @@ import {
   serializeArtworkDirectoryScroll,
 } from '../app/utils/artworkDirectoryNavigation.ts'
 import { shouldNavigateArtworkTag } from '../app/utils/artworkTagNavigation.ts'
+import {
+  clampReaderColumns,
+  getArtworkDownloadFilename,
+  getArtworkPageFilename,
+  getReaderAlignedRows,
+  getReaderImageSource,
+  getViewerSpreadIndices,
+  getViewerStepIndex,
+  shouldOpenArtworkReaderFromKey,
+} from '../app/utils/artworkWaterfallReader.ts'
 
 test('跨页面打开作品立即定位顶部且不使用平滑滚动', async () => {
   const result = await routerOptions.scrollBehavior!(
@@ -149,6 +159,136 @@ test('新版多图作品默认只展示首图，展开后显示全部图片', ()
   assert.deepEqual(getVisibleArtworkPages(pages, false), [{ id: 1 }])
   assert.deepEqual(getVisibleArtworkPages(pages, true), pages)
   assert.deepEqual(getVisibleArtworkPages([], false), [])
+})
+
+test('瀑布阅读器支持小图、高清与原图并允许一至十二列', () => {
+  const page = {
+    urls: {
+      small: 'small.jpg',
+      regular: 'regular.jpg',
+      original: 'original.jpg',
+    },
+  }
+
+  assert.equal(getReaderImageSource(page, 'small'), 'small.jpg')
+  assert.equal(getReaderImageSource(page, 'regular'), 'regular.jpg')
+  assert.equal(getReaderImageSource(page, 'original'), 'original.jpg')
+  assert.equal(clampReaderColumns(0), 1)
+  assert.equal(clampReaderColumns(2), 2)
+  assert.equal(clampReaderColumns(4), 4)
+  assert.equal(clampReaderColumns(13), 12)
+})
+
+test('作品页仅在非交互区域按下 Enter 时进入阅读模式', () => {
+  assert.equal(
+    shouldOpenArtworkReaderFromKey({
+      key: 'Enter',
+      repeat: false,
+      isComposing: false,
+      target: null,
+    }),
+    true
+  )
+  assert.equal(
+    shouldOpenArtworkReaderFromKey({
+      key: 'Enter',
+      repeat: true,
+      isComposing: false,
+      target: null,
+    }),
+    false
+  )
+  assert.equal(
+    shouldOpenArtworkReaderFromKey({
+      key: 'Enter',
+      repeat: false,
+      isComposing: true,
+      target: null,
+    }),
+    false
+  )
+  assert.equal(
+    shouldOpenArtworkReaderFromKey({
+      key: 'Enter',
+      repeat: false,
+      isComposing: false,
+      target: { tagName: 'INPUT' },
+    }),
+    false
+  )
+  assert.equal(
+    shouldOpenArtworkReaderFromKey({
+      key: 'Enter',
+      repeat: false,
+      isComposing: false,
+      target: { closest: () => ({}) },
+    }),
+    false
+  )
+})
+
+test('行对齐阅读模式按列数分行并保留横竖图原始顺序', () => {
+  const pages = [
+    { width: 1000, height: 1800 },
+    { width: 1800, height: 1000 },
+    { width: 1600, height: 900 },
+    { width: 900, height: 1600 },
+    { width: 800, height: 1200 },
+  ]
+
+  assert.deepEqual(getReaderAlignedRows(pages, 2), [[0, 1], [2, 3], [4]])
+  assert.deepEqual(getReaderAlignedRows(pages, 3), [
+    [0, 1, 2],
+    [3, 4],
+  ])
+  assert.deepEqual(
+    getReaderAlignedRows(
+      [
+        { width: 1800, height: 1000 },
+        { width: 1600, height: 900 },
+      ],
+      4
+    ),
+    [[0, 1]]
+  )
+})
+
+test('作品下载使用安全的作品名并保留每页原图扩展名', () => {
+  assert.equal(
+    getArtworkDownloadFilename('标题 / 测试:*?', '147583598', true),
+    '标题 _ 测试___-147583598.zip'
+  )
+  assert.equal(
+    getArtworkDownloadFilename('标题', '147583598', false, 'png'),
+    '标题-147583598.png'
+  )
+  assert.equal(
+    getArtworkPageFilename(
+      '147583598',
+      2,
+      '/-/img-original/example_p2.png?cache=1'
+    ),
+    '147583598_p2.png'
+  )
+  assert.equal(
+    getArtworkPageFilename('147583598', 0, '/image-without-extension'),
+    '147583598_p0.jpg'
+  )
+})
+
+test('原图查看器的双页模式固定配对并以跨页为单位翻页', () => {
+  assert.deepEqual(getViewerSpreadIndices(6, 0, true), [0, 1])
+  assert.deepEqual(getViewerSpreadIndices(6, 3, true), [2, 3])
+  assert.deepEqual(getViewerSpreadIndices(5, 4, true), [3, 4])
+  assert.deepEqual(getViewerSpreadIndices(1, 0, true), [0])
+  assert.deepEqual(getViewerSpreadIndices(6, 3, false), [3])
+
+  assert.equal(getViewerStepIndex(6, 0, 1, true), 2)
+  assert.equal(getViewerStepIndex(6, 2, -1, true), 0)
+  assert.equal(getViewerStepIndex(5, 2, 1, true), 4)
+  assert.equal(getViewerStepIndex(5, 4, -1, true), 2)
+  assert.equal(getViewerStepIndex(5, 4, 1, true), 4)
+  assert.equal(getViewerStepIndex(5, 2, 1, false), 3)
 })
 
 test('收藏标签判定只覆盖公开与私密收藏', () => {

@@ -117,3 +117,53 @@
 - P3 accepted: 移动端隐藏搜索和开发风格选择文字，保留菜单、主题和账户入口，以避免顶栏溢出。
 
 final result: passed
+
+## 2026-07-25 · 作品页瀑布阅读修正
+
+### Visual truth
+
+- Source: `.design-qa/00-reference-reader-trigger.png`（用户提供的入口按钮截图，206 × 110；其通用花形仅用于按钮比例和层级参考，用户明确要求以真正的樱花图标替换）
+- Focused comparison: `.design-qa/06-trigger-comparison.png`（760 × 192；参考按钮与实现入口并列）
+- Implementation entry: `.design-qa/01-artwork-entry.jpg`（1665 × 904）
+- Implementation waterfall: `.design-qa/02-waterfall.jpg`（1680 × 912）
+- Implementation original viewer hover state: `.design-qa/03-original-viewer-hover.jpg`（1680 × 912）
+- Implementation toolbox: `.design-qa/04-reader-toolbox.jpg`（1680 × 912）
+- Favicon at browser-icon scale: `.design-qa/05-favicon-32.png`（32 × 21，透明背景）
+
+### Verified states
+
+- Desktop viewport: 1680 × 912 CSS pixels，density 1，亮色主题，游客会话，`/artworks/147583598`，16 页漫画。
+- Source reference and focused implementation crop were normalized to the same 200px comparison height; the source and implementation do not represent the same theme, so color equality was not used as a pass criterion.
+- Waterfall opened at its default three-column state; pages 1、2、3 occupy the first row in source order.
+- All 16 waterfall images used Pixiv `small`/540px preview URLs; no `img-original` URL was present in the preview grid.
+- Clicking page 1 opened the original in the current-page lightbox. The 1400 × 1976 source rendered at 584 × 824 and remained fully inside the 1680 × 912 viewport.
+- Moving the pointer into the right-side navigation land revealed the next control; clicking it changed `1 / 16` and `_p0.jpg` to `2 / 16` and `_p1.jpg`. Page 2 exposed both previous and next lands.
+- Clicking the active lower-left blossom opened the toolbox. Column choices are exactly `2` and `3`; actions are “回到顶部”“下载当前页”“退出阅读”.
+- `/favicon.svg` returned HTTP 200 with `Content-Type: image/svg+xml`; its 32px raster check remained legible.
+- Browser-visible interaction smoke test completed without an error surface. The connected browser API did not expose a historical console-message stream; production server output showed no runtime error during the tested flow.
+
+### Required fidelity surfaces
+
+- Fonts and typography: existing PixivFun typography and weights are reused. The compact entry, page counter, captions, viewer metadata, and toolbox keep a clear hierarchy without clipping.
+- Spacing and layout rhythm: the entry remains fixed at the lower-left, below the development controls. The waterfall uses three equal masonry tracks with 18px gutters and preserves source order. The viewer image fits within the viewport, leaving stable metadata and navigation space.
+- Colors and visual tokens: entry and toolbox use existing `--pf-*` tokens. The active blossom is forced to white against the pink state so it does not disappear.
+- Image quality and asset fidelity: a real Noto cherry-blossom icon replaces the generic outlined flower. Waterfall previews use Pixiv small images; original assets load only in the lightbox or through download. The supplied SVG favicon is used directly rather than being degraded to ICO.
+- Copy and content: labels clearly distinguish “阅读”“阅读中”“阅读工具”, and page counters remain visible in both waterfall and original-viewer states.
+
+### Comparison history
+
+- P1 fixed: the first masonry implementation used CSS columns, which displayed pages as `1 / 6 / 12` across the first row. It was replaced with the existing waterfall layout dependency; post-fix evidence in `.design-qa/02-waterfall.jpg` shows `1 / 2 / 3`.
+- P1 fixed: the first original viewer allowed the 1400 × 1976 image to extend below the viewport. The stage now has explicit sizing and overflow constraints; post-fix evidence in `.design-qa/03-original-viewer-hover.jpg` shows the whole page fitted at 584 × 824.
+- P2 fixed: the multicolor blossom fill had insufficient contrast in the active pink state. The active icon now renders white; post-fix evidence is visible in all three reading-state screenshots.
+- P2 fixed: waterfall preview quality initially reused large `regular` URLs. Source inspection of `comic-looms` confirmed its Pixiv matcher stores `small` for the grid and `original` separately for the viewer. Runtime inspection now reports 16 small preview URLs and 0 original URLs.
+- P3 accepted: the reference screenshot uses a dark surface and a generic outlined flower. The application keeps its current theme tokens and uses the user-requested cherry-blossom library asset, so exact color and flower-shape matching would contradict the correction request.
+
+### Findings
+
+- No actionable P0/P1/P2 visual or interaction findings remain in the tested desktop flow.
+
+### Follow-up polish
+
+- P3: a future mobile-specific pass could tune the single-column reader density independently; the current breakpoint intentionally prioritizes readability.
+
+final result: passed

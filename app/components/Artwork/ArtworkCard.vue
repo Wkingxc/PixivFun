@@ -1,7 +1,9 @@
 <template lang="pug">
 .artwork-card-container
   .artwork-card.fnb-media-card.placeholder(v-if='loading')
-    .artwork-image.fnb-media-card__media
+    .artwork-image.fnb-media-card__media(
+      :class='{ "artwork-image--zoom": imageZoom }'
+    )
       FnbSkeleton(block height='100%' width='100%')
     .artwork-info.fnb-media-card__body
       .title.fnb-media-card__title: a: FnbSkeleton(height='1.4em' text width='8em')
@@ -57,6 +59,7 @@ import { useArtworkStore } from '~/stores/artwork'
 const props = defineProps<{
   item?: ArtworkInfo
   loading?: boolean
+  imageZoom?: boolean
 }>()
 
 const item = toRef(props, 'item')
@@ -162,12 +165,18 @@ async function handleBookmark() {
     &::before {
       background-color: rgba(0, 0, 0, 0.2);
     }
-    img {
-      transform: scale(1.2);
-    }
     .type-ugoira {
       opacity: 0;
       transform: translate(-50%, -50%) scale(1.5);
+    }
+  }
+
+  &.artwork-image--zoom {
+    &:hover a,
+    & a.router-link-active {
+      img {
+        transform: scale(1.2);
+      }
     }
   }
 

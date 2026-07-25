@@ -1,0 +1,159 @@
+interface ReaderImagePage {
+  urls: {
+    small: string
+    regular: string
+    original: string
+  }
+}
+
+export type ReaderImageQuality = 'small' | 'regular' | 'original'
+
+const INVALID_FILENAME_CHARACTERS = /[<>:"/\\|?*\u0000-\u001f]/g
+const INTERACTIVE_SHORTCUT_TAGS = new Set([
+  'A',
+  'BUTTON',
+  'INPUT',
+  'SELECT',
+  'SUMMARY',
+  'TEXTAREA',
+])
+
+interface ArtworkReaderShortcutTarget {
+  tagName?: string
+  isContentEditable?: boolean
+  closest?: (selectors: string) => unknown
+}
+
+interface ArtworkReaderShortcutEvent {
+  key: string
+  repeat?: boolean
+  isComposing?: boolean
+  target?: EventTarget | ArtworkReaderShortcutTarget | null
+}
+
+export function shouldOpenArtworkReaderFromKey(
+  event: ArtworkReaderShortcutEvent
+): boolean {
+  if (event.key !== 'Enter' || event.repeat || event.isComposing) return false
+
+  const target = event.target as ArtworkReaderShortcutTarget | null | undefined
+  if (!target) return true
+  if (
+    target.isContentEditable ||
+    (target.tagName &&
+      INTERACTIVE_SHORTCUT_TAGS.has(target.tagName.toUpperCase()))
+  ) {
+    return false
+  }
+  return !target.closest?.(
+    'a[href], button, input, select, summary, textarea, [contenteditable="true"], [role="button"], [role="link"], [role="menuitem"]'
+  )
+}
+
+export function getReaderImageSource(
+  page: ReaderImagePage,
+  quality: ReaderImageQuality
+): string {
+  return page.urls[quality]
+}
+
+export function clampReaderColumns(columns: number): number {
+  return Math.min(12, Math.max(1, Math.round(columns)))
+}
+
+interface ReaderSizedPage {
+  width: number
+  height: number
+}
+
+export function getReaderAlignedRows(
+  pages: ReaderSizedPage[],
+  maximumItems: number
+): number[][] {
+  const rowLimit = clampReaderColumns(maximumItems)
+  return Array.from(
+    { length: Math.ceil(pages.length / rowLimit) },
+    (_, rowIndex) => {
+      const start = rowIndex * rowLimit
+      return pages
+        .slice(start, start + rowLimit)
+        .map((_, offset) => start + offset)
+    }
+  )
+}
+
+export function getViewerSpreadIndices(
+  pageCount: number,
+  currentIndex: number,
+  doublePage: boolean
+): number[] {
+  if (pageCount <= 0) return []
+  const current = Math.min(pageCount - 1, Math.max(0, currentIndex))
+  if (!doublePage || pageCount === 1) return [current]
+
+  if (pageCount % 2 === 1 && current === pageCount - 1) {
+    return [current - 1, current]
+  }
+  const start = current - (current % 2)
+  return [start, start + 1].filter((index) => index < pageCount)
+}
+
+export function getViewerStepIndex(
+  pageCount: number,
+  currentIndex: number,
+  direction: number,
+  doublePage: boolean
+): number {
+  if (pageCount <= 0) return 0
+  const current = Math.min(pageCount - 1, Math.max(0, currentIndex))
+  if (!doublePage) {
+    return Math.min(pageCount - 1, Math.max(0, current + Math.sign(direction)))
+  }
+
+  const spread = getViewerSpreadIndices(pageCount, current, true)
+  const first = spread[0] ?? current
+  const last = spread.at(-1) ?? current
+  if (direction > 0) {
+    return last >= pageCount - 1 ? current : Math.min(first + 2, pageCount - 1)
+  }
+  if (direction < 0) {
+    if (first <= 0) return current
+    if (pageCount % 2 === 1 && current === pageCount - 1) {
+      return Math.max(0, current - 2)
+    }
+    return Math.max(0, first - 2)
+  }
+  return current
+}
+
+export function getOriginalImageExtension(url: string): string {
+  const pathname = url.split(/[?#]/, 1)[0] || ''
+  const extension = pathname.match(/\.([a-z0-9]{2,5})$/i)?.[1]?.toLowerCase()
+  return extension &&
+    ['avif', 'gif', 'jpeg', 'jpg', 'png', 'webp'].includes(extension)
+    ? extension
+    : 'jpg'
+}
+
+export function getArtworkPageFilename(
+  illustId: string,
+  index: number,
+  originalUrl: string
+): string {
+  return `${illustId}_p${index}.${getOriginalImageExtension(originalUrl)}`
+}
+
+export function getArtworkDownloadFilename(
+  title: string,
+  illustId: string,
+  archived: boolean,
+  extension = 'jpg'
+): string {
+  const safeTitle =
+    title
+      .replace(INVALID_FILENAME_CHARACTERS, '_')
+      .replace(/[.\s]+$/g, '')
+      .trim()
+      .slice(0, 120) || 'pixiv-artwork'
+  return `${safeTitle}-${illustId}.${archived ? 'zip' : extension}`
+}

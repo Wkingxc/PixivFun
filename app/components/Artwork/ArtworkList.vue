@@ -1,14 +1,11 @@
 <template lang="pug">
-Component.artworks-list(
-  :class='{ inline }',
-  :is='inline ? "div" : "ul"'
-)
+Component.artworks-list(:class='{ inline }', :is='inline ? "div" : "ul"')
   template(v-if='loading')
-    li(v-for='i in skeletonNumber' :key='"skeleton-" + i')
+    li(:key='"skeleton-" + i' v-for='i in skeletonNumber')
       ArtworkCard(loading)
   template(v-else)
-    li(v-for='item in artworks' :key='item.id')
-      ArtworkCard(:item='item')
+    li(:key='item.id' v-for='item in artworks')
+      ArtworkCard(:image-zoom='imageZoom', :item='item')
 </template>
 
 <script lang="ts" setup>
@@ -20,6 +17,7 @@ const props = defineProps<{
   list: ArtworkInfoOrAd[]
   loading?: boolean | number
   inline?: boolean
+  imageZoom?: boolean
 }>()
 
 const skeletonNumber = computed(() =>

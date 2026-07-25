@@ -107,6 +107,7 @@
             | {{ isDiscoveryLoading ? '加载中' : '换一批' }}
 
       ArtworkList(
+        :image-zoom='true',
         :list='displayedDiscoveryList',
         :loading='isDiscoveryLoading ? discoveryArtworkLimit : false'
         v-if='discoveryTab !== "novel"'

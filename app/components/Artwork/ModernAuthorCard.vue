@@ -23,7 +23,7 @@
     .author-copy
       FnbSkeleton(text width='8rem')
       FnbSkeleton(text width='12rem')
-  FnbSkeleton(block height='40px' width='100%')
+  FnbSkeleton(block height='36px' width='86px')
 </template>
 
 <script lang="ts" setup>
@@ -60,7 +60,9 @@ async function toggleFollow(): Promise<void> {
 <style scoped lang="scss">
 .modern-author-card {
   display: grid;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
 }
 
 .author-identity {
@@ -104,7 +106,9 @@ async function toggleFollow(): Promise<void> {
 }
 
 .follow-button {
-  min-height: 40px;
+  min-width: 86px;
+  min-height: 36px;
+  padding: 0 18px;
   color: #fff;
   background: var(--modern-pink);
   border: 0;
@@ -113,6 +117,7 @@ async function toggleFollow(): Promise<void> {
   font: inherit;
   font-size: 0.8rem;
   font-weight: 650;
+  white-space: nowrap;
 
   &.followed {
     color: var(--modern-pink);

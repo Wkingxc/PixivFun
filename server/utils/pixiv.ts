@@ -2,6 +2,7 @@ import type { H3Event } from 'h3'
 import colors from 'picocolors'
 import { createPixivRequestHeaders } from './pixiv-headers'
 import { getPixivSession } from './pixiv-session'
+import { resolveUpstreamProxyUrl } from './system-proxy'
 
 export const PROD = process.env.NODE_ENV === 'production'
 export const DEV = !PROD
@@ -23,19 +24,13 @@ export async function proxyAwareFetch(
   url: string,
   init?: RequestInit
 ): Promise<Response> {
-  if (import.meta.dev) {
-    const proxyUrl =
-      process.env.https_proxy ||
-      process.env.HTTPS_PROXY ||
-      process.env.http_proxy ||
-      process.env.HTTP_PROXY
-    if (proxyUrl) {
-      const { fetch: undiciFetch, ProxyAgent } = await import('undici')
-      return undiciFetch(url, {
-        ...init,
-        dispatcher: new ProxyAgent(proxyUrl),
-      } as any) as unknown as Response
-    }
+  const proxyUrl = await resolveUpstreamProxyUrl()
+  if (proxyUrl) {
+    const { fetch: undiciFetch, ProxyAgent } = await import('undici')
+    return undiciFetch(url, {
+      ...init,
+      dispatcher: new ProxyAgent(proxyUrl),
+    } as any) as unknown as Response
   }
   return globalThis.fetch(url, init)
 }

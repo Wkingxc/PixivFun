@@ -128,7 +128,7 @@ onBeforeUnmount(stopDrag)
 
 .dev-debug-trigger {
   left: 18px;
-  bottom: 18px;
+  bottom: 74px;
   display: inline-flex;
   align-items: center;
   gap: 7px;

@@ -176,6 +176,13 @@
     v-else-if='!error && illust'
   )
 
+  ArtworkWaterfallReader(
+    :illust-id='illust.illustId',
+    :pages='pages',
+    :title='illust.illustTitle'
+    v-if='!loading && !error && illust && !isUgoira && pages.length'
+  )
+
   //- Error
   section.error(v-if='error')
     ErrorPage(:description='error' title='出大问题')
@@ -189,6 +196,7 @@ definePageMeta({
 import ArtTag from '~/components/ArtTag.vue'
 import ArtworkList from '~/components/Artwork/ArtworkList.vue'
 import ArtworkDetailModern from '~/components/Artwork/ArtworkDetailModern.vue'
+import ArtworkWaterfallReader from '~/components/Artwork/ArtworkWaterfallReader.vue'
 import AuthorCard from '~/components/AuthorCard.vue'
 import Card from '~/components/Card.vue'
 import CommentArea from '~/components/Comment/CommentArea.vue'

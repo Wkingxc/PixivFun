@@ -261,7 +261,7 @@ const {
 } = useArtworkDirectoryTuning()
 const isUgoira = computed(() => props.illust.illustType === 2)
 const pagesExpanded = ref(false)
-const commentsExpanded = ref(true)
+const commentsExpanded = ref(false)
 const visiblePages = computed(() =>
   getVisibleArtworkPages(props.pages, pagesExpanded.value)
 )
@@ -276,7 +276,7 @@ watch(
   () => props.illust.illustId,
   () => {
     pagesExpanded.value = false
-    commentsExpanded.value = true
+    commentsExpanded.value = false
   }
 )
 
