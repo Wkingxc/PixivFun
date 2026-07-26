@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         PixivNow Login Helper
-// @namespace    PixivNow
+// @name         PixivFun Login Helper
+// @namespace    PixivFun
 // @version      1.0.0
-// @description  Add a "Login to PixivNow" button on Pixiv account portal
+// @description  Add a "Login to PixivFun" button on Pixiv account portal
 // @match        https://accounts.pixiv.net/*
 // @grant        GM_cookie
 // @grant        GM_getValue
@@ -16,21 +16,21 @@
   const DEFAULT_HOST = 'http://localhost:3000'
 
   function getHost() {
-    return GM_getValue('pixivnow_host', DEFAULT_HOST).replace(/\/$/, '')
+    return GM_getValue('pixivfun_host', DEFAULT_HOST).replace(/\/$/, '')
   }
 
-  GM_registerMenuCommand('设置 PixivNow URL', () => {
+  GM_registerMenuCommand('设置 PixivFun URL', () => {
     const current = getHost()
-    const input = prompt('PixivNow URL:', current)
+    const input = prompt('PixivFun URL:', current)
     if (input !== null) {
-      GM_setValue('pixivnow_host', input.trim() || DEFAULT_HOST)
+      GM_setValue('pixivfun_host', input.trim() || DEFAULT_HOST)
       alert('已保存: ' + getHost())
     }
   })
 
   function createButton() {
     const btn = document.createElement('a')
-    btn.textContent = '登录到 PixivNow'
+    btn.textContent = '登录到 PixivFun'
     btn.href = '#'
     Object.assign(btn.style, {
       display: 'inline-flex',

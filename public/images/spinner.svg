@@ -7,7 +7,7 @@
     <circle r="20" fill="none" stroke="#000" stroke-width="5"/>
   </g>
   <style>
-    /* Copyright Microsoft, Imitated by: 机智的小鱼君 */
+    /* Spinner style imitating the Microsoft loading indicator */
     @keyframes opacity-keyframe {
 
       0%,
