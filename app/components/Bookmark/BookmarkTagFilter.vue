@@ -7,30 +7,33 @@
       </div>
       <span v-if="loading" class="bookmark-tag-filter__loading">读取中…</span>
     </div>
-    <div class="bookmark-tag-filter__list">
+    <div class="pf-tag-cloud">
       <button
-        :class="{ active: modelValue === '' }"
+        class="pf-tag-capsule pf-tag-capsule--plain"
+        :class="{ 'is-selected': modelValue === '' }"
         type="button"
         @click="$emit('update:modelValue', '')"
       >
-        全部
+        <span class="pf-tag-capsule__name">全部</span>
       </button>
       <button
-        :class="{ active: modelValue === UNCLASSIFIED_BOOKMARK_TAG }"
+        class="pf-tag-capsule pf-tag-capsule--plain"
+        :class="{ 'is-selected': modelValue === UNCLASSIFIED_BOOKMARK_TAG }"
         type="button"
         @click="$emit('update:modelValue', UNCLASSIFIED_BOOKMARK_TAG)"
       >
-        未分类
+        <span class="pf-tag-capsule__name">未分类</span>
       </button>
       <button
         v-for="tag in visibleTags"
         :key="tag.name"
-        :class="{ active: modelValue === tag.name }"
+        class="pf-tag-capsule"
+        :class="{ 'is-selected': modelValue === tag.name }"
         type="button"
         @click="$emit('update:modelValue', tag.name)"
       >
-        {{ tag.name }}
-        <small>{{ tag.count }}</small>
+        <span class="pf-tag-capsule__name">{{ tag.name }}</span>
+        <span class="pf-tag-capsule__count">{{ tag.count }}</span>
       </button>
     </div>
   </section>
@@ -99,54 +102,6 @@ const visibleTags = computed(() =>
 
 .bookmark-tag-filter__loading {
   color: var(--pf-pink) !important;
-}
-
-.bookmark-tag-filter__list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-
-  button {
-    display: inline-flex;
-    min-height: 31px;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 11px;
-    color: var(--pf-muted);
-    background: var(--pf-bg);
-    border: 1px solid var(--pf-line);
-    border-radius: 999px;
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.75rem;
-    font-weight: 680;
-    transition:
-      color 140ms ease,
-      background 140ms ease,
-      border-color 140ms ease;
-
-    &:hover,
-    &.active {
-      color: var(--pf-pink);
-      background: var(--pf-soft-pink);
-      border-color: color-mix(in srgb, var(--pf-pink) 34%, var(--pf-line));
-    }
-
-    &.active {
-      box-shadow: inset 0 0 0 1px
-        color-mix(in srgb, var(--pf-pink) 12%, transparent);
-    }
-
-    small {
-      min-width: 17px;
-      padding: 1px 5px;
-      color: inherit;
-      background: color-mix(in srgb, currentcolor 8%, transparent);
-      border-radius: 999px;
-      font-size: 0.64rem;
-      text-align: center;
-    }
-  }
 }
 
 @media (max-width: 560px) {

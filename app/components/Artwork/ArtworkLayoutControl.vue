@@ -58,9 +58,47 @@
           ) {{ option.label }}
         small.setting-help 原图档会使用更多网络流量
 
-      button.reset-layout(@click='reset' type='button')
-        ITablerRestore(aria-hidden='true')
-        | 恢复默认
+      .layout-setting
+        .setting-heading
+          span 过滤页数
+          output {{ minPageCountLabel }}
+        .column-stepper.column-stepper--with-reset
+          button(
+            :disabled='normalizedMinPageCount <= ARTWORK_LAYOUT_LIMITS.minPageCount.min'
+            @click='changeMinPageCount(-1)'
+            aria-label='降低页数过滤门槛'
+            type='button'
+          )
+            ITablerMinus(aria-hidden='true')
+          input.stepper-input(
+            :max='ARTWORK_LAYOUT_LIMITS.minPageCount.max',
+            :min='ARTWORK_LAYOUT_LIMITS.minPageCount.min',
+            :step='ARTWORK_LAYOUT_LIMITS.minPageCount.step'
+            @blur='commitMinPageCount'
+            @change='commitMinPageCount'
+            @focus='selectStepperInput'
+            @keyup.enter='commitMinPageCount'
+            aria-label='页数过滤门槛'
+            inputmode='numeric'
+            type='number'
+            v-model='minPageCountInput'
+          )
+          button(
+            :disabled='normalizedMinPageCount >= ARTWORK_LAYOUT_LIMITS.minPageCount.max'
+            @click='changeMinPageCount(1)'
+            aria-label='提高页数过滤门槛'
+            type='button'
+          )
+            ITablerPlus(aria-hidden='true')
+          button.stepper-reset(
+            :disabled='normalizedMinPageCount === ARTWORK_LAYOUT_LIMITS.minPageCount.min'
+            @click='resetMinPageCount'
+            aria-label='重置页数过滤'
+            title='重置为 0'
+            type='button'
+          )
+            ITablerRestore(aria-hidden='true')
+        small.setting-help 只在右侧作者目录、相关作品和作者页生效，0 表示不过滤
 
   button.artwork-layout-trigger(
     :aria-expanded='open',
@@ -82,7 +120,11 @@ import {
   IconRestore as ITablerRestore,
   IconX as ITablerX,
 } from '@tabler/icons-vue'
-import { ARTWORK_LAYOUT_LIMITS } from '~/utils/artworkLayout'
+import {
+  ARTWORK_LAYOUT_DEFAULTS,
+  ARTWORK_LAYOUT_LIMITS,
+  normalizeArtworkLayoutValue,
+} from '~/utils/artworkLayout'
 import type { ArtworkCardImageQuality } from '~/utils/artworkLayout'
 
 const route = useRoute()
@@ -93,11 +135,17 @@ const {
   width,
   columns,
   imageQuality,
+  minPageCount,
   normalizedWidth,
   normalizedColumns,
   normalizedImageQuality,
-  reset,
+  normalizedMinPageCount,
 } = useArtworkLayoutSettings()
+const minPageCountLabel = computed(() =>
+  normalizedMinPageCount.value > 0
+    ? `仅 > ${normalizedMinPageCount.value} 页`
+    : '不过滤'
+)
 const qualityOptions: {
   label: string
   value: ArtworkCardImageQuality
@@ -115,6 +163,50 @@ function changeColumns(offset: number) {
       normalizedColumns.value + offset
     )
   )
+}
+
+function clampMinPageCount(value: number): number {
+  return normalizeArtworkLayoutValue(
+    value,
+    ARTWORK_LAYOUT_DEFAULTS.minPageCount,
+    ARTWORK_LAYOUT_LIMITS.minPageCount
+  )
+}
+
+function changeMinPageCount(offset: number) {
+  minPageCount.value = clampMinPageCount(normalizedMinPageCount.value + offset)
+}
+
+function resetMinPageCount() {
+  minPageCount.value = ARTWORK_LAYOUT_DEFAULTS.minPageCount
+}
+
+// v-model on a number input hands back a number, but an in-progress edit can
+// still leave a raw string (or an empty field) here.
+const minPageCountInput = ref<string | number>(normalizedMinPageCount.value)
+watch(normalizedMinPageCount, (value) => {
+  minPageCountInput.value = value
+})
+
+function selectStepperInput(event: FocusEvent) {
+  ;(event.target as HTMLInputElement | null)?.select()
+}
+
+/**
+ * Typed values are only applied once the field settles, so intermediate
+ * keystrokes ("2" on the way to "25") never re-filter the lists. Out of range
+ * or unparseable input snaps back to the clamped value.
+ */
+function commitMinPageCount() {
+  const raw = String(minPageCountInput.value ?? '').trim()
+  const parsed = Number(raw)
+  // An emptied field means "I'm still editing", not "disable the filter".
+  const next =
+    raw && Number.isFinite(parsed)
+      ? clampMinPageCount(parsed)
+      : normalizedMinPageCount.value
+  minPageCount.value = next
+  minPageCountInput.value = next
 }
 
 const available = computed(() => {
@@ -304,6 +396,66 @@ watch([available, artworkLayoutButtonVisible], ([isAvailable, isVisible]) => {
   }
 }
 
+// Same 34/64/34 rhythm as the column stepper above, plus the reset slot, so
+// the two settings line up instead of one stretching across the panel.
+.column-stepper--with-reset {
+  grid-template-columns: 34px 64px 34px 34px;
+}
+
+// Neutral next to the pink − / + pair: resetting is a different kind of action
+// and shouldn't read as another step.
+.column-stepper .stepper-reset {
+  color: var(--pf-muted);
+  background: var(--pf-bg);
+  border-color: var(--pf-line);
+
+  &:hover:not(:disabled) {
+    color: var(--pf-pink);
+    background: var(--pf-soft-pink);
+    border-color: color-mix(in srgb, var(--pf-pink) 24%, var(--pf-line));
+  }
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.stepper-input {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 6px;
+  color: var(--pf-text);
+  background: var(--pf-bg);
+  border: 1px solid var(--pf-line);
+  border-radius: 9px;
+  cursor: text;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  outline: 0;
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--pf-pink) 34%, var(--pf-line));
+  }
+
+  &:focus {
+    border-color: var(--pf-pink);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--pf-pink) 13%, transparent);
+  }
+
+  // The native spinners duplicate the − / + buttons and crowd the field.
+  appearance: textfield;
+
+  &::-webkit-outer-spin-button,
+  &::-webkit-inner-spin-button {
+    margin: 0;
+    appearance: none;
+  }
+}
+
 .quality-options {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -338,29 +490,6 @@ watch([available, artworkLayoutButtonVisible], ([isAvailable, isVisible]) => {
   color: var(--pf-muted);
   font-size: 0.66rem;
   line-height: 1.5;
-}
-
-.reset-layout {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  width: 100%;
-  min-height: 36px;
-  margin-top: 5px;
-  color: var(--pf-text);
-  background: var(--pf-bg);
-  border: 1px solid var(--pf-line);
-  border-radius: 10px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.76rem;
-  font-weight: 700;
-
-  &:hover {
-    color: var(--pf-pink);
-    background: var(--pf-soft-pink);
-  }
 }
 
 .layout-panel-enter-active,

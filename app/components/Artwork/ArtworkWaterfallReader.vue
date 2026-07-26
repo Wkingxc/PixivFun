@@ -2,6 +2,7 @@
 Teleport(to='body')
   Transition(name='reader-cover')
     section.artwork-waterfall-reader(
+      :style='readerShellStyle'
       @click='handleReaderBackgroundClick'
       @scroll.passive='scheduleCurrentPageUpdate'
       aria-label='瀑布阅读'
@@ -11,7 +12,7 @@ Teleport(to='body')
       tabindex='-1'
       v-if='active'
     )
-      header.reader-heading
+      header.reader-heading(@click='handleHeadingClick')
         .reader-heading__copy
           strong {{ title }}
           span {{ currentPageIndex + 1 }} / {{ pages.length }}
@@ -20,7 +21,7 @@ Teleport(to='body')
             :class='{ complete: loadedOriginalCount === pages.length }'
             v-if='preloadOriginals'
           ) 原图预载 {{ loadedOriginalCount }} / {{ pages.length }}
-          span.reader-heading__hint Esc 退出 · 点击左下角花朵调整
+          span.reader-heading__hint Esc 或点击顶栏空白处退出 · 点击左下角花朵调整
           .reader-heading__actions
             button.reader-heading__action(
               @click='scrollReaderToTop'
@@ -38,8 +39,7 @@ Teleport(to='body')
               type='button'
             )
               ITablerDownload(aria-hidden='true')
-              span(v-if='downloading') 下载 {{ downloadCompletedCount }}/{{ pages.length }}
-              span(v-else) 下载作品
+              span {{ downloadLabel }}
             button.reader-heading__action.reader-heading__exit(
               @click='closeReader'
               aria-label='退出阅读模式'
@@ -218,6 +218,19 @@ Teleport(to='body')
               ITablerPlus(aria-hidden='true')
 
         .reader-toolbox__group
+          span 界面宽度
+          .reader-width-control
+            input.reader-width-slider(
+              :max='READER_WIDTH_LIMITS.max',
+              :min='READER_WIDTH_LIMITS.min',
+              :step='READER_WIDTH_LIMITS.step'
+              aria-label='阅读界面宽度'
+              type='range'
+              v-model.number='readerWidth'
+            )
+            output {{ readerWidth }}
+
+        .reader-toolbox__group
           span 排版方式
           .reader-segments
             button(
@@ -252,6 +265,39 @@ Teleport(to='body')
             span {{ preloadOriginals ? '开启' : '关闭' }}
             small {{ loadedOriginalCount }}/{{ pages.length }}
 
+        .reader-toolbox__group
+          span 并发线程
+          .reader-column-control
+            button(
+              :disabled='threads <= READER_THREAD_LIMITS.min'
+              @click='adjustThreads(-1)'
+              aria-label='减少并发线程'
+              type='button'
+            )
+              ITablerMinus(aria-hidden='true')
+            input.reader-thread-input(
+              :max='READER_THREAD_LIMITS.max',
+              :min='READER_THREAD_LIMITS.min'
+              @blur='commitThreads'
+              @change='commitThreads'
+              @focus='selectThreadInput'
+              @keyup.enter='commitThreads'
+              aria-label='并发线程数'
+              inputmode='numeric'
+              step='1'
+              type='number'
+              v-model='threadsInput'
+            )
+            button(
+              :disabled='threads >= READER_THREAD_LIMITS.max'
+              @click='adjustThreads(1)'
+              aria-label='增加并发线程'
+              type='button'
+            )
+              ITablerPlus(aria-hidden='true')
+
+        p.reader-toolbox__note 预载与下载共用线程；下载会立即接管未完成的原图，不必等预载跑完。
+
     button.reader-trigger(
       :aria-expanded='active ? menuOpen : undefined',
       :aria-label='active ? "打开阅读工具" : "进入瀑布阅读"',
@@ -268,6 +314,8 @@ Teleport(to='body')
 import type { ArtworkGallery } from '~/types'
 import {
   clampReaderColumns,
+  clampReaderWidth,
+  DEFAULT_READER_WIDTH,
   getArtworkDownloadFilename,
   getArtworkPageFilename,
   getOriginalImageExtension,
@@ -275,9 +323,15 @@ import {
   getReaderImageSource,
   getViewerSpreadIndices,
   getViewerStepIndex,
+  READER_WIDTH_LIMITS,
   shouldOpenArtworkReaderFromKey,
   type ReaderImageQuality,
 } from '~/utils/artworkWaterfallReader'
+import {
+  clampReaderThreads,
+  DEFAULT_READER_THREADS,
+  READER_THREAD_LIMITS,
+} from '~/utils/readerOriginalLoader'
 import {
   IconArrowUp as ITablerArrowUp,
   IconChevronLeft as ITablerChevronLeft,
@@ -310,6 +364,9 @@ const columns = ref(3)
 const layoutColumns = ref(3)
 const imageQuality = ref<ReaderImageQuality>('small')
 const preloadOriginals = ref(true)
+const threads = ref(DEFAULT_READER_THREADS)
+const threadsInput = ref<string | number>(DEFAULT_READER_THREADS)
+const readerWidth = ref(DEFAULT_READER_WIDTH)
 const doublePageMode = ref(false)
 type ReaderLayoutMode = 'masonry' | 'aligned'
 const layoutMode = ref<ReaderLayoutMode>('masonry')
@@ -319,8 +376,14 @@ const localPersistenceStore = useLocalPersistenceStore()
 const settingsReady = ref(false)
 const downloadCompletedCount = ref(0)
 const downloadError = ref('')
-type PreloadState = 'idle' | 'loading' | 'loaded' | 'failed'
-const preloadStates = ref<PreloadState[]>([])
+const originals = useReaderOriginals({
+  pages: () => props.pages,
+  threads: () => threads.value,
+})
+// Aliased to top-level bindings: the template only auto-unwraps refs that are
+// setup bindings, not properties reached through an object.
+const preloadStates = originals.states
+const loadedOriginalCount = originals.loadedCount
 const currentPageIndex = ref(0)
 const viewerIndex = ref(0)
 const readerRef = ref<HTMLElement | null>(null)
@@ -335,12 +398,9 @@ const viewerPointer = reactive<{
 const viewerTransitioning = ref(false)
 let previousBodyOverflow = ''
 let scrollFrame = 0
-let preloadGeneration = 0
-let activePreloadImage: HTMLImageElement | null = null
-let resolveActivePreload: ((loaded: boolean) => void) | null = null
 let menuCollapseTimer = 0
 let columnLayoutTimer = 0
-let downloadController: AbortController | null = null
+let downloadRun = 0
 let viewerStepGeneration = 0
 
 const qualityOptions: { label: string; value: ReaderImageQuality }[] = [
@@ -417,9 +477,16 @@ const viewerCanGoPrevious = computed(
 const viewerCanGoNext = computed(
   () => nextViewerIndex.value !== viewerIndex.value
 )
-const loadedOriginalCount = computed(
-  () => preloadStates.value.filter((state) => state === 'loaded').length
-)
+const readerShellStyle = computed(() => ({
+  '--reader-width': `${readerWidth.value}px`,
+}))
+const downloadLabel = computed(() => {
+  if (!downloading.value) return '下载作品'
+  if (downloadCompletedCount.value < props.pages.length) {
+    return `下载 ${downloadCompletedCount.value}/${props.pages.length}`
+  }
+  return props.pages.length > 1 ? '打包中…' : '保存中…'
+})
 const readerBreakpoints = computed(() => ({
   9999: { rowPerView: layoutColumns.value },
   760: { rowPerView: 1 },
@@ -449,13 +516,13 @@ async function openReader() {
   await nextTick()
   readerRef.value?.focus({ preventScroll: true })
   waterfallRef.value?.renderer?.()
-  if (preloadOriginals.value) void startOriginalPreload(0)
+  if (preloadOriginals.value) originals.preload(0)
 }
 
 function closeReader() {
-  stopOriginalPreload()
+  originals.stop()
   cancelMenuCollapse()
-  downloadController?.abort()
+  cancelDownload()
   viewerStepGeneration++
   viewerTransitioning.value = false
   clearViewerPointer()
@@ -471,7 +538,7 @@ async function openViewer(index: number) {
   menuOpen.value = false
   await nextTick()
   updateViewerNavBounds()
-  if (preloadOriginals.value) void startOriginalPreload(index)
+  if (preloadOriginals.value) originals.preload(index)
 }
 
 function closeViewer() {
@@ -510,12 +577,17 @@ async function stepViewer(step: number) {
   updateViewerNavBounds()
   updateViewerPointerDirection()
   viewerTransitioning.value = false
-  if (preloadOriginals.value) void startOriginalPreload(viewerIndex.value)
+  if (preloadOriginals.value) originals.preload(viewerIndex.value)
 }
 
-function prepareViewerImage(index: number): Promise<void> {
+async function prepareViewerImage(index: number): Promise<void> {
   const page = props.pages[index]
-  if (!page) return Promise.resolve()
+  if (!page) return
+
+  // Pull the bytes through the shared loader first — with priority, so the page
+  // being flipped to jumps ahead of the background sweep — then let the browser
+  // decode them straight out of its cache.
+  await originals.ensure(index, true).catch(() => {})
 
   return new Promise((resolve) => {
     const image = new Image()
@@ -540,112 +612,32 @@ function getGridFallback(page: ArtworkGallery): string {
   return page.urls.thumb_mini
 }
 
-function ensurePreloadStates() {
-  if (preloadStates.value.length === props.pages.length) return
-  preloadStates.value = props.pages.map(
-    (_, index) => preloadStates.value[index] || 'idle'
-  )
-}
-
-function markOriginalLoaded(index: number) {
-  ensurePreloadStates()
-  preloadStates.value[index] = 'loaded'
-}
-
 async function handleViewerImageLoad(index: number) {
-  markOriginalLoaded(index)
+  originals.markLoaded(index)
   await nextTick()
   updateViewerNavBounds()
 }
 
 function handleGridImageLoad(index: number) {
-  if (imageQuality.value === 'original') markOriginalLoaded(index)
+  if (imageQuality.value === 'original') originals.markLoaded(index)
 }
 
-function waitForPreloadTurn(generation: number, delay = 320): Promise<boolean> {
-  return new Promise((resolve) => {
-    const check = () => {
-      if (
-        generation !== preloadGeneration ||
-        !active.value ||
-        !preloadOriginals.value
-      ) {
-        resolve(false)
-        return
-      }
-      if (document.hidden) {
-        window.setTimeout(check, 500)
-        return
-      }
-      window.setTimeout(() => resolve(generation === preloadGeneration), delay)
-    }
-    check()
-  })
+function adjustThreads(step: number) {
+  threads.value = clampReaderThreads(threads.value + step)
 }
 
-function preloadOriginal(index: number, generation: number): Promise<boolean> {
-  const page = props.pages[index]
-  if (!page) return Promise.resolve(false)
-
-  ensurePreloadStates()
-  preloadStates.value[index] = 'loading'
-
-  return new Promise((resolve) => {
-    const image = new Image()
-    activePreloadImage = image
-    resolveActivePreload = resolve
-    image.decoding = 'async'
-    image.onload = () => {
-      if (generation === preloadGeneration) markOriginalLoaded(index)
-      if (activePreloadImage === image) activePreloadImage = null
-      if (resolveActivePreload === resolve) resolveActivePreload = null
-      resolve(true)
-    }
-    image.onerror = () => {
-      if (generation === preloadGeneration) {
-        preloadStates.value[index] = 'failed'
-      }
-      if (activePreloadImage === image) activePreloadImage = null
-      if (resolveActivePreload === resolve) resolveActivePreload = null
-      resolve(false)
-    }
-    image.src = page.urls.original
-  })
+function commitThreads() {
+  // `type="number"` makes v-model hand back a number, so normalise before trim.
+  const raw = String(threadsInput.value ?? '').trim()
+  const parsed = Number(raw)
+  const next =
+    raw && Number.isFinite(parsed) ? clampReaderThreads(parsed) : threads.value
+  threads.value = next
+  threadsInput.value = next
 }
 
-async function startOriginalPreload(startIndex: number) {
-  if (!active.value || !preloadOriginals.value || !props.pages.length) return
-  stopOriginalPreload()
-  ensurePreloadStates()
-  const generation = ++preloadGeneration
-  const fixedStart = Math.min(props.pages.length - 1, Math.max(0, startIndex))
-  const order = [
-    ...props.pages.slice(fixedStart).map((_, index) => fixedStart + index),
-    ...props.pages.slice(0, fixedStart).map((_, index) => index),
-  ]
-
-  for (const index of order) {
-    if (generation !== preloadGeneration) return
-    if (preloadStates.value[index] === 'loaded') continue
-    const canContinue = await waitForPreloadTurn(generation)
-    if (!canContinue) return
-    await preloadOriginal(index, generation)
-  }
-}
-
-function stopOriginalPreload() {
-  preloadGeneration++
-  if (activePreloadImage) {
-    activePreloadImage.onload = null
-    activePreloadImage.onerror = null
-    activePreloadImage.src = ''
-    activePreloadImage = null
-  }
-  resolveActivePreload?.(false)
-  resolveActivePreload = null
-  preloadStates.value = preloadStates.value.map((state) =>
-    state === 'loading' ? 'idle' : state
-  )
+function selectThreadInput(event: FocusEvent) {
+  ;(event.target as HTMLInputElement).select()
 }
 
 function scrollReaderToTop() {
@@ -737,6 +729,10 @@ function handleViewerClick(event: MouseEvent) {
 
 function handleReaderBackgroundClick(event: MouseEvent) {
   const target = event.target as HTMLElement
+  // A handler that runs earlier in the same click can re-render and detach the
+  // node that was clicked, and closest() on a detached node matches nothing.
+  // Without this the download button used to close the reader on its own click.
+  if (!target.isConnected) return
   if (
     target.closest(
       '.reader-heading, .reader-page, .reader-lightbox, .reader-toolbox, .reader-trigger'
@@ -744,6 +740,14 @@ function handleReaderBackgroundClick(event: MouseEvent) {
   ) {
     return
   }
+  closeReader()
+}
+
+function handleHeadingClick(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (!target.isConnected) return
+  // The title stays clickable-through so it can still be selected and copied.
+  if (target.closest('button, input, a, .reader-heading__copy strong')) return
   closeReader()
 }
 
@@ -822,45 +826,40 @@ function saveDownload(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-async function fetchOriginalForDownload(
-  index: number,
-  signal: AbortSignal
-): Promise<Blob> {
-  const page = props.pages[index]
-  if (!page) throw new Error('作品图片不存在')
-  ensurePreloadStates()
-  preloadStates.value[index] = 'loading'
-  try {
-    const response = await fetch(page.urls.original, {
-      cache: 'force-cache',
-      signal,
-    })
-    if (!response.ok) throw new Error(`第 ${index + 1} 页请求失败`)
-    const blob = await response.blob()
-    markOriginalLoaded(index)
-    return blob
-  } catch (error) {
-    if (!signal.aborted) preloadStates.value[index] = 'failed'
-    throw error
-  }
+function cancelDownload() {
+  downloadRun++
+  downloading.value = false
+  downloadCompletedCount.value = 0
 }
 
 async function downloadArtwork() {
   if (downloading.value || !props.pages.length) return
   cancelMenuCollapse()
   menuOpen.value = false
-  stopOriginalPreload()
   downloading.value = true
   downloadCompletedCount.value = 0
   downloadError.value = ''
-  const controller = new AbortController()
-  downloadController = controller
+  const run = ++downloadRun
 
   try {
+    // Queue every page at once and let the shared gate decide how many run in
+    // parallel. Pages the preloader already cached resolve without a request,
+    // which is why downloading no longer has to wait for the sweep to finish.
+    let fetched = 0
+    const requests = props.pages.map((_, index) =>
+      originals.ensure(index).then((blob) => {
+        if (run === downloadRun) downloadCompletedCount.value = ++fetched
+        return blob
+      })
+    )
+    // Each request is awaited below; this only stops the siblings from being
+    // reported as unhandled rejections while they wait their turn.
+    for (const request of requests) request.catch(() => {})
+
     if (props.pages.length === 1) {
       const page = props.pages[0]!
-      const blob = await fetchOriginalForDownload(0, controller.signal)
-      downloadCompletedCount.value = 1
+      const blob = await requests[0]!
+      if (!blob || run !== downloadRun) return
       saveDownload(
         blob,
         getArtworkDownloadFilename(
@@ -876,25 +875,26 @@ async function downloadArtwork() {
     const { BlobReader, BlobWriter, ZipWriter } = await import('@zip.js/zip.js')
     const zipWriter = new ZipWriter(new BlobWriter('application/zip'))
     for (const [index, page] of props.pages.entries()) {
-      const blob = await fetchOriginalForDownload(index, controller.signal)
+      const blob = await requests[index]!
+      if (!blob || run !== downloadRun) return
       await zipWriter.add(
         getArtworkPageFilename(props.illustId, index, page.urls.original),
         new BlobReader(blob)
       )
-      downloadCompletedCount.value = index + 1
     }
     const archive = await zipWriter.close()
+    if (run !== downloadRun) return
     saveDownload(
       archive,
       getArtworkDownloadFilename(props.title, props.illustId, true)
     )
   } catch (error) {
+    if (run !== downloadRun) return
     if (error instanceof DOMException && error.name === 'AbortError') return
     downloadError.value =
       error instanceof Error ? error.message : '作品下载失败，请稍后重试'
   } finally {
-    if (downloadController === controller) downloadController = null
-    downloading.value = false
+    if (run === downloadRun) downloading.value = false
   }
 }
 
@@ -959,7 +959,6 @@ onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   window.addEventListener('resize', syncReaderViewport)
   syncReaderViewport()
-  ensurePreloadStates()
   await localPersistenceStore.init().catch(() => {})
   const saved = localPersistenceStore.preferences.artworkReader
   columns.value = clampReaderColumns(saved.columns)
@@ -968,14 +967,37 @@ onMounted(async () => {
   preloadOriginals.value = saved.preloadOriginals
   doublePageMode.value = saved.doublePageMode
   layoutMode.value = saved.layoutMode
+  threads.value = clampReaderThreads(saved.threads)
+  threadsInput.value = threads.value
+  readerWidth.value = clampReaderWidth(saved.width)
   await nextTick()
   settingsReady.value = true
 })
 
+watch(threads, (value) => {
+  threadsInput.value = value
+})
+
 watch(
-  [columns, imageQuality, preloadOriginals, doublePageMode, layoutMode],
+  [
+    columns,
+    imageQuality,
+    preloadOriginals,
+    doublePageMode,
+    layoutMode,
+    threads,
+    readerWidth,
+  ],
   (
-    [nextColumns, nextQuality, nextPreload, nextDoublePage, nextLayoutMode],
+    [
+      nextColumns,
+      nextQuality,
+      nextPreload,
+      nextDoublePage,
+      nextLayoutMode,
+      nextThreads,
+      nextWidth,
+    ],
     previous
   ) => {
     if (!settingsReady.value) return
@@ -987,14 +1009,17 @@ watch(
           preloadOriginals: nextPreload,
           doublePageMode: nextDoublePage,
           layoutMode: nextLayoutMode,
+          threads: nextThreads,
+          width: nextWidth,
         },
       })
       .catch(() => {})
     if (!previous || nextPreload === previous[2] || !active.value) return
     if (nextPreload) {
-      void startOriginalPreload(currentPageIndex.value)
-    } else {
-      stopOriginalPreload()
+      originals.preload(currentPageIndex.value)
+    } else if (!downloading.value) {
+      // Stopping the sweep would also drop the queued download requests.
+      originals.stop()
     }
   }
 )
@@ -1015,15 +1040,15 @@ watch(
   () => props.illustId,
   () => {
     if (active.value) closeReader()
-    preloadStates.value = props.pages.map(() => 'idle')
+    originals.reset()
   }
 )
 
 onBeforeUnmount(() => {
-  stopOriginalPreload()
   cancelMenuCollapse()
   if (columnLayoutTimer) window.clearTimeout(columnLayoutTimer)
-  downloadController?.abort()
+  cancelDownload()
+  originals.reset()
   window.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('resize', syncReaderViewport)
   if (scrollFrame) cancelAnimationFrame(scrollFrame)
@@ -1047,6 +1072,10 @@ onBeforeUnmount(() => {
     ),
     var(--pf-bg);
   overscroll-behavior: contain;
+  // Reading is click-heavy (page flips, opening the viewer). Without this a
+  // fast double click lands on a label like "双页" or a page number and leaves
+  // a text selection behind, which browsers and extensions then act on.
+  user-select: none;
 }
 
 .reader-heading {
@@ -1058,7 +1087,8 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 20px;
   min-height: 64px;
-  padding: 12px max(24px, calc((100vw - 1500px) / 2));
+  // Keeps the header lined up with the content column below.
+  padding: 12px max(12px, calc((100vw - var(--reader-width, 2200px)) / 2));
   background: color-mix(in srgb, var(--pf-surface) 88%, transparent);
   border-bottom: 1px solid var(--pf-line);
   backdrop-filter: blur(14px);
@@ -1074,6 +1104,9 @@ onBeforeUnmount(() => {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    // The one string worth copying out of the reader; it sits in the header,
+    // away from the click targets.
+    user-select: text;
   }
 
   span {
@@ -1151,7 +1184,7 @@ onBeforeUnmount(() => {
 .reader-heading__download-error {
   position: absolute;
   top: calc(100% + 8px);
-  right: max(16px, calc((100vw - 1500px) / 2));
+  right: max(16px, calc((100vw - var(--reader-width, 2200px)) / 2));
   max-width: min(420px, calc(100vw - 32px));
   padding: 8px 10px;
   color: #e85c6b;
@@ -1165,7 +1198,10 @@ onBeforeUnmount(() => {
 
 .reader-waterfall,
 .reader-aligned {
-  width: min(1500px, calc(100% - 48px));
+  // The reader is a full-screen modal with nothing beside it, so it gets a far
+  // wider ceiling than the browsing grids and only a slim gutter. The ceiling
+  // itself is the 界面宽度 slider in the reading tools.
+  width: min(var(--reader-width, 2200px), calc(100% - 24px));
   margin: 28px auto 0;
   padding: 0 0 120px;
 }
@@ -1287,6 +1323,9 @@ onBeforeUnmount(() => {
   background: rgb(8 9 13 / 94%);
   place-items: center;
   backdrop-filter: blur(14px);
+  // Same reason as the reader shell: the whole surface is a click target for
+  // flipping pages, so nothing here should be selectable.
+  user-select: none;
 }
 
 .reader-lightbox__stage {
@@ -1634,6 +1673,91 @@ onBeforeUnmount(() => {
     font-size: 0.76rem;
     font-weight: 800;
   }
+
+  input {
+    min-width: 0;
+    padding: 0 4px;
+    color: var(--pf-text);
+    background: transparent;
+    border: 0;
+    border-radius: 7px;
+    text-align: center;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    appearance: textfield;
+
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+      margin: 0;
+      appearance: none;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--pf-pink);
+      outline-offset: -2px;
+    }
+  }
+}
+
+.reader-width-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px;
+  min-height: 39px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: var(--pf-bg);
+  border-radius: 10px;
+
+  output {
+    color: var(--pf-text);
+    text-align: right;
+    font-size: 0.72rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.reader-width-slider {
+  width: 100%;
+  height: 4px;
+  background: var(--pf-line);
+  border-radius: 999px;
+  cursor: pointer;
+  appearance: none;
+
+  &::-webkit-slider-thumb {
+    width: 15px;
+    height: 15px;
+    background: var(--pf-pink);
+    border: 0;
+    border-radius: 999px;
+    cursor: grab;
+    appearance: none;
+  }
+
+  &::-moz-range-thumb {
+    width: 15px;
+    height: 15px;
+    background: var(--pf-pink);
+    border: 0;
+    border-radius: 999px;
+    cursor: grab;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pf-pink);
+    outline-offset: 4px;
+  }
+}
+
+.reader-toolbox__note {
+  margin: 10px 0 0;
+  color: var(--pf-muted);
+  font-size: 0.66rem;
+  line-height: 1.55;
 }
 
 .reader-preload-toggle {
@@ -1704,7 +1828,7 @@ onBeforeUnmount(() => {
 
   .reader-waterfall,
   .reader-aligned {
-    width: calc(100% - 24px);
+    width: calc(100% - 16px);
     margin-top: 16px;
   }
 

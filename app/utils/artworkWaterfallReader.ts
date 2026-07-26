@@ -61,6 +61,25 @@ export function clampReaderColumns(columns: number): number {
   return Math.min(12, Math.max(1, Math.round(columns)))
 }
 
+/** Content-column width of the reader, in CSS pixels. */
+export const READER_WIDTH_LIMITS = { min: 900, max: 3200, step: 20 } as const
+export const DEFAULT_READER_WIDTH = 2200
+
+export function clampReaderWidth(value: unknown): number {
+  // Blank input means "unset", not zero, so it falls back instead of clamping.
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : Number(String(value ?? '').trim() || NaN)
+  if (!Number.isFinite(parsed)) return DEFAULT_READER_WIDTH
+  const stepped =
+    Math.round(parsed / READER_WIDTH_LIMITS.step) * READER_WIDTH_LIMITS.step
+  return Math.min(
+    READER_WIDTH_LIMITS.max,
+    Math.max(READER_WIDTH_LIMITS.min, stepped)
+  )
+}
+
 interface ReaderSizedPage {
   width: number
   height: number

@@ -234,6 +234,8 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 12px;
   width: min(100%, 1040px);
+  min-width: 0;
+  max-width: 100%;
   line-height: 1.4;
 }
 
@@ -241,6 +243,8 @@ onBeforeUnmount(() => {
   position: relative;
   display: grid;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: min(62vh, 520px);
   overflow: hidden;
   background:

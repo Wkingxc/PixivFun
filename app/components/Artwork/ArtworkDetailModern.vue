@@ -142,6 +142,7 @@ section.artwork-modern(
       :list='recommendations',
       :loading='recommendLoading && !recommendations.length'
       controlled
+      page-count-filtered
     )
     .recommend-more(v-if='recommendations.length && hasMoreRecommendations')
       FnbButton(
@@ -368,6 +369,8 @@ async function shareArtwork() {
 .info-panel,
 .comments-panel,
 .sidebar-card {
+  min-width: 0;
+  max-width: 100%;
   background: var(--pf-surface);
   border: 1px solid var(--pf-line);
   border-radius: 18px;
@@ -395,6 +398,8 @@ async function shareArtwork() {
 .ugoira-stage {
   display: grid;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   place-items: center;
 }
 
@@ -412,12 +417,13 @@ async function shareArtwork() {
   position: absolute;
   top: 28px;
   right: 28px;
-  padding: 6px 10px;
+  padding: 7px 13px;
   color: #fff;
   background: rgb(30 25 32 / 72%);
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.84rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .read-more {
@@ -521,7 +527,11 @@ async function shareArtwork() {
 }
 
 .description {
+  min-width: 0;
+  max-width: 100%;
   margin: 18px 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   line-height: 1.7;
 }
 

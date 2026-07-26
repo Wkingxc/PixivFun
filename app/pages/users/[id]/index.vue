@@ -150,19 +150,26 @@
               v-if='isSelfUserPage'
               v-model='selectedPublicBookmarkTag'
             )
+            BookmarkArtworkTagPanel(
+              @expand='publicArtworkTags.scan()'
+              @refresh='publicArtworkTags.scan(true)'
+              @update:selected-tags='publicArtworkTags.setSelectedTags($event)'
+              v-bind='publicArtworkTagProps'
+              v-if='publicBookmarks.length || publicArtworkTags.scanned.value'
+            )
             BookmarkBatchToolbar(
               :active='bookmarkBatchMode',
               :all-selected='allPageBookmarksSelected',
               :available-tags='batchAvailableBookmarkTags',
               :loading='bookmarkBatchLoading',
               :selected-count='selectedBookmarks.length',
-              :total-count='publicBookmarks.length'
+              :total-count='displayPublicBookmarks.length'
               @add-tags='handleBatchAddTags'
               @cancel='cancelBookmarkBatch'
               @set-visibility='handleBatchVisibility'
               @start='startBookmarkBatch'
               @toggle-all='toggleAllPageBookmarks'
-              v-if='isSelfUserPage && publicBookmarks.length'
+              v-if='isSelfUserPage && displayPublicBookmarks.length'
             )
             ArtworkList(
               :list='[]',
@@ -171,10 +178,10 @@
               controlled
               v-if='!publicBookmarks?.length && loadingPublicBookmarks'
             )
-            .fnb-empty(v-else-if='!publicBookmarks?.length') {{ emptyPublicBookmarksText }}
+            .fnb-empty(v-else-if='!displayPublicBookmarks.length') {{ emptyPublicBookmarksText }}
             .user-bookmarks.bookmark-grid(ref='publicBookmarkGridRef' v-else)
               ArtworkList(
-                :list='publicBookmarks',
+                :list='displayPublicBookmarks',
                 :marker-disabled='isSelfUserPage',
                 :selectable='bookmarkBatchMode',
                 :selected-ids='selectedBookmarkIds'
@@ -183,8 +190,8 @@
                 filter-disabled
               )
               FnbPagination.bookmark-pagination(
-                :item-count='totalPublicBookmarks',
-                :page='publicBookmarkPage',
+                :item-count='displayPublicBookmarkTotal',
+                :page='displayPublicBookmarkPage',
                 :page-size='BOOKMARK_PAGE_SIZE'
                 @update:page='changePublicBookmarkPage'
               )
@@ -194,19 +201,26 @@
               :loading='loadingBookmarkTags'
               v-model='selectedHiddenBookmarkTag'
             )
+            BookmarkArtworkTagPanel(
+              @expand='hiddenArtworkTags.scan()'
+              @refresh='hiddenArtworkTags.scan(true)'
+              @update:selected-tags='hiddenArtworkTags.setSelectedTags($event)'
+              v-bind='hiddenArtworkTagProps'
+              v-if='hiddenBookmarks.length || hiddenArtworkTags.scanned.value'
+            )
             BookmarkBatchToolbar(
               :active='bookmarkBatchMode',
               :all-selected='allPageBookmarksSelected',
               :available-tags='batchAvailableBookmarkTags',
               :loading='bookmarkBatchLoading',
               :selected-count='selectedBookmarks.length',
-              :total-count='hiddenBookmarks.length'
+              :total-count='displayHiddenBookmarks.length'
               @add-tags='handleBatchAddTags'
               @cancel='cancelBookmarkBatch'
               @set-visibility='handleBatchVisibility'
               @start='startBookmarkBatch'
               @toggle-all='toggleAllPageBookmarks'
-              v-if='hiddenBookmarks.length'
+              v-if='displayHiddenBookmarks.length'
             )
             ArtworkList(
               :list='[]',
@@ -215,10 +229,10 @@
               marker-disabled
               v-if='!hiddenBookmarks?.length && loadingHiddenBookmarks'
             )
-            .fnb-empty(v-else-if='!hiddenBookmarks?.length') {{ emptyHiddenBookmarksText }}
+            .fnb-empty(v-else-if='!displayHiddenBookmarks.length') {{ emptyHiddenBookmarksText }}
             .user-bookmarks.bookmark-grid(ref='hiddenBookmarkGridRef' v-else)
               ArtworkList(
-                :list='hiddenBookmarks',
+                :list='displayHiddenBookmarks',
                 :selectable='bookmarkBatchMode',
                 :selected-ids='selectedBookmarkIds'
                 @toggle-selection='toggleBookmarkSelection'
@@ -227,8 +241,8 @@
                 marker-disabled
               )
               FnbPagination.bookmark-pagination(
-                :item-count='totalHiddenBookmarks',
-                :page='hiddenBookmarkPage',
+                :item-count='displayHiddenBookmarkTotal',
+                :page='displayHiddenBookmarkPage',
                 :page-size='BOOKMARK_PAGE_SIZE'
                 @update:page='changeHiddenBookmarkPage'
               )
@@ -298,6 +312,7 @@ import ArtworkList from '~/components/Artwork/ArtworkList.vue'
 import ArtworkListByUser from '~/components/Artwork/ArtworkListByUser.vue'
 import ArtworkListByUserTag from '~/components/Artwork/ArtworkListByUserTag.vue'
 import ArtworkMarkerControl from '~/components/Artwork/ArtworkMarkerControl.vue'
+import BookmarkArtworkTagPanel from '~/components/Bookmark/BookmarkArtworkTagPanel.vue'
 import BookmarkBatchToolbar from '~/components/Bookmark/BookmarkBatchToolbar.vue'
 import BookmarkTagFilter from '~/components/Bookmark/BookmarkTagFilter.vue'
 import ErrorPage from '~/components/ErrorPage.vue'
@@ -328,6 +343,8 @@ import {
   prioritizeBookmarkTags,
   type BookmarkTagGroups,
 } from '~/utils/bookmarkTags'
+import { paginateWorks } from '~/utils/bookmarkArtworkTags'
+import type { BookmarkArtworkTagIndex } from '~/composables/useBookmarkArtworkTags'
 import { effect } from 'vue'
 
 const loadingUser = ref(true)
@@ -415,6 +432,83 @@ let hiddenBookmarkRequestId = 0
 const publicBookmarkGridRef = ref<HTMLElement | null>(null)
 const hiddenBookmarkGridRef = ref<HTMLElement | null>(null)
 
+// Artwork-tag statistics: built from the bookmark pages themselves, scoped to
+// the currently selected bookmark tag, and paged locally once a filter is on.
+function fetchBookmarkPageForScan(hidden: boolean, offset: number) {
+  const curUser = user.value
+  if (!curUser) return Promise.resolve({ works: [], total: 0 })
+  return userProfileStore.fetchBookmarks(curUser.userId, {
+    offset,
+    hidden,
+    tag: hidden
+      ? selectedHiddenBookmarkTag.value
+      : selectedPublicBookmarkTag.value,
+  })
+}
+
+const publicArtworkTags = useBookmarkArtworkTags((offset) =>
+  fetchBookmarkPageForScan(false, offset)
+)
+const hiddenArtworkTags = useBookmarkArtworkTags((offset) =>
+  fetchBookmarkPageForScan(true, offset)
+)
+const publicArtworkTagPage = ref(1)
+const hiddenArtworkTagPage = ref(1)
+
+function artworkTagPanelProps(index: BookmarkArtworkTagIndex) {
+  return computed(() => ({
+    stats: index.stats.value,
+    selectedTags: index.selectedTags.value,
+    matchedCount: index.filteredWorks.value.length,
+    scannedCount: index.works.value.length,
+    totalCount: index.total.value,
+    scanning: index.scanning.value,
+    scanned: index.scanned.value,
+    truncated: index.truncated.value,
+    error: index.error.value,
+  }))
+}
+
+const publicArtworkTagProps = artworkTagPanelProps(publicArtworkTags)
+const hiddenArtworkTagProps = artworkTagPanelProps(hiddenArtworkTags)
+
+const displayPublicBookmarks = computed(() =>
+  publicArtworkTags.active.value
+    ? paginateWorks(
+        publicArtworkTags.filteredWorks.value,
+        publicArtworkTagPage.value
+      )
+    : publicBookmarks.value
+)
+const displayPublicBookmarkTotal = computed(() =>
+  publicArtworkTags.active.value
+    ? publicArtworkTags.filteredWorks.value.length
+    : totalPublicBookmarks.value
+)
+const displayPublicBookmarkPage = computed(() =>
+  publicArtworkTags.active.value
+    ? publicArtworkTagPage.value
+    : publicBookmarkPage.value
+)
+const displayHiddenBookmarks = computed(() =>
+  hiddenArtworkTags.active.value
+    ? paginateWorks(
+        hiddenArtworkTags.filteredWorks.value,
+        hiddenArtworkTagPage.value
+      )
+    : hiddenBookmarks.value
+)
+const displayHiddenBookmarkTotal = computed(() =>
+  hiddenArtworkTags.active.value
+    ? hiddenArtworkTags.filteredWorks.value.length
+    : totalHiddenBookmarks.value
+)
+const displayHiddenBookmarkPage = computed(() =>
+  hiddenArtworkTags.active.value
+    ? hiddenArtworkTagPage.value
+    : hiddenBookmarkPage.value
+)
+
 enum UserTabs {
   illusts = 'illusts',
   mangas = 'mangas',
@@ -446,21 +540,25 @@ const isAuthorWorksTab = computed(
 )
 
 const emptyPublicBookmarksText = computed(() =>
-  selectedPublicBookmarkTag.value
-    ? '这个标签下还没有公开收藏'
-    : isSelfUserPage.value
-      ? '收藏夹是空的 Σ(⊙▽⊙"a'
-      : user.value?.name + '没有公开的收藏 (❁´◡`❁)'
+  publicArtworkTags.active.value
+    ? '没有同时包含所选作品标签的公开收藏'
+    : selectedPublicBookmarkTag.value
+      ? '这个标签下还没有公开收藏'
+      : isSelfUserPage.value
+        ? '收藏夹是空的 Σ(⊙▽⊙"a'
+        : user.value?.name + '没有公开的收藏 (❁´◡`❁)'
 )
 const emptyHiddenBookmarksText = computed(() =>
-  selectedHiddenBookmarkTag.value
-    ? '这个标签下还没有私密收藏'
-    : '没有隐藏的小秘密 இ௰இ'
+  hiddenArtworkTags.active.value
+    ? '没有同时包含所选作品标签的私密收藏'
+    : selectedHiddenBookmarkTag.value
+      ? '这个标签下还没有私密收藏'
+      : '没有隐藏的小秘密 இ௰இ'
 )
 const activeBookmarkList = computed(() =>
   tab.value === UserTabs.hidden_bookmarks
-    ? hiddenBookmarks.value
-    : publicBookmarks.value
+    ? displayHiddenBookmarks.value
+    : displayPublicBookmarks.value
 )
 const selectedBookmarks = computed(() => {
   const selected = new Set(selectedBookmarkIds.value)
@@ -546,6 +644,10 @@ async function init(id: string | number, initTab?: UserTabs): Promise<void> {
   bookmarkBatchLoading.value = false
   selectedBookmarkIds.value = []
   bookmarkTags.value = { public: [], private: [] }
+  publicArtworkTags.reset()
+  hiddenArtworkTags.reset()
+  publicArtworkTagPage.value = 1
+  hiddenArtworkTagPage.value = 1
   publicBookmarkRequestId += 1
   hiddenBookmarkRequestId += 1
   userArtworkTags.value = []
@@ -677,7 +779,13 @@ async function getBookmarks(hidden = false, page = 1): Promise<void> {
 
 async function changePublicBookmarkPage(page: number): Promise<void> {
   selectedBookmarkIds.value = []
-  await getBookmarks(false, page)
+  // With an artwork-tag filter on, the list is already in memory: page locally
+  // instead of asking Pixiv for an offset that no longer matches the filter.
+  if (publicArtworkTags.active.value) {
+    publicArtworkTagPage.value = Math.max(1, page)
+  } else {
+    await getBookmarks(false, page)
+  }
   publicBookmarkGridRef.value?.scrollIntoView({
     behavior: 'smooth',
     block: 'start',
@@ -686,7 +794,11 @@ async function changePublicBookmarkPage(page: number): Promise<void> {
 
 async function changeHiddenBookmarkPage(page: number): Promise<void> {
   selectedBookmarkIds.value = []
-  await getBookmarks(true, page)
+  if (hiddenArtworkTags.active.value) {
+    hiddenArtworkTagPage.value = Math.max(1, page)
+  } else {
+    await getBookmarks(true, page)
+  }
   hiddenBookmarkGridRef.value?.scrollIntoView({
     behavior: 'smooth',
     block: 'start',
@@ -718,13 +830,26 @@ watch(tab, (newTab, oldTab) => {
 watch(selectedPublicBookmarkTag, () => {
   selectedBookmarkIds.value = []
   publicBookmarkPage.value = 1
+  // The index only covers one bookmark tag at a time.
+  publicArtworkTags.reset()
   if (tab.value === UserTabs.public_bookmarks) void getBookmarks(false, 1)
 })
 
 watch(selectedHiddenBookmarkTag, () => {
   selectedBookmarkIds.value = []
   hiddenBookmarkPage.value = 1
+  hiddenArtworkTags.reset()
   if (tab.value === UserTabs.hidden_bookmarks) void getBookmarks(true, 1)
+})
+
+watch(publicArtworkTags.selectedTags, () => {
+  selectedBookmarkIds.value = []
+  publicArtworkTagPage.value = 1
+})
+
+watch(hiddenArtworkTags.selectedTags, () => {
+  selectedBookmarkIds.value = []
+  hiddenArtworkTagPage.value = 1
 })
 
 function startBookmarkBatch() {
@@ -758,6 +883,17 @@ async function refreshActiveBookmarkPage() {
   await Promise.all([loadBookmarkTags(), getBookmarks(hidden, page)])
   const list = hidden ? hiddenBookmarks.value : publicBookmarks.value
   if (!list.length && page > 1) await getBookmarks(hidden, page - 1)
+  refreshArtworkTagIndexes()
+}
+
+/**
+ * Batch edits can move works between the public and private lists, so any index
+ * already built has to be rebuilt — but only if the user actually opened it.
+ */
+function refreshArtworkTagIndexes(): void {
+  for (const index of [publicArtworkTags, hiddenArtworkTags]) {
+    if (index.scanned.value) void index.scan(true)
+  }
 }
 
 async function handleBatchAddTags(tags: string[]) {
@@ -817,6 +953,7 @@ watch(bookmarkRevision, () => {
   publicBookmarkCache.clear()
   hiddenBookmarkCache.clear()
   void loadBookmarkTags()
+  refreshArtworkTagIndexes()
   if (tab.value === UserTabs.public_bookmarks) void getBookmarks(false, 1)
   if (tab.value === UserTabs.hidden_bookmarks) void getBookmarks(true, 1)
 })
@@ -1166,6 +1303,9 @@ onMounted(async () => {
     background: color-mix(in srgb, var(--pf-bg) 92%, transparent);
     border: 0;
     border-bottom: 1px solid var(--pf-line);
+    // The layout is pulled up over the cover banner, so the top edge shows:
+    // round it to match the cards below instead of cutting a hard rectangle.
+    border-radius: 18px 18px 0 0;
     backdrop-filter: blur(14px);
   }
 

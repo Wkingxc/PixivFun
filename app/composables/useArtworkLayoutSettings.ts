@@ -22,6 +22,10 @@ const useGlobalArtworkLayoutSettings = createGlobalState(() => {
     'pixivfun:artwork-layout-image-quality',
     ARTWORK_LAYOUT_DEFAULTS.imageQuality
   )
+  const minPageCount = useLocalStorage(
+    'pixivfun:artwork-layout-min-page-count',
+    ARTWORK_LAYOUT_DEFAULTS.minPageCount as number
+  )
 
   const isCompact = useMediaQuery('(max-width: 560px)')
   const isTablet = useMediaQuery('(max-width: 820px)')
@@ -43,6 +47,13 @@ const useGlobalArtworkLayoutSettings = createGlobalState(() => {
   )
   const normalizedImageQuality = computed(() =>
     resolveArtworkCardImageQuality(imageQuality.value)
+  )
+  const normalizedMinPageCount = computed(() =>
+    normalizeArtworkLayoutValue(
+      minPageCount.value,
+      ARTWORK_LAYOUT_DEFAULTS.minPageCount,
+      ARTWORK_LAYOUT_LIMITS.minPageCount
+    )
   )
 
   const effectiveColumns = computed(() => {
@@ -73,23 +84,18 @@ const useGlobalArtworkLayoutSettings = createGlobalState(() => {
     }
   })
 
-  function reset() {
-    width.value = ARTWORK_LAYOUT_DEFAULTS.width
-    columns.value = ARTWORK_LAYOUT_DEFAULTS.columns
-    imageQuality.value = ARTWORK_LAYOUT_DEFAULTS.imageQuality
-  }
-
   return {
     width,
     columns,
     imageQuality,
+    minPageCount,
     normalizedWidth,
     normalizedColumns,
     normalizedImageQuality,
+    normalizedMinPageCount,
     effectiveColumns,
     containerStyle,
     gridStyle,
-    reset,
   }
 })
 

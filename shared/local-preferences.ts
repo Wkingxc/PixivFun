@@ -25,6 +25,10 @@ export interface LocalPreferences {
     preloadOriginals: boolean
     doublePageMode: boolean
     layoutMode: 'masonry' | 'aligned'
+    /** Parallel original-image requests shared by preloading and downloading. */
+    threads: number
+    /** Content-column width of the reader, in CSS pixels. */
+    width: number
   }
   viewedMarker: {
     artworkVisitedColor: MarkerColor
@@ -81,6 +85,8 @@ export const DEFAULT_LOCAL_PREFERENCES: LocalPreferences = {
     preloadOriginals: true,
     doublePageMode: false,
     layoutMode: 'masonry',
+    threads: 4,
+    width: 2200,
   },
   viewedMarker: {
     artworkVisitedColor: { r: 244, g: 118, b: 162, a: 1 },
@@ -143,6 +149,8 @@ const validators: {
     preloadOriginals: booleanValue('artworkReader.preloadOriginals'),
     doublePageMode: booleanValue('artworkReader.doublePageMode'),
     layoutMode: enumValue('artworkReader.layoutMode', ['masonry', 'aligned']),
+    threads: integerValue('artworkReader.threads', 1, 16),
+    width: integerValue('artworkReader.width', 900, 3200),
   },
   viewedMarker: {
     artworkVisitedColor: colorValue('viewedMarker.artworkVisitedColor'),

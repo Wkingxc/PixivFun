@@ -1,0 +1,106 @@
+// Shared pastel tag capsule, used by the author artwork tags and by both tag
+// clouds on the bookmark page. The palette is deliberately theme-independent:
+// the same pastels read correctly on the light and the dark surface, and the
+// cycling keeps neighbouring capsules distinguishable at a glance.
+
+.pf-tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.pf-tag-capsule {
+  position: relative;
+  display: grid;
+  min-width: 118px;
+  max-width: 220px;
+  // Matches the natural height of a name + translation capsule, so rows stay
+  // even when only some tags have a translation. Both lines are nowrap, so
+  // this height is deterministic.
+  min-height: 55px;
+  align-content: center;
+  padding: 0.55rem 2rem 0.55rem 0.9rem;
+  color: #3d3440;
+  background: #d9c4ed;
+  border: 1px solid rgb(61 52 64 / 10%);
+  border-radius: 9px;
+  cursor: pointer;
+  font: inherit;
+  text-align: center;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease;
+
+  &:hover {
+    box-shadow: 0 5px 12px rgb(61 52 64 / 14%);
+    transform: translateY(-2px);
+  }
+
+  &:focus-visible,
+  &.is-selected {
+    outline: 2px solid var(--pf-pink);
+    outline-offset: 2px;
+  }
+}
+
+.pf-tag-capsule__name {
+  overflow: hidden;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-tag-capsule__sub {
+  overflow: hidden;
+  margin-top: 0.12rem;
+  opacity: 0.74;
+  font-size: 0.64rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-tag-capsule__count {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  opacity: 0.62;
+  font-size: 0.62rem;
+  font-weight: 750;
+}
+
+// Neutral variant for control chips (全部 / 未分类) that aren't real tags —
+// excluded from the palette so they read as controls, not as one more tag.
+.pf-tag-capsule--plain {
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border-color: var(--pf-line);
+}
+
+.pf-tag-cloud > .pf-tag-capsule:not(.pf-tag-capsule--plain) {
+  &:nth-child(6n + 2) {
+    background: #efd3a5;
+  }
+
+  &:nth-child(6n + 3) {
+    background: #bfe6c7;
+  }
+
+  &:nth-child(6n + 4) {
+    background: #bcd8ed;
+  }
+
+  &:nth-child(6n + 5) {
+    background: #e9b7cc;
+  }
+
+  &:nth-child(6n) {
+    background: #ded493;
+  }
+}
+
+@media (max-width: 640px) {
+  .pf-tag-capsule {
+    flex: 1 1 120px;
+  }
+}

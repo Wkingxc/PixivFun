@@ -61,19 +61,30 @@ section.user-artwork-overview
       span 最多显示 80 项，选择标签后仅检索当前作者的作品
 
     .tag-loading(v-if='tagsLoading') 正在加载作者作品标签…
-    .tag-cloud(v-else-if='visibleTags.length')
-      button.author-tag(
-        :class='{ selected: selectedTag === tag.tag }',
+    .pf-tag-cloud(v-else-if='visibleTags.length')
+      button.pf-tag-capsule(
+        :class='{ "is-selected": selectedTag === tag.tag }',
         :key='tag.tag'
         @click='selectTag(tag.tag)'
+        @focus='describeTag(tag.tag)'
+        @mouseenter='describeTag(tag.tag)'
         type='button'
         v-for='tag in visibleTags'
       )
-        strong {{ tag.tag }}
-        small(v-if='tag.tag_translation') {{ '#' + tag.tag_translation }}
-        span {{ tag.cnt }}
+        span.pf-tag-capsule__name {{ tag.tag }}
+        span.pf-tag-capsule__sub(v-if='tag.tag_translation') {{ '#' + tag.tag_translation }}
+        span.pf-tag-capsule__count {{ tag.cnt }}
     p.tag-empty(v-else-if='tagQuery') 没有匹配的作者作品标签
     p.tag-empty(v-else) 作者没有可显示的作品标签
+
+    .tag-detail(v-if='describedTag')
+      .tag-detail-title
+        strong {{ describedTag }}
+        span(v-if='describedInfo?.translation') {{ '#' + describedInfo.translation }}
+        small(v-if='describedInfo?.parentTag') {{ '母标签 ' + describedInfo.parentTag }}
+      p(v-if='!describedInfo') 读取标签简介…
+      p(v-else-if='describedInfo.abstract') {{ describedInfo.abstract }}
+      p.muted(v-else) 这个标签没有简介
 </template>
 
 <script lang="ts" setup>
@@ -125,6 +136,19 @@ const visibleTags = computed(() => {
 
 function selectTag(tag: string) {
   emit('update:selectedTag', props.selectedTag === tag ? '' : tag)
+}
+
+// The tag list endpoint carries names but no descriptions, so the pixpedia
+// summary is fetched (and cached) only for the chip the user points at.
+const describedTag = ref('')
+const tagInfo = useTagInfo()
+const describedInfo = computed(() =>
+  describedTag.value ? tagInfo.get(describedTag.value) : undefined
+)
+
+function describeTag(tag: string) {
+  describedTag.value = tag
+  tagInfo.ensure(tag)
 }
 </script>
 
@@ -376,87 +400,52 @@ function selectTag(tag: string) {
   }
 }
 
-.tag-cloud {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-}
-
-.author-tag {
-  position: relative;
-  display: grid;
-  min-width: 118px;
-  max-width: 220px;
-  padding: 0.55rem 2rem 0.55rem 0.9rem;
-  color: #3d3440;
-  background: #d9c4ed;
-  border: 1px solid rgb(61 52 64 / 10%);
-  border-radius: 9px;
-  cursor: pointer;
-  font: inherit;
-  text-align: center;
-  transition:
-    transform 140ms ease,
-    box-shadow 140ms ease;
-
-  strong {
-    overflow: hidden;
-    font-size: 0.78rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  small {
-    margin-top: 0.12rem;
-    opacity: 0.74;
-    font-size: 0.64rem;
-  }
-
-  > span {
-    position: absolute;
-    top: 7px;
-    right: 8px;
-    opacity: 0.62;
-    font-size: 0.62rem;
-    font-weight: 750;
-  }
-
-  &:nth-child(6n + 2) {
-    background: #efd3a5;
-  }
-
-  &:nth-child(6n + 3) {
-    background: #bfe6c7;
-  }
-
-  &:nth-child(6n + 4) {
-    background: #bcd8ed;
-  }
-
-  &:nth-child(6n + 5) {
-    background: #e9b7cc;
-  }
-
-  &:nth-child(6n) {
-    background: #ded493;
-  }
-
-  &:hover {
-    box-shadow: 0 5px 12px rgb(61 52 64 / 14%);
-    transform: translateY(-2px);
-  }
-
-  &.selected {
-    outline: 2px solid var(--pf-pink);
-    outline-offset: 2px;
-  }
-}
-
 .tag-empty,
 .tag-loading {
   margin: 0;
   color: var(--pf-muted);
   font-size: 0.8rem;
+}
+
+.tag-detail {
+  margin-top: 0.8rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 11px;
+
+  p {
+    margin: 0.35rem 0 0;
+    color: var(--pf-text);
+    font-size: 0.75rem;
+    line-height: 1.55;
+
+    &.muted {
+      color: var(--pf-muted);
+    }
+  }
+}
+
+.tag-detail-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem;
+
+  strong {
+    font-size: 0.8rem;
+    font-weight: 780;
+  }
+
+  span {
+    color: var(--pf-pink);
+    font-size: 0.7rem;
+  }
+
+  small {
+    color: var(--pf-muted);
+    font-size: 0.66rem;
+  }
 }
 
 @media (max-width: 640px) {
@@ -476,10 +465,6 @@ function selectTag(tag: string) {
 
   .artwork-tag-section {
     padding: 0.9rem 1rem 1rem;
-  }
-
-  .author-tag {
-    flex: 1 1 120px;
   }
 
   .tag-search-tools {

@@ -334,20 +334,6 @@ test('作者标签作品分页按每页 24 件生成接口偏移量', () => {
   assert.equal(userArtworkTagPageOffset(-1), 0)
 })
 
-test('主页横幅候选只保留全年龄今日排行作品', () => {
-  const candidates = safeRankingCandidates([
-    { id: '1', xRestrict: 0 },
-    { id: '2', xRestrict: 1 },
-    { id: '3', xRestrict: 2 },
-    { id: '4', xRestrict: 0 },
-  ])
-
-  assert.deepEqual(
-    candidates.map((item) => item.id),
-    ['1', '4']
-  )
-})
-
 test('主页横幅候选只从今日排行前十名中筛选全年龄作品', () => {
   const ranking = Array.from({ length: 12 }, (_, index) => ({
     id: String(index + 1),

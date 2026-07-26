@@ -8,6 +8,7 @@ import {
   normalizeUserSearchResult,
   type UserSearchResult,
 } from '~/utils/userSearch'
+import { emptyTagInfo, normalizeTagInfo, type TagInfo } from '~/utils/tagInfo'
 import type { ArtworkInfo, NovelInfo } from '~/types'
 
 export interface SearchRequestOptions {
@@ -82,6 +83,26 @@ export class SearchApi extends PixivApiBase {
           params: { keyword, lang: 'zh' },
         })
         return normalizeSearchSuggestions(this.transform(data))
+      },
+      { ttl: CACHE_TTL.profile }
+    )
+  }
+
+  /**
+   * Tag page metadata: the localized tag name plus the pixpedia summary.
+   * Tag descriptions are not embedded in any list response, so chips that want
+   * to show one have to ask for it per tag (cached; many tags have none).
+   */
+  async getTagInfo(tag: string): Promise<TagInfo> {
+    const keyword = tag.trim()
+    if (!keyword) return emptyTagInfo()
+    return requestCache.fetch(
+      cacheKey('tag-info', keyword),
+      async () => {
+        const { data } = await this.http.get<PixivResponse<unknown>>(
+          `/ajax/search/tags/${encodeURIComponent(keyword)}`
+        )
+        return normalizeTagInfo(this.unwrap(data), keyword)
       },
       { ttl: CACHE_TTL.profile }
     )

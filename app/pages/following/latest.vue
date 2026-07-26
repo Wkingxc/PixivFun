@@ -75,7 +75,7 @@ function changePage(page: number) {
 
 watch(currentPage, (page) => {
   void handleFetch(page)
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  window.scrollTo({ top: 0, behavior: 'auto' })
 })
 </script>
 

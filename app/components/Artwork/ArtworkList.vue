@@ -25,6 +25,7 @@ import ArtworkCard from './ArtworkCard.vue'
 import { isArtwork } from '~/utils'
 import type { ArtworkInfo, ArtworkInfoOrAd } from '~/types'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
+import { filterArtworksByPageCount } from '~/utils/artworkLayout'
 
 const props = defineProps<{
   list: ArtworkInfoOrAd[]
@@ -37,6 +38,12 @@ const props = defineProps<{
   selectedIds?: string[]
   /** Skip the author blocklist (own bookmarks / author's own page). */
   filterDisabled?: boolean
+  /**
+   * Apply the "过滤页数" layout setting. Opt-in, because it only makes sense
+   * where the list is browsed for reading (author directory, related works,
+   * author page) — not on server-paginated lists whose totals would lie.
+   */
+  pageCountFiltered?: boolean
 }>()
 
 defineEmits<{
@@ -53,11 +60,15 @@ const artworks = computed(() => {
   const items = props.list.filter((item): item is ArtworkInfo =>
     isArtwork(item)
   )
-  return props.filterDisabled ? items : filterBlocked(items)
+  const visible = props.filterDisabled ? items : filterBlocked(items)
+  return props.pageCountFiltered
+    ? filterArtworksByPageCount(visible, normalizedMinPageCount.value)
+    : visible
 })
 
 const localPersistence = useLocalPersistenceStore()
-const { gridStyle, normalizedImageQuality } = useArtworkLayoutSettings()
+const { gridStyle, normalizedImageQuality, normalizedMinPageCount } =
+  useArtworkLayoutSettings()
 watch(
   artworks,
   (items) => {

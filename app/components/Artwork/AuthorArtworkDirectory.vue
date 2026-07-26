@@ -52,6 +52,8 @@ section.author-artwork-directory
       @wheel='handleWheel'
       ref='viewportRef'
     )
+      p.directory-filter-note(v-if='pageCountFilterHidAll')
+        | 本页作品都被“过滤页数”规则隐藏了
       .directory-grid
         RouterLink.directory-card(
           :aria-current='artwork.id === currentArtworkId ? "page" : undefined',
@@ -59,7 +61,7 @@ section.author-artwork-directory
           :data-current-artwork='artwork.id === currentArtworkId ? "true" : undefined',
           :key='artwork.id',
           :to='artworkRoute(artwork.id)'
-          @mousedown='rememberArtworkScroll($event, artwork.id)'
+          @mousedown='handleArtworkPointerDown($event, artwork.id)'
           v-for='artwork in displayedArtworks'
         )
           .directory-cover
@@ -69,6 +71,12 @@ section.author-artwork-directory
               lazyload
             )
             ArtworkViewedOverlay(:artwork-id='artwork.id')
+            span.directory-ugoira(
+              aria-label='动图'
+              title='动图'
+              v-if='artwork.illustType === IllustType.UGOIRA'
+            )
+              IPlayCircle(aria-hidden='true')
             span.directory-page-count(
               :aria-label='`${artwork.pageCount} 张图片`'
               v-if='artwork.pageCount > 1'
@@ -80,6 +88,8 @@ section.author-artwork-directory
 <script lang="ts" setup>
 import DeferLoad from '~/components/DeferLoad.vue'
 import type { ArtworkInfo } from '~/types'
+import { IllustType } from '~/utils/constants'
+import IPlayCircle from '~icons/fa-solid/play-circle'
 import {
   buildAuthorArtworkEntries,
   getAuthorArtworkPage,
@@ -100,7 +110,9 @@ import {
   artworkDirectoryScrollKey,
   serializeArtworkDirectoryScroll,
 } from '~/utils/artworkDirectoryNavigation'
+import { isOpenInNewViewGesture } from '~/utils/linkGestures'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
+import { filterArtworksByPageCount } from '~/utils/artworkLayout'
 
 const props = defineProps<{
   userId: string
@@ -110,6 +122,7 @@ const props = defineProps<{
 const pageSize = 6
 const pixivClient = usePixivClient()
 const localPersistence = useLocalPersistenceStore()
+const { normalizedMinPageCount } = useArtworkLayoutSettings()
 const entries = ref<AuthorArtworkEntry[]>([])
 const currentArtworkPosition = ref<number | null>(null)
 const totalArtworkCount = ref(0)
@@ -134,7 +147,7 @@ const currentPositionLabel = computed(
 const currentArtworkPage = computed(() =>
   getAuthorArtworkPositionPage(currentArtworkPosition.value, pageSize)
 )
-const displayedArtworks = computed(() => {
+const loadedArtworks = computed(() => {
   if (mode.value === 'page') {
     return pageCache.value[currentPage.value] || []
   }
@@ -147,8 +160,18 @@ const displayedArtworks = computed(() => {
     )
 })
 
+// Page composition is fixed by the author's work order and only the page's
+// artworks carry a page count, so the filter runs after the fetch — a page can
+// end up partly or entirely hidden, which the empty notice below explains.
+const displayedArtworks = computed(() =>
+  filterArtworksByPageCount(loadedArtworks.value, normalizedMinPageCount.value)
+)
+const pageCountFilterHidAll = computed(
+  () => !!loadedArtworks.value.length && !displayedArtworks.value.length
+)
+
 watch(
-  displayedArtworks,
+  loadedArtworks,
   (artworks) => {
     void localPersistence
       .ensureArtworkVisits(artworks.map((artwork) => artwork.id))
@@ -300,6 +323,16 @@ function artworkRoute(id: string) {
   }
 }
 
+function handleArtworkPointerDown(event: MouseEvent, artworkId: string): void {
+  rememberArtworkScroll(event, artworkId)
+
+  // Opening in a new tab leaves this page mounted, so the destination never
+  // gets to refresh our copy of the visited set — mark it here instead.
+  if (isOpenInNewViewGesture(event)) {
+    void localPersistence.recordArtworkVisit(artworkId).catch(() => {})
+  }
+}
+
 function rememberArtworkScroll(event: MouseEvent, artworkId: string): void {
   if (!import.meta.client || (event.button !== 0 && event.button !== 1)) return
 
@@ -370,12 +403,8 @@ async function setMode(nextMode: 'scroll' | 'page'): Promise<void> {
   viewportRef.value?.scrollTo({ top: 0 })
 }
 
-async function handleScroll(event: Event): Promise<void> {
-  if (mode.value !== 'scroll') return
-  const target = event.currentTarget as HTMLElement
-  const isNearEnd =
-    target.scrollTop + target.clientHeight >= target.scrollHeight - 80
-  if (!isNearEnd || scrollPage.value >= totalPages.value) return
+async function loadNextScrollPage(): Promise<void> {
+  if (scrollPage.value >= totalPages.value) return
 
   const nextPage = scrollPage.value + 1
   try {
@@ -388,6 +417,23 @@ async function handleScroll(event: Event): Promise<void> {
   scrollPage.value = nextPage
   void preloadAdjacentPages(nextPage)
 }
+
+async function handleScroll(event: Event): Promise<void> {
+  if (mode.value !== 'scroll') return
+  const target = event.currentTarget as HTMLElement
+  const isNearEnd =
+    target.scrollTop + target.clientHeight >= target.scrollHeight - 80
+  if (!isNearEnd) return
+  await loadNextScrollPage()
+}
+
+// A fully filtered viewport has nothing to scroll, so the scroll handler would
+// never fire again. Keep pulling pages until something survives the filter or
+// the author's works run out.
+watch([displayedArtworks, mode], () => {
+  if (mode.value !== 'scroll' || displayedArtworks.value.length) return
+  void loadNextScrollPage()
+})
 
 async function handleWheel(event: WheelEvent): Promise<void> {
   if (mode.value !== 'page') return
@@ -443,16 +489,16 @@ onBeforeUnmount(() => {
 .directory-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 28px;
-  padding: 0 9px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
   border-radius: 999px;
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   font-weight: 650;
 
   svg {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
     flex: 0 0 auto;
   }
 
@@ -461,9 +507,13 @@ onBeforeUnmount(() => {
   }
 
   strong {
-    font-family: var(--pf-font-mono);
-    font-size: 0.72rem;
+    // The mono face (Space Grotesk) renders these counters harshly at small
+    // sizes; the body font with tabular figures keeps the columns aligned
+    // while reading much softer.
+    font-size: 0.86rem;
     font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
   }
 
   &--position {
@@ -551,6 +601,13 @@ onBeforeUnmount(() => {
   }
 }
 
+.directory-filter-note {
+  margin: 0 0 10px;
+  color: var(--modern-muted);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
 .directory-grid {
   display: grid;
   grid-template-columns: repeat(
@@ -634,6 +691,20 @@ onBeforeUnmount(() => {
     width: 13px;
     height: 13px;
   }
+}
+
+.directory-ugoira {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  color: #fff;
+  filter: drop-shadow(0 2px 8px rgb(0 0 0 / 42%));
+  font-size: 2.25rem;
+  opacity: 0.82;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  z-index: 5;
 }
 
 .directory-state {

@@ -40,7 +40,7 @@
           @click.stop.prevent='handleBookmark'
         )
           IFasHeart(aria-hidden='true')
-      RouterLink(:to='workLink')
+      RouterLink(:to='workLink' @mousedown='handleOpenGesture')
         DeferLoad.img(
           :alt='item.alt',
           :src='cardImageUrl',
@@ -56,7 +56,11 @@
         ): IPlayCircle
     .artwork-info.fnb-media-card__body
       .title.fnb-media-card__title(:class='{ "is-viewed": markTitle }')
-        RouterLink(:style='titleStyle', :to='workLink') {{ item.title }}
+        RouterLink(
+          :style='titleStyle',
+          :to='workLink'
+          @mousedown='handleOpenGesture'
+        ) {{ item.title }}
       .author.fnb-media-card__author(:title='item.userName')
         RouterLink(
           :class='{ "is-viewed": markAuthorName }',
@@ -82,8 +86,10 @@ import {
   getArtworkCardImageUrl,
   type ArtworkCardImageQuality,
 } from '~/utils/artworkLayout'
+import { isOpenInNewViewGesture } from '~/utils/linkGestures'
 
 import { useArtworkStore } from '~/stores/artwork'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 
 const props = defineProps<{
   item?: ArtworkInfo
@@ -103,6 +109,7 @@ const item = toRef(props, 'item')
 const loading = toRef(props, 'loading')
 
 const artworkStore = useArtworkStore()
+const localPersistence = useLocalPersistenceStore()
 const { markBookmarkChanged, openBookmarkEditor } = useBookmarkEditor()
 const { markTitle, titleStyle } = useArtworkViewedState(
   () => item.value?.id,
@@ -124,6 +131,15 @@ const cardImageUrl = computed(() => {
 })
 
 const loadingBookmark = ref(false)
+
+// Opening in a new tab keeps this list mounted, so the destination page never
+// refreshes our visited set — mark it here so the overlay lands immediately.
+function handleOpenGesture(event: MouseEvent) {
+  const current = item.value
+  if (!current || props.markerDisabled || current.type === 'novel') return
+  if (!isOpenInNewViewGesture(event)) return
+  void localPersistence.recordArtworkVisit(current.id).catch(() => {})
+}
 
 function handleCardClick(event: MouseEvent) {
   if (!props.selectable || !item.value) return
