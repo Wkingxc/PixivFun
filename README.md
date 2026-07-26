@@ -3,7 +3,7 @@
   <h1>PixivFun</h1>
   <p>面向个人使用的 Pixiv 阅读、收藏管理与访问记录同步工具。</p>
   <p>
-    <a href="https://github.com/Wkingxc/PixivFun/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-00a8ff"></a>
+    <a href="https://github.com/Wkingxc/PixivFun/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.1.0-00a8ff"></a>
     <img alt="Windows" src="https://img.shields.io/badge/Windows-x64-0078d4">
     <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   </p>
