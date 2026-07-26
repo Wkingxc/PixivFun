@@ -1,6 +1,14 @@
 import axios, { type AxiosInstance } from 'axios'
 import { hasAuthenticatedSession } from '~/composables/userData'
 import { createPximgReplacer } from '~/utils/pximg'
+import {
+  extractBookmarkTagsFromHtml,
+  normalizeArtworkBookmarkSettings,
+  normalizeBookmarkTagGroups,
+  type ArtworkBookmarkSettings,
+  type BookmarkTagGroups,
+  type BookmarkVisibility,
+} from '~/utils/bookmarkTags'
 import { buildDiscoveryUsers, type DiscoveryUsersBody } from './discovery-users'
 import type {
   Artwork,
@@ -18,6 +26,7 @@ import type {
   NovelRankItem,
   RankedNovelInfo,
   User,
+  UserArtworkTag,
   UserListItem,
   PixivUser,
 } from '~/types'
@@ -584,6 +593,41 @@ export class PixivWebClient {
     return this.unwrap(data).works
   }
 
+  async getUserArtworkTags(
+    userId: string,
+    includeR18 = true
+  ): Promise<UserArtworkTag[]> {
+    const { data } = await this.http.get<PixivResponse<UserArtworkTag[]>>(
+      `/ajax/user/${userId}/illusts/tags`,
+      {
+        params: {
+          lang: 'zh',
+          ...(includeR18 ? { all: 1 } : {}),
+        },
+      }
+    )
+    return this.unwrap(data).sort((a, b) => b.cnt - a.cnt)
+  }
+
+  async getUserArtworksByTag(
+    userId: string,
+    tag: string,
+    params: { offset: number; limit: number }
+  ): Promise<{ works: ArtworkInfo[]; total: number }> {
+    const { data } = await this.http.get<
+      PixivResponse<{ works: ArtworkInfo[]; total: number }>
+    >(`/ajax/user/${userId}/illusts/tag`, {
+      params: {
+        tag,
+        offset: params.offset,
+        limit: params.limit,
+        sensitiveFilterMode: 'userSetting',
+        lang: 'zh',
+      },
+    })
+    return this.unwrap(data)
+  }
+
   // ── Following & Feed ──────────────────────────────────────────────
 
   async getUserFollowing(
@@ -617,17 +661,139 @@ export class PixivWebClient {
     params: { tag: string; offset: number; limit: number; rest: string }
   ): Promise<{ works: ArtworkInfo[]; total: number }> {
     const { data } = await this.http.get<
-      PixivResponse<{ works: ArtworkInfo[]; total: number }>
+      PixivResponse<{
+        works: ArtworkInfo[]
+        total: number
+        bookmarkTags?: Record<string, string[]>
+      }>
     >(`/ajax/user/${userId}/illusts/bookmarks`, { params })
+    const body = this.unwrap(data)
+    for (const work of body.works) {
+      if (!work.bookmarkData) continue
+      work.bookmarkData.tags = body.bookmarkTags?.[work.bookmarkData.id] ?? []
+    }
+    return body
+  }
+
+  async getBookmarkTags(userId: string): Promise<BookmarkTagGroups> {
+    const { data } = await this.http.get<PixivResponse<unknown>>(
+      `/ajax/user/${userId}/illusts/bookmark/tags`
+    )
+    return normalizeBookmarkTagGroups(this.unwrap(data))
+  }
+
+  async getArtworkBookmarkSettings(
+    illustId: string | number,
+    fallbackPrivate = false,
+    fallbackTags: string[] = []
+  ): Promise<ArtworkBookmarkSettings> {
+    const [bookmarkDataResult, editPageResult] = await Promise.allSettled([
+      this.http.get<PixivResponse<unknown>>(
+        `/ajax/illust/${illustId}/bookmarkData`
+      ),
+      this.http.get<string>('/bookmark_add.php', {
+        params: { type: 'illust', illust_id: '' + illustId },
+        responseType: 'text',
+      }),
+    ])
+    if (
+      bookmarkDataResult.status === 'rejected' &&
+      editPageResult.status === 'rejected'
+    ) {
+      throw bookmarkDataResult.reason
+    }
+
+    let settings: ArtworkBookmarkSettings = {
+      tags: [],
+      private: fallbackPrivate,
+    }
+    if (bookmarkDataResult.status === 'fulfilled') {
+      try {
+        settings = normalizeArtworkBookmarkSettings(
+          this.unwrap(bookmarkDataResult.value.data),
+          fallbackPrivate
+        )
+      } catch {
+        // The HTML edit page below still exposes current tags and the target
+        // artwork already carries the bookmark visibility as a fallback.
+      }
+    }
+    const editPageTags =
+      editPageResult.status === 'fulfilled'
+        ? extractBookmarkTagsFromHtml(editPageResult.value.data)
+        : settings.tags.length
+          ? settings.tags
+          : fallbackTags
+    return {
+      ...settings,
+      tags: editPageTags,
+    }
+  }
+
+  async addBookmark(
+    illustId: string | number,
+    options: { tags?: string[]; private?: boolean } = {}
+  ): Promise<any> {
+    const { data } = await this.http.post<PixivResponse<any>>(
+      '/ajax/illusts/bookmarks/add',
+      {
+        illust_id: '' + illustId,
+        restrict: options.private ? 1 : 0,
+        comment: '',
+        tags: options.tags ?? [],
+      }
+    )
     return this.unwrap(data)
   }
 
-  async addBookmark(illustId: string | number): Promise<any> {
-    const { data } = await this.http.post<PixivResponse<any>>(
-      '/ajax/illusts/bookmarks/add',
-      { illust_id: illustId, restrict: 0, comment: '', tags: [] }
+  async addBookmarkTags(
+    bookmarkId: string | number | Array<string | number>,
+    tags: string[]
+  ): Promise<void> {
+    if (!tags.length) return
+    const bookmarkIds = (Array.isArray(bookmarkId) ? bookmarkId : [bookmarkId])
+      .map(String)
+      .filter(Boolean)
+    if (!bookmarkIds.length) return
+    const { data } = await this.http.post<PixivResponse<unknown>>(
+      '/ajax/illusts/bookmarks/add_tags',
+      { bookmarkIds, tags }
     )
-    return this.unwrap(data)
+    this.unwrap(data)
+  }
+
+  async removeBookmarkTags(
+    bookmarkId: string | number | Array<string | number>,
+    tags: string[]
+  ): Promise<void> {
+    if (!tags.length) return
+    const bookmarkIds = (Array.isArray(bookmarkId) ? bookmarkId : [bookmarkId])
+      .map(String)
+      .filter(Boolean)
+    if (!bookmarkIds.length) return
+    const { data } = await this.http.post<PixivResponse<unknown>>(
+      '/ajax/illusts/bookmarks/remove_tags',
+      { bookmarkIds, removeTags: tags }
+    )
+    this.unwrap(data)
+  }
+
+  async editBookmarkVisibility(
+    bookmarkId: string | number | Array<string | number>,
+    visibility: BookmarkVisibility
+  ): Promise<void> {
+    const bookmarkIds = (Array.isArray(bookmarkId) ? bookmarkId : [bookmarkId])
+      .map(String)
+      .filter(Boolean)
+    if (!bookmarkIds.length) return
+    const { data } = await this.http.post<PixivResponse<unknown>>(
+      '/ajax/illusts/bookmarks/edit_restrict',
+      {
+        bookmarkIds,
+        bookmarkRestrict: visibility,
+      }
+    )
+    this.unwrap(data)
   }
 
   async removeBookmark(bookmarkId: string | number): Promise<any> {

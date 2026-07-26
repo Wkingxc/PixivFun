@@ -1,10 +1,4 @@
-import { resolve } from 'node:path'
 import Icons from 'unplugin-icons/vite'
-import { toSassPath } from './shared/sass-path'
-
-const fnbSassPath = toSassPath(
-  resolve(import.meta.dirname, './app/assets/styles/_fnb.scss')
-)
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-05-01',
@@ -40,16 +34,6 @@ export default defineNuxtConfig({
         defaultClass: 'svg--inline',
       }),
     ],
-    css: {
-      preprocessorOptions: {
-        scss: {
-          additionalData: `@use "${fnbSassPath}" as *;`,
-        },
-        sass: {
-          additionalData: `\n@use "${fnbSassPath}" as *\n`,
-        },
-      },
-    },
     vue: {
       template: {
         compilerOptions: {},

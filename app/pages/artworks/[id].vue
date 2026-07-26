@@ -1,10 +1,6 @@
 <template lang="pug">
 #artwork-view
-  //- Modern loading
-  section.modern-placeholder(
-    :style='directoryTuningStyle'
-    v-if='loading && artworkDetailStyle === "modern"'
-  )
+  section.modern-placeholder(:style='directoryTuningStyle' v-if='loading')
     .modern-placeholder__shell
       .modern-placeholder__main
         .modern-placeholder__panel.modern-placeholder__media
@@ -24,141 +20,6 @@
             v-for='index in 6'
             width='100%'
           )
-
-  //- Classic loading
-  section.placeholder(v-else-if='loading')
-    .gallery
-      FnbSkeleton(
-        block
-        height='50vh'
-        style='margin: 0 auto; width: 500px; max-width: 80vw'
-      )
-    .body-inner
-      .artwork-info
-        h1.loading(style='padding: 0.5rem 0'): FnbSkeleton(
-          height='2rem'
-          style='margin-top: 1em'
-          width='20rem'
-        )
-        Card(title='')
-          p.description: FnbSkeleton(:repeat='4' text)
-          p.stats: span(v-for='_ in 4')
-            FnbSkeleton(circle height='1em' text width='1em')
-            FnbSkeleton(style='margin-left: 0.5em' text width='4em')
-          p.create-date: FnbSkeleton(text width='12em')
-          p.canonical-link: FnbSkeleton(height='1.5rem' width='8rem')
-        h2: FnbSkeleton(height='2rem' width='8rem')
-        Card(title='')
-          AuthorCard
-        h2: FnbSkeleton(height='2rem' width='8rem')
-        FnbSkeleton(height='8rem' width='100%')
-
-  //- Done
-  section.illust-container(
-    v-if='!error && illust && artworkDetailStyle === "classic"'
-  )
-    #top-area
-      .align-center(:style='{ marginBottom: "1rem" }' v-if='isUgoira')
-        UgoiraViewer(:illust='illust')
-      Gallery(:pages='pages' v-else)
-
-      .body-inner
-        #meta-area
-          h1(:class='illust.xRestrict ? "danger" : ""') {{ illust.illustTitle }}
-          Card(title='')
-            .artwork-info
-              p.description.pre(v-html='illust.description')
-              p.description.no-desc(
-                :style='{ color: "var(--fnb-text-muted)" }'
-                v-if='!illust.description'
-              ) (作者未填写简介)
-
-              p.stats
-                //- 点赞
-                button.stat-item.like-btn(
-                  :aria-label='illust.likeData ? "已赞" : "点赞"',
-                  :class='{ liked: illust.likeData }',
-                  :title='!userStore.isLoggedIn ? "点赞" : illust.likeData ? "已赞（不可取消）" : "点赞"'
-                  @click='handleLike'
-                )
-                  IFasThumbsUp.i-like(aria-hidden='true')
-                  | {{ illust.likeCount }}
-
-                //- 收藏
-                button.stat-item.bookmark-btn(
-                  :aria-label='illust.bookmarkData ? "取消收藏" : "添加收藏"',
-                  :class='{ bookmarked: illust.bookmarkData }',
-                  :title='!userStore.isLoggedIn ? "收藏" : illust.bookmarkData ? "取消收藏" : "添加收藏"'
-                  @click='illust?.bookmarkData ? handleRemoveBookmark() : handleAddBookmark()'
-                )
-                  IFasHeart(aria-hidden='true')
-                  | {{ illust.bookmarkCount }}
-
-                span.stat-item(title='浏览')
-                  IFasEye.i-view(aria-hidden='true')
-                  | {{ illust.viewCount }}
-                span.stat-item(title='页数')
-                  IFasImages.i-pages(aria-hidden='true')
-                  | {{ pages.length }}张
-
-              p.create-date {{ new Date(illust.createDate).toLocaleString() }}
-
-            .artwork-tags
-              span.original-tag(v-if='illust.isOriginal')
-                IFasLaughWink(data-icon)
-                | 原创
-              span.restrict-tag.x-restrict(
-                title='R-18'
-                v-if='illust?.xRestrict'
-              ) R-18
-              span.restrict-tag.ai-restrict(
-                :title='`AI生成 (${illust.aiType})`'
-                v-if='illust?.aiType === 2'
-              ) AI生成
-              ArtTag(
-                :key='_',
-                :tag='item.tag',
-                :translation='item.translation?.en'
-                v-for='(item, _) in illust.tags.tags'
-              )
-
-            .canonical-link
-              FnbButton(
-                :href='illust?.extraData?.meta?.canonical || "#"'
-                rel='noopener noreferrer'
-                size='sm'
-                tag='a'
-                target='_blank'
-              )
-                | 前往 Pixiv 查看
-                template(#icon)
-                  IFasArrowRight
-
-        aside.author-area(ref='authorRef')
-          Card(title='作者')
-            AuthorCard(:user='user')
-
-        Card.comments(title='评论')
-          CommentArea(
-            :author-id='illust.userId',
-            :count='illust.commentCount',
-            :disabled='illust.commentOff === 1',
-            :id='illust.id || illust.illustId'
-          )
-
-    //- 相关推荐
-    .recommend-works.body-inner(ref='recommendRef')
-      h2 相关推荐
-      ArtworkList(
-        :list='artworkStore.recommendations',
-        :loading='!artworkStore.recommendations.length'
-      )
-      ShowMore(
-        :loading='recommendLoading',
-        :method='handleMoreRecommend',
-        :text='recommendLoading ? "加载中" : "加载更多"'
-        v-if='artworkStore.recommendations.length && artworkStore.recommendNextIds.length'
-      )
 
   ArtworkDetailModern(
     :bookmark-loading='bookmarkLoading',
@@ -195,23 +56,10 @@ definePageMeta({
   name: 'artworks',
   alias: ['/illust/:id', '/i/:id'],
 })
-import ArtTag from '~/components/ArtTag.vue'
-import ArtworkList from '~/components/Artwork/ArtworkList.vue'
 import ArtworkDetailModern from '~/components/Artwork/ArtworkDetailModern.vue'
 import ArtworkWaterfallReader from '~/components/Artwork/ArtworkWaterfallReader.vue'
 import ArtworkMarkerControl from '~/components/Artwork/ArtworkMarkerControl.vue'
-import AuthorCard from '~/components/AuthorCard.vue'
-import Card from '~/components/Card.vue'
-import CommentArea from '~/components/Comment/CommentArea.vue'
 import ErrorPage from '~/components/ErrorPage.vue'
-import Gallery from '~/components/Gallery.vue'
-import ShowMore from '~/components/ShowMore.vue'
-import IFasArrowRight from '~icons/fa-solid/arrow-right'
-import IFasEye from '~icons/fa-solid/eye'
-import IFasHeart from '~icons/fa-solid/heart'
-import IFasImages from '~icons/fa-solid/images'
-import IFasLaughWink from '~icons/fa-solid/laugh-wink'
-import IFasThumbsUp from '~icons/fa-solid/thumbs-up'
 
 // Types
 import type { Artwork, ArtworkGallery, User } from '~/types'
@@ -239,49 +87,9 @@ const userStore = useUserStore()
 const artworkStore = useArtworkStore()
 const localPersistenceStore = useLocalPersistenceStore()
 const userProfileStore = useUserProfileStore()
-const { style: artworkDetailStyle } = useArtworkDetailStyle()
 const { style: directoryTuningStyle } = useArtworkDirectoryTuning()
 
-const recommendRef = ref<HTMLDivElement | null>(null)
-const authorRef = ref<HTMLElement>()
-
 const isUgoira = computed(() => illust.value?.illustType === 2)
-const UgoiraViewer = defineAsyncComponent({
-  loader: () => import('~/components/UgoiraViewer.vue'),
-  loadingComponent: () =>
-    h('svg', {
-      width: illust.value?.width,
-      height: illust.value?.height,
-      style: {
-        width: 'auto',
-        height: 'auto',
-        maxWidth: '100%',
-        maxHeight: '60vh',
-        borderRadius: '4px',
-        backgroundColor: 'var(--fnb-skeleton)',
-      },
-    }),
-})
-
-function addObserver(elementRef: Ref, cb: () => any) {
-  const unWatch = watch(loading, async (val) => {
-    console.log(loading.value)
-    if (val) return
-    await nextTick()
-    if (illust.value?.illustId) {
-      unWatch()
-      const ob = useIntersectionObserver(
-        elementRef.value,
-        ([{ isIntersecting }]) => {
-          if (isIntersecting) {
-            cb()
-            ob.stop()
-          }
-        }
-      )
-    }
-  })
-}
 
 function consumeDirectoryScroll(artworkId: string): number | null {
   if (!import.meta.client) return null
@@ -314,15 +122,13 @@ async function restoreDirectoryScroll(
 async function init(id: string): Promise<void> {
   const directoryScrollTop = consumeDirectoryScroll(id)
   loading.value = true
+  error.value = ''
 
   // Reset states
   illust.value = undefined
   pages.value = []
   user.value = undefined
   artworkStore.clearRecommendations()
-
-  addObserver(recommendRef, () => handleRecommendInit(illust.value!.illustId))
-  addObserver(authorRef, () => handleUserInit(illust.value!.userId))
 
   const cachedArtwork = artworkStore.getCachedArtwork(id)
   const cachedPages = artworkStore.getCachedPages(id)
@@ -482,12 +288,12 @@ onMounted(() => {
 })
 
 watch(
-  [loading, artworkDetailStyle],
-  ([isLoading, style]) => {
-    if (!isLoading && style === 'modern' && illust.value) {
-      if (!user.value) handleUserInit(illust.value.userId)
+  loading,
+  (isLoading) => {
+    if (!isLoading && illust.value) {
+      if (!user.value) void handleUserInit(illust.value.userId)
       if (!artworkStore.recommendations.length) {
-        handleRecommendInit(illust.value.illustId)
+        void handleRecommendInit(illust.value.illustId)
       }
     }
   },
@@ -589,165 +395,6 @@ watch(
 
   .modern-placeholder__panel {
     border-radius: 14px;
-  }
-}
-
-section {
-  padding-top: 1rem;
-}
-
-.gallery {
-  margin: 0 auto;
-}
-
-.artwork-tags {
-  margin: 1rem 0;
-  > span {
-    font-weight: 700;
-    margin-right: 1rem;
-  }
-}
-
-h1 {
-  --bg-color: var(--fnb-brand);
-  box-shadow: 0 2px 0 var(--bg-color);
-  margin: 0;
-  margin-bottom: 1rem;
-  &.danger {
-    --bg-color: var(--fnb-danger);
-  }
-  &.loading {
-    --bg-color: rgba(0, 0, 0, 0.08);
-    opacity: 0.85;
-  }
-}
-
-.original-tag {
-  color: var(--pixiv-original);
-}
-.x-restrict {
-  color: var(--pixiv-r18-text);
-}
-.ai-restrict {
-  color: var(--pixiv-ai-text);
-}
-
-.stats {
-  display: inline-flex;
-  align-items: stretch;
-  margin: 0.5rem 0;
-  background: var(--fnb-surface);
-  @include fnb-border-sm;
-  @include fnb-shadow-xs;
-
-  .stat-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.4rem 0.85rem;
-    color: var(--fnb-text);
-    font-weight: 800;
-    font-size: 0.9rem;
-    line-height: 1;
-    transition:
-      background-color 0.15s,
-      color 0.15s;
-
-    & + .stat-item {
-      border-left: 2px solid var(--fnb-border);
-    }
-  }
-
-  .i-like {
-    color: var(--fnb-brand);
-  }
-  .i-view {
-    color: var(--fnb-accent);
-  }
-  .i-pages {
-    color: var(--fnb-text-muted);
-  }
-
-  .bookmark-btn,
-  .like-btn {
-    border: none;
-    background: transparent;
-    font: inherit;
-    font-weight: 800;
-    cursor: pointer;
-
-    &:focus-visible {
-      outline: 2px solid var(--fnb-brand);
-      outline-offset: 2px;
-    }
-  }
-
-  .bookmark-btn {
-    svg {
-      color: var(--fnb-bookmark);
-    }
-
-    &:hover:not(.bookmarked) {
-      background-color: var(--fnb-highlight);
-      color: var(--fnb-on-light);
-    }
-    &.bookmarked {
-      background-color: var(--fnb-bookmark);
-      color: var(--fnb-on-brand);
-      svg {
-        color: var(--fnb-on-brand);
-      }
-    }
-  }
-
-  .like-btn {
-    &:hover:not(.liked) {
-      background-color: var(--fnb-highlight);
-      color: var(--fnb-on-light);
-    }
-    &.liked {
-      background-color: var(--fnb-brand);
-      color: var(--fnb-on-brand);
-      svg {
-        color: var(--fnb-on-brand);
-      }
-    }
-  }
-}
-
-.create-date {
-  color: var(--fnb-text-muted);
-  font-size: 0.85rem;
-}
-
-.breadcrumb {
-  margin-top: 1rem;
-}
-
-.user-illusts {
-  ul {
-    margin-left: -1rem;
-    margin-right: -1rem;
-    background-color: var(--fnb-bg);
-  }
-}
-
-.load-more {
-  a.plain {
-    color: var(--fnb-text);
-    cursor: pointer;
-  }
-
-  .top .inner {
-    border-radius: 8px;
-    width: 100%;
-    padding: 28% 0;
-    background-color: var(--fnb-border);
-    text-align: center;
-  }
-
-  .bottom .author {
-    font-size: 0.8rem;
   }
 }
 </style>

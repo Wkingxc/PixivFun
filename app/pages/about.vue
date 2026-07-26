@@ -2,7 +2,7 @@
 mixin GoToPixivSettings
   p 部分高级功能的效果取决于您在 Pixiv 源站的设定，请前往 #[ExternalLink(href='https://www.pixiv.net/settings/viewing' target='_blank') 浏览与显示设置] 调整。
 
-#about-view.body-inner
+#about-view.modern-route-page.modern-page-shell
   h1#top 关于 PixivNow
   section.intro
     Card(title='简介')
@@ -72,3 +72,30 @@ import { setTitle } from '~/utils/setTitle'
 
 onMounted(() => setTitle('About'))
 </script>
+
+<style scoped lang="scss">
+#about-view {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+h1 {
+  margin: 0 0 4px;
+}
+
+.intro {
+  display: grid;
+  gap: 18px;
+}
+
+:deep(.card p) {
+  color: color-mix(in srgb, var(--pf-text) 82%, var(--pf-muted));
+  line-height: 1.75;
+}
+
+:deep(.card h3) {
+  margin-top: 18px;
+  color: var(--pf-text);
+}
+</style>

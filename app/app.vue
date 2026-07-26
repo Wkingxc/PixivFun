@@ -10,7 +10,9 @@
       NuxtPage
 
   SideNav
+  ArtworkLayoutControl
   BackToTop
+  BookmarkEditorDialog
   FnbDialog
   FnbToast
 </template>
@@ -20,6 +22,12 @@ import SiteHeader from '~/components/SiteHeader.vue'
 
 const SideNav = defineAsyncComponent(
   () => import('~/components/SideNav/SideNav.vue')
+)
+const ArtworkLayoutControl = defineAsyncComponent(
+  () => import('~/components/Artwork/ArtworkLayoutControl.vue')
+)
+const BookmarkEditorDialog = defineAsyncComponent(
+  () => import('~/components/Bookmark/BookmarkEditorDialog.vue')
 )
 
 const route = useRoute()

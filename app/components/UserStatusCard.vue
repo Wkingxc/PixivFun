@@ -8,10 +8,7 @@ FnbCard.user-status-card(shadow='sm')
       .user-info
         .user-name
           RouterLink.plain(:to='"/users/" + userStore.userId') {{ userStore.userName }}
-          FnbTag.premium-badge(
-            color='var(--fnb-highlight)'
-            v-if='userStore.user?.premium'
-          ) Premium
+          FnbTag.premium-badge(color='#f3a221' v-if='userStore.user?.premium') Premium
         .user-id @{{ userStore.userPixivId }}
     .user-actions
       FnbButton(

@@ -1,6 +1,6 @@
 <template lang="pug">
 .artworks-by-user(ref='containerRef')
-  .flex.justify-center.align-center
+  .pagination-row.pagination-row--top
     FnbPagination(
       :item-count='storeAllIds.length',
       :page='curPage',
@@ -8,10 +8,11 @@
       @update:page='curPage = $event'
     )
   ArtworkList(
+    :controlled='controlled',
     :list='curArtworks',
     :loading='!curArtworks.length ? userArtworksStore.pageSize : false'
   )
-  .flex.justify-center.align-center
+  .pagination-row
     FnbPagination(
       :item-count='storeAllIds.length',
       :page='curPage',
@@ -28,6 +29,7 @@ const props = withDefaults(
   defineProps<{
     userId: string
     workCategory?: 'illust' | 'manga'
+    controlled?: boolean
   }>(),
   {
     workCategory: 'illust',
@@ -74,13 +76,19 @@ async function firstInit() {
 </script>
 
 <style scoped lang="scss">
-.flex {
+.pagination-row {
   display: flex;
-}
-.justify-center {
+  min-height: 36px;
+  margin: 4px 0 22px;
   justify-content: center;
-}
-.align-center {
   align-items: center;
+
+  &--top:empty {
+    display: none;
+  }
+
+  &:last-child {
+    margin: 28px 0 6px;
+  }
 }
 </style>

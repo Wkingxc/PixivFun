@@ -94,6 +94,11 @@ export function bookmarkPageOffset(
   return (safePage - 1) * pageSize
 }
 
+export function userArtworkTagPageOffset(page: number, pageSize = 24): number {
+  const safePage = Math.max(1, Math.floor(page))
+  return (safePage - 1) * Math.max(1, Math.floor(pageSize))
+}
+
 export function safeRankingCandidates<T extends { xRestrict: number }>(
   artworks: readonly T[],
   maxRank = artworks.length

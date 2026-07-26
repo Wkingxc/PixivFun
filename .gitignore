@@ -120,3 +120,11 @@ dev-test
 
 .design-qa/
 openspec/
+
+# Generated desktop release inputs and artifacts
+desktop/generated/
+release/
+.desktop-release/
+
+# Third-party reference source; keep Markdown summaries only
+reference/pixiv-viewer/

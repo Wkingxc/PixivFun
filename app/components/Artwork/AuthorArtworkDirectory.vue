@@ -461,7 +461,7 @@ onBeforeUnmount(() => {
   }
 
   strong {
-    font-family: var(--fnb-font-mono);
+    font-family: var(--pf-font-mono);
     font-size: 0.72rem;
     font-weight: 750;
   }

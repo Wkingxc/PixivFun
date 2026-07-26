@@ -1,10 +1,10 @@
 <template lang="pug">
 Transition(name='back-to-top')
   button.back-to-top(
-    v-show='visible',
-    @click='scrollToTop',
-    aria-label='回到顶部',
+    @click='scrollToTop'
+    aria-label='回到顶部'
     title='回到顶部'
+    v-show='visible'
   )
     ITablerArrowUp
 </template>
@@ -37,25 +37,30 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
   display: flex;
   align-items: center;
   justify-content: center;
-  @include fnb-border;
-  @include fnb-shadow;
-  background: var(--fnb-surface);
-  color: var(--fnb-text);
+  color: var(--pf-text);
+  background: color-mix(in srgb, var(--pf-surface) 92%, transparent);
+  border: 1px solid var(--pf-line);
+  border-radius: 50%;
+  box-shadow: 0 8px 24px rgb(67 41 59 / 14%);
+  backdrop-filter: blur(12px);
   cursor: pointer;
   font-size: 1.2rem;
   transition: all 150ms;
 
   &:hover {
-    background: var(--fnb-highlight);
-    color: var(--fnb-on-light);
-    transform: translate(3px, 3px);
-    box-shadow: none;
+    color: #fff;
+    background: var(--pf-pink);
+    border-color: var(--pf-pink);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 26px color-mix(in srgb, var(--pf-pink) 24%, transparent);
   }
 }
 
 .back-to-top-enter-active,
 .back-to-top-leave-active {
-  transition: opacity 0.2s, transform 0.2s;
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
 }
 
 .back-to-top-enter-from,

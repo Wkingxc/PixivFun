@@ -28,15 +28,31 @@ useIntersectionObserver(elRef, async ([{ isIntersecting }]) => {
 </script>
 
 <style scoped lang="scss">
-
 .show-more {
   text-align: center;
 
   a {
-    @include fnb-btn;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 38px;
     margin: 1rem auto;
-    padding: 0.4rem 8rem;
+    padding: 0.45rem 1.2rem;
+    color: var(--pf-pink);
+    background: var(--pf-soft-pink);
+    border: 1px solid color-mix(in srgb, var(--pf-pink) 36%, var(--pf-line));
+    border-radius: 999px;
+    box-shadow: none;
     cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-decoration: none;
+
+    &:hover {
+      color: #fff;
+      background: var(--pf-pink);
+    }
   }
 }
 </style>

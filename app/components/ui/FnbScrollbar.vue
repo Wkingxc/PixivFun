@@ -28,11 +28,11 @@ defineProps<{
   }
 
   &::-webkit-scrollbar-thumb {
-    background: var(--fnb-text-muted);
-    border-radius: var(--fnb-radius-sm);
+    background: var(--pf-muted);
+    border-radius: 999px;
 
     &:hover {
-      background: var(--fnb-text);
+      background: var(--pf-text);
     }
   }
 }

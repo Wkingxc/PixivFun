@@ -1,11 +1,11 @@
 <template lang="pug">
 .discovery-tabs
   button.discovery-tab(
-    v-for='tab in tabs',
-    :key='tab.value',
     :class='{ active: modelValue === tab.value, disabled: tab.disabled }',
     :disabled='tab.disabled',
+    :key='tab.value'
     @click='!tab.disabled && $emit("update:modelValue", tab.value)'
+    v-for='tab in tabs'
   )
     | {{ tab.label }}
     span.coming-soon(v-if='tab.disabled') soon
@@ -29,22 +29,22 @@ const tabs = [
 }
 
 .discovery-tab {
-  @include fnb-border-sm;
-  @include fnb-shadow-xs;
   padding: 0.3rem 0.75rem;
   font-family: inherit;
   font-size: 0.85rem;
   font-weight: 700;
-  background: var(--fnb-surface);
-  color: var(--fnb-text);
+  background: var(--pf-surface);
+  color: var(--pf-muted);
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
+  box-shadow: none;
   cursor: pointer;
   transition: all 150ms;
 
   &.active {
-    background: var(--fnb-brand);
-    color: var(--fnb-on-brand);
-    box-shadow: none;
-    transform: translate(3px, 3px);
+    background: var(--pf-blue);
+    color: #fff;
+    border-color: var(--pf-blue);
   }
 
   &.disabled {
@@ -53,8 +53,9 @@ const tabs = [
   }
 
   &:hover:not(.active):not(.disabled) {
-    background: var(--fnb-highlight);
-    color: var(--fnb-on-light);
+    background: var(--pf-soft-blue);
+    color: var(--pf-blue);
+    border-color: color-mix(in srgb, var(--pf-blue) 36%, var(--pf-line));
   }
 
   .coming-soon {

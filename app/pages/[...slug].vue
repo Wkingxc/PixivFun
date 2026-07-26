@@ -1,5 +1,5 @@
 <template lang="pug">
-#error-view
+#error-view.modern-route-page
   ErrorPage(
     description='啊咧？啊咧咧——？！页面跑丢了！！！'
     status='404'

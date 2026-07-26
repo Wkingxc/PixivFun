@@ -1,63 +1,69 @@
 <template lang="pug">
 .novel-reader
-  template(v-for='(block, index) in blocks' :key='index')
+  template(:key='index' v-for='(block, index) in blocks')
     h2.chapter(v-if='block.type === "chapter"') {{ block.title }}
     .page-divider(v-else-if='block.type === "divider"')
       span {{ block.label || '分页' }}
     figure.embedded-image(v-else-if='block.type === "uploadedImage"')
-      img(:alt='block.alt' :src='block.src' loading='lazy')
+      img(:alt='block.alt', :src='block.src' loading='lazy')
     .pixiv-image(v-else-if='block.type === "pixivImage"')
       RouterLink(:to='pixivImageLink(block.id)') 插入作品 {{ block.id }}
     p.paragraph(v-else-if='block.type === "paragraph"')
-      template(v-for='(token, tokenIndex) in block.inlines' :key='tokenIndex')
+      template(:key='tokenIndex' v-for='(token, tokenIndex) in block.inlines')
         span(v-if='token.type === "text"') {{ token.text }}
         ruby(v-else-if='token.type === "ruby"')
           | {{ token.base }}
           rt {{ token.ruby }}
         a(
-          v-else-if='token.type === "link"'
           :href='token.href'
           rel='noopener noreferrer'
           target='_blank'
+          v-else-if='token.type === "link"'
         ) {{ token.text }}
         span.page-jump(v-else-if='token.type === "jump"') 第 {{ token.page }} 页
         strong(v-else-if='token.type === "bold"')
-          template(v-for='(child, childIndex) in token.inlines' :key='childIndex')
+          template(
+            :key='childIndex'
+            v-for='(child, childIndex) in token.inlines'
+          )
             span(v-if='child.type === "text"') {{ child.text }}
             ruby(v-else-if='child.type === "ruby"')
               | {{ child.base }}
               rt {{ child.ruby }}
             a(
-              v-else-if='child.type === "link"'
               :href='child.href'
               rel='noopener noreferrer'
               target='_blank'
+              v-else-if='child.type === "link"'
             ) {{ child.text }}
             span.page-jump(v-else-if='child.type === "jump"') 第 {{ child.page }} 页
             span.emphasis(
-              v-else-if='child.type === "emphasis"'
               :style='{ textEmphasis: child.mark, WebkitTextEmphasis: child.mark }'
+              v-else-if='child.type === "emphasis"'
             ) {{ child.text }}
         em(v-else-if='token.type === "italic"')
-          template(v-for='(child, childIndex) in token.inlines' :key='childIndex')
+          template(
+            :key='childIndex'
+            v-for='(child, childIndex) in token.inlines'
+          )
             span(v-if='child.type === "text"') {{ child.text }}
             ruby(v-else-if='child.type === "ruby"')
               | {{ child.base }}
               rt {{ child.ruby }}
             a(
-              v-else-if='child.type === "link"'
               :href='child.href'
               rel='noopener noreferrer'
               target='_blank'
+              v-else-if='child.type === "link"'
             ) {{ child.text }}
             span.page-jump(v-else-if='child.type === "jump"') 第 {{ child.page }} 页
             span.emphasis(
-              v-else-if='child.type === "emphasis"'
               :style='{ textEmphasis: child.mark, WebkitTextEmphasis: child.mark }'
+              v-else-if='child.type === "emphasis"'
             ) {{ child.text }}
         span.emphasis(
-          v-else-if='token.type === "emphasis"'
           :style='{ textEmphasis: token.mark, WebkitTextEmphasis: token.mark }'
+          v-else-if='token.type === "emphasis"'
         ) {{ token.text }}
 </template>
 
@@ -101,16 +107,15 @@ function pixivImageLink(id: string): string {
   align-items: center;
   gap: 1rem;
   margin: 2rem 0;
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   font-size: 0.9rem;
 
   &::before,
   &::after {
     content: '';
     flex: 1;
-    height: 3px;
-    background: var(--fnb-border);
-    opacity: 0.15;
+    height: 1px;
+    background: var(--pf-line);
   }
 }
 
@@ -121,14 +126,17 @@ function pixivImageLink(id: string): string {
   img {
     max-width: 100%;
     height: auto;
-    @include fnb-border;
+    border: 1px solid var(--pf-line);
+    border-radius: 12px;
   }
 }
 
 .pixiv-image {
   margin: 1.5rem 0;
   padding: 1rem;
-  @include fnb-border-sm;
+  background: var(--pf-bg);
+  border: 1px solid var(--pf-line);
+  border-radius: 10px;
   text-align: center;
 }
 
@@ -137,7 +145,7 @@ ruby rt {
 }
 
 .page-jump {
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   font-size: 0.9em;
 }
 

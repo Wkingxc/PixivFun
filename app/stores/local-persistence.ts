@@ -17,7 +17,9 @@ export const useLocalPersistenceStore = defineStore('local-persistence', () => {
   )
   const initialized = ref(false)
   const visitedArtworkIds = reactive(new Set<string>())
+  const visitedAuthorIds = reactive(new Set<string>())
   const checkedArtworkIds = new Set<string>()
+  const checkedAuthorIds = new Set<string>()
   let initialization: Promise<void> | undefined
   let preferenceRevision = 0
   let preferenceWriteQueue: Promise<void> = Promise.resolve()
@@ -165,11 +167,51 @@ export const useLocalPersistenceStore = defineStore('local-persistence', () => {
     return visitedArtworkIds.has(String(id))
   }
 
+  async function ensureAuthorVisits(
+    ids: Array<string | number>
+  ): Promise<void> {
+    const pending = Array.from(
+      new Set(ids.map(String).filter((id) => /^\d+$/.test(id)))
+    ).filter((id) => !checkedAuthorIds.has(id))
+    if (!pending.length) return
+    pending.forEach((id) => checkedAuthorIds.add(id))
+    try {
+      const responses = await Promise.all(
+        Array.from({ length: Math.ceil(pending.length / 500) }, (_, index) =>
+          pending.slice(index * 500, index * 500 + 500)
+        ).map((ids) =>
+          $fetch<{ visitedIds: string[] }>('/api/local/authors/status', {
+            method: 'POST',
+            body: { ids },
+          })
+        )
+      )
+      for (const response of responses) {
+        response.visitedIds.forEach((id) => visitedAuthorIds.add(id))
+      }
+    } catch (error) {
+      pending.forEach((id) => checkedAuthorIds.delete(id))
+      throw error
+    }
+  }
+
+  function isAuthorViewed(id: string | number | undefined): boolean {
+    if (id === undefined) return false
+    return visitedAuthorIds.has(String(id))
+  }
+
   async function recordArtworkVisit(id: string | number): Promise<void> {
     const artworkId = String(id)
     checkedArtworkIds.add(artworkId)
     visitedArtworkIds.add(artworkId)
     await $fetch(`/api/local/artworks/${artworkId}/visit`, { method: 'POST' })
+  }
+
+  async function recordAuthorVisit(id: string | number): Promise<void> {
+    const authorId = String(id)
+    checkedAuthorIds.add(authorId)
+    visitedAuthorIds.add(authorId)
+    await $fetch(`/api/local/authors/${authorId}/visit`, { method: 'POST' })
   }
 
   async function refreshCheckedArtworkVisits(): Promise<void> {
@@ -179,20 +221,32 @@ export const useLocalPersistenceStore = defineStore('local-persistence', () => {
     await ensureArtworkVisits(ids)
   }
 
+  async function refreshCheckedAuthorVisits(): Promise<void> {
+    const ids = Array.from(checkedAuthorIds)
+    ids.forEach((id) => visitedAuthorIds.delete(id))
+    checkedAuthorIds.clear()
+    await ensureAuthorVisits(ids)
+  }
+
   return {
     preferences,
     initialized,
     viewedMarker,
     visitedArtworkIds,
+    visitedAuthorIds,
     init,
     applyPreferencesPatch,
     persistPreferences,
     patchPreferences,
     migrateLegacyPreferences,
     ensureArtworkVisits,
+    ensureAuthorVisits,
     isArtworkViewed,
+    isAuthorViewed,
     recordArtworkVisit,
+    recordAuthorVisit,
     refreshCheckedArtworkVisits,
+    refreshCheckedAuthorVisits,
   }
 })
 

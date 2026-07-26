@@ -52,7 +52,6 @@ header.global-navbar(
         )
 
     .header-tools
-      ArtworkDetailStyleToggle(v-if='isDevelopment')
       ThemeToggle
 
       .user-area
@@ -123,8 +122,6 @@ const route = useRoute()
 const accountPath = computed(() =>
   userStore.isLoggedIn ? '/login' : createLoginPath(route.fullPath)
 )
-const { isDevelopment } = useArtworkDetailStyle()
-
 onClickOutside(userLinkRef, () => {
   showUserDropdown.value = false
 })

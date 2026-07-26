@@ -11,7 +11,8 @@
 <script lang="ts" setup>
 const props = withDefaults(
   defineProps<{
-    status?: 'warning' | '500' | 'error' | 'info' | 'success' | '404' | '403' | '418'
+    status?:
+      'warning' | '500' | 'error' | 'info' | 'success' | '404' | '403' | '418'
     title?: string
     description?: string
   }>(),
@@ -42,7 +43,8 @@ const statusEmoji = computed(() => {
 }
 
 .fnb-result__status {
-  font-family: var(--fnb-font-display);
+  color: var(--pf-pink);
+  font-family: inherit;
   font-size: 4rem;
   font-weight: 900;
   line-height: 1.2;
@@ -50,14 +52,15 @@ const statusEmoji = computed(() => {
 }
 
 .fnb-result__title {
-  font-family: var(--fnb-font-display);
+  color: var(--pf-text);
+  font-family: inherit;
   font-size: 1.5rem;
   font-weight: 900;
   margin-bottom: 0.5rem;
 }
 
 .fnb-result__description {
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   margin-bottom: 1rem;
 }
 

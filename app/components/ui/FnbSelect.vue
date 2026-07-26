@@ -1,30 +1,26 @@
 <template lang="pug">
-.fnb-select(:class='{ open }', ref='selectRef')
+.fnb-select(:class='{ open }' ref='selectRef')
   button.fnb-select-trigger(
-    @click='open = !open',
-    @keydown='onTriggerKeydown',
-    type='button',
-    role='combobox',
-    :aria-expanded='open',
-    aria-haspopup='listbox',
-    :aria-activedescendant='open ? `fnb-opt-${modelValue}` : undefined'
+    :aria-activedescendant='open ? `fnb-opt-${modelValue}` : undefined',
+    :aria-expanded='open'
+    @click='open = !open'
+    @keydown='onTriggerKeydown'
+    aria-haspopup='listbox'
+    role='combobox'
+    type='button'
   )
     span.fnb-select-label {{ currentLabel }}
     span.fnb-select-arrow(:class='{ flipped: open }') ▼
   Transition(name='fnb-select-dropdown')
-    ul.fnb-select-dropdown(
-      v-if='open',
-      role='listbox',
-      ref='dropdownRef'
-    )
+    ul.fnb-select-dropdown(ref='dropdownRef' role='listbox' v-if='open')
       li.fnb-select-option(
-        v-for='(opt, i) in options',
-        :key='opt.value',
-        :id='`fnb-opt-${opt.value}`',
-        :class='{ selected: opt.value === modelValue, focused: i === focusedIndex }',
         :aria-selected='opt.value === modelValue',
-        role='option',
+        :class='{ selected: opt.value === modelValue, focused: i === focusedIndex }',
+        :id='`fnb-opt-${opt.value}`',
+        :key='opt.value'
         @click='select(opt.value)'
+        role='option'
+        v-for='(opt, i) in options'
       ) {{ opt.label }}
 </template>
 
@@ -61,7 +57,9 @@ function onTriggerKeydown(e: KeyboardEvent) {
       e.preventDefault()
       if (!open.value) {
         open.value = true
-        focusedIndex.value = props.options.findIndex((o) => o.value === props.modelValue)
+        focusedIndex.value = props.options.findIndex(
+          (o) => o.value === props.modelValue
+        )
         if (focusedIndex.value === -1) focusedIndex.value = 0
       } else {
         moveFocus(e.key === 'ArrowDown' ? 1 : -1)
@@ -75,7 +73,9 @@ function onTriggerKeydown(e: KeyboardEvent) {
       } else {
         open.value = !open.value
         if (open.value) {
-          focusedIndex.value = props.options.findIndex((o) => o.value === props.modelValue)
+          focusedIndex.value = props.options.findIndex(
+            (o) => o.value === props.modelValue
+          )
           if (focusedIndex.value === -1) focusedIndex.value = 0
         }
       }
@@ -109,24 +109,30 @@ onClickOutside(selectRef, () => {
 
 .fnb-select-trigger {
   width: 100%;
-  @include fnb-border-sm;
-  @include fnb-shadow-xs;
-  padding: 0.3rem 0.75rem;
-  background: var(--fnb-surface);
+  min-height: 36px;
+  padding: 0.35rem 0.8rem;
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 10px;
+  box-shadow: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.4em;
-  font-weight: 700;
-  font-size: 0.85rem;
+  font-weight: 650;
+  font-size: 0.8rem;
   font-family: inherit;
-  color: var(--fnb-text);
   transition: all 150ms;
 
   &:hover {
-    transform: translate(1.5px, 1.5px);
-    box-shadow: none;
+    border-color: color-mix(in srgb, var(--pf-pink) 38%, var(--pf-line));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pf-pink);
+    outline-offset: 2px;
   }
 }
 
@@ -143,9 +149,11 @@ onClickOutside(selectRef, () => {
   top: calc(100% + 4px);
   left: 0;
   width: 100%;
-  @include fnb-border-sm;
-  @include fnb-shadow-sm;
-  background: var(--fnb-surface);
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(46 34 54 / 14%);
   z-index: 50;
   overflow: hidden;
   list-style: none;
@@ -161,13 +169,13 @@ onClickOutside(selectRef, () => {
 
   &:hover,
   &.focused {
-    background: var(--fnb-highlight);
-    color: var(--fnb-on-light);
+    background: var(--pf-bg);
+    color: var(--pf-text);
   }
 
   &.selected {
-    background: var(--fnb-brand);
-    color: var(--fnb-on-brand);
+    background: var(--pf-soft-pink);
+    color: var(--pf-pink);
     font-weight: 700;
   }
 }

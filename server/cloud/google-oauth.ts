@@ -1,8 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
 
-export const GOOGLE_DRIVE_CLIENT_ID =
-  'REDACTED_GOOGLE_CLIENT_ID'
-const GOOGLE_DRIVE_CLIENT_SECRET = 'REDACTED_GOOGLE_CLIENT_SECRET'
 export const GOOGLE_DRIVE_SCOPE =
   'https://www.googleapis.com/auth/drive.appdata'
 
@@ -39,18 +36,14 @@ export function resolveGoogleOAuthClient(
   env: GoogleOAuthEnvironment = process.env
 ): GoogleOAuthClient {
   const clientId = env.GOOGLE_DRIVE_CLIENT_ID?.trim()
-  const clientSecret = env.GOOGLE_DRIVE_CLIENT_SECRET?.trim()
-  if (Boolean(clientId) !== Boolean(clientSecret)) {
-    throw new Error(
-      'GOOGLE_DRIVE_CLIENT_ID and GOOGLE_DRIVE_CLIENT_SECRET must be configured together'
-    )
+  if (!clientId) {
+    throw new Error('GOOGLE_DRIVE_CLIENT_ID is not configured')
   }
-  return clientId && clientSecret
-    ? { clientId, clientSecret }
-    : {
-        clientId: GOOGLE_DRIVE_CLIENT_ID,
-        clientSecret: GOOGLE_DRIVE_CLIENT_SECRET,
-      }
+  const clientSecret = env.GOOGLE_DRIVE_CLIENT_SECRET?.trim()
+  if (!clientSecret) {
+    throw new Error('GOOGLE_DRIVE_CLIENT_SECRET is not configured')
+  }
+  return { clientId, clientSecret }
 }
 
 export function googleCodeChallenge(codeVerifier: string): string {

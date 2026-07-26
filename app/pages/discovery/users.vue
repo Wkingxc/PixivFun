@@ -4,26 +4,26 @@
   .login-prompt(v-if='!userStore.isLoggedIn')
     p 推荐用户需要登录后查看
     FnbButton(
-      size='sm',
-      variant='primary',
-      tag='RouterLink',
+      size='sm'
+      tag='RouterLink'
       to='/login?back=/discovery/users'
+      variant='primary'
     )
       template(#icon): ITablerLogin
       | 登录
 
   template(v-else)
     .user-list(v-if='visibleUsers.length')
-      Card(v-for='u in visibleUsers', :key='u.userId')
-        FollowUserCard(:user='u')
+      FollowUserCard(:key='u.userId', :user='u' v-for='u in visibleUsers')
     .user-list(v-else-if='discoveryStore.loadingUserDiscovery')
-      Card(v-for='n in 4', :key='n')
-        FollowUserCard
+      FollowUserCard(:key='n' v-for='n in 4')
 
-    .discover-footer(v-if='!discoveryStore.loadingUserDiscovery && visibleUsers.length')
+    .discover-footer(
+      v-if='!discoveryStore.loadingUserDiscovery && visibleUsers.length'
+    )
       .loading-more(v-if='discoveryStore.loadingMoreUserDiscovery')
-        FnbSkeleton(block, height='2rem', width='200px')
-      div(v-else-if='!atEnd', ref='scrollSentinel')
+        FnbSkeleton(block height='2rem' width='200px')
+      div(ref='scrollSentinel' v-else-if='!atEnd')
 </template>
 
 <script lang="ts" setup>
@@ -79,7 +79,11 @@ function maybeFetch() {
 }
 
 // session init is async — react to login state becoming available
-watch(() => userStore.isLoggedIn, () => maybeFetch(), { immediate: true })
+watch(
+  () => userStore.isLoggedIn,
+  () => maybeFetch(),
+  { immediate: true }
+)
 onMounted(maybeFetch)
 </script>
 
@@ -110,7 +114,7 @@ onMounted(maybeFetch)
 .login-prompt {
   padding: 2rem;
   text-align: center;
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
 
   p {
     margin-bottom: 0.75rem;

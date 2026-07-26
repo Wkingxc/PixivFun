@@ -1,5 +1,5 @@
 <template lang="pug">
-#novel-series-view
+#novel-series-view.modern-route-page
   //- Loading
   section.placeholder(v-if='loading')
     .body-inner
@@ -14,7 +14,7 @@
     .body-inner
       .series-hero
         .cover(v-if='coverUrl')
-          img(:alt='series.title' :src='coverUrl')
+          img(:alt='series.title', :src='coverUrl')
         .summary
           h1(:class='{ danger: series.xRestrict }') {{ series.title }}
           .meta
@@ -28,8 +28,8 @@
           .tags
             ArtTag(
               :key='tag',
-              :tag='tag',
               :search-query='{ type: "novels", s_mode: "s_tag_only" }',
+              :tag='tag'
               v-for='tag in series.tags'
             )
           .actions
@@ -50,7 +50,11 @@
           .fnb-empty(v-if='!seriesNovels.length && !contentTitles.length') 这个系列还没有可显示的章节
           NovelList(:list='seriesNovels' v-else-if='seriesNovels.length')
           ul.title-list(v-else)
-            li(:class='{ unavailable: !item.available }' :key='item.id' v-for='item in contentTitles')
+            li(
+              :class='{ unavailable: !item.available }',
+              :key='item.id'
+              v-for='item in contentTitles'
+            )
               RouterLink(:to='`/novels/${item.id}`' v-if='item.available') {{ item.title }}
               span(v-else) {{ item.title }}
       aside.side-area
@@ -60,9 +64,15 @@
             span {{ series.userName }}
         Card(title='快速入口')
           .quick-links
-            RouterLink.plain(:to='`/novels/${series.firstNovelId}`' v-if='series.firstNovelId')
+            RouterLink.plain(
+              :to='`/novels/${series.firstNovelId}`'
+              v-if='series.firstNovelId'
+            )
               FnbButton(size='sm') 第一篇
-            RouterLink.plain(:to='`/novels/${series.latestNovelId}`' v-if='series.latestNovelId')
+            RouterLink.plain(
+              :to='`/novels/${series.latestNovelId}`'
+              v-if='series.latestNovelId'
+            )
               FnbButton(size='sm') 最新篇
 
   //- Error
@@ -94,12 +104,13 @@ const series = ref<NovelSeries>()
 const seriesNovels = ref<NovelInfo[]>([])
 const contentTitles = ref<NovelContentTitle[]>([])
 
-const coverUrl = computed(() =>
-  series.value?.cover?.urls.original ||
-  series.value?.cover?.urls['1200x1200'] ||
-  series.value?.cover?.urls['480mw'] ||
-  series.value?.firstEpisode?.url ||
-  ''
+const coverUrl = computed(
+  () =>
+    series.value?.cover?.urls.original ||
+    series.value?.cover?.urls['1200x1200'] ||
+    series.value?.cover?.urls['480mw'] ||
+    series.value?.firstEpisode?.url ||
+    ''
 )
 const captionText = computed(() =>
   series.value?.caption ? stripHtmlText(series.value.caption).trim() : ''
@@ -143,7 +154,7 @@ onMounted(() => {
 
 <style scoped lang="scss">
 section {
-  padding-top: 1rem;
+  padding-top: 0;
 }
 
 .series-hero {
@@ -159,18 +170,19 @@ section {
 
 .cover img {
   width: 100%;
-  @include fnb-border;
-  @include fnb-shadow;
+  border: 1px solid var(--pf-line);
+  border-radius: 16px;
+  box-shadow: var(--pf-card-shadow);
 }
 
 h1 {
-  --bg-color: var(--fnb-brand);
-  display: inline-block;
-  box-shadow: 0 4px 0 var(--bg-color);
   margin: 0 0 1rem;
+  color: var(--pf-text);
+  font-family: inherit;
+  font-size: clamp(1.45rem, 2.5vw, 2rem);
 
   &.danger {
-    --bg-color: var(--fnb-danger);
+    color: #ed5a68;
   }
 }
 
@@ -184,7 +196,11 @@ h1 {
 }
 
 .meta span {
-  color: var(--fnb-text-muted);
+  padding: 3px 9px;
+  color: var(--pf-muted);
+  background: var(--pf-bg);
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
 }
 
 .description {
@@ -223,7 +239,8 @@ h1 {
   img {
     width: 2rem;
     height: 2rem;
-    @include fnb-border-sm;
+    object-fit: cover;
+    border-radius: 50%;
   }
 }
 
@@ -235,7 +252,7 @@ h1 {
 
   li {
     padding: 0.75rem 0;
-    border-bottom: 3px solid var(--fnb-divider);
+    border-bottom: 1px solid var(--pf-line);
   }
 
   li:last-child {
@@ -243,13 +260,13 @@ h1 {
   }
 
   .unavailable {
-    color: var(--fnb-text-muted);
+    color: var(--pf-muted);
   }
 }
 
 .fnb-empty {
   text-align: center;
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   padding: 2rem;
 }
 </style>

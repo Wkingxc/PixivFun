@@ -1,12 +1,19 @@
 {
   "name": "pixiv-now",
-  "version": "5.0.0",
+  "productName": "PixivFun",
+  "version": "1.0.0",
+  "description": "面向个人使用的 Pixiv 阅读与本地云同步工具",
   "private": true,
+  "main": "desktop/main.mjs",
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "nuxt dev",
     "build": "nuxt build",
+    "desktop:prepare": "node script/prepare-desktop-build.mjs && pwsh -NoProfile -File script/prepare-desktop-icon.ps1",
+    "desktop:start": "pnpm desktop:prepare && electron .",
+    "desktop:clean": "node script/clean-desktop-release.mjs",
+    "desktop:dist": "pnpm build && pnpm desktop:prepare && pnpm desktop:clean && electron-builder --win dir --x64 && node script/finalize-desktop-release.mjs",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "test": "node --test tests/*.test.ts",
@@ -42,6 +49,8 @@
     "@vueuse/nuxt": "^14.3.0",
     "cheerio": "^1.2.0",
     "cookie": "^1.1.1",
+    "electron": "43.2.0",
+    "electron-builder": "26.15.3",
     "lodash.escaperegexp": "^4.1.2",
     "nuxt": "^4.4.8",
     "picocolors": "^1.1.1",
@@ -52,6 +61,44 @@
     "typescript": "^6.0.3",
     "undici": "^8.5.0",
     "unplugin-icons": "^23.0.1"
+  },
+  "build": {
+    "appId": "fun.pixiv.desktop",
+    "artifactName": "PixivFun-${version}-win-${arch}.${ext}",
+    "asar": true,
+    "directories": {
+      "output": ".desktop-release"
+    },
+    "files": [
+      "desktop/*.mjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".output",
+        "to": "server"
+      },
+      {
+        "from": "desktop/generated/google-oauth.json",
+        "to": "config/google-oauth.json"
+      },
+      {
+        "from": "desktop/generated/PixivFunIcon.png",
+        "to": "icon/PixivFunIcon.png"
+      }
+    ],
+    "win": {
+      "executableName": "PixivFun",
+      "icon": "desktop/generated/PixivFunIcon.png",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
   },
   "packageManager": "pnpm@11.15.1"
 }

@@ -21,19 +21,21 @@ const props = withDefaults(
 
 const fillStyle = computed(() => ({
   width: `${Math.min(100, Math.max(0, props.percentage))}%`,
-  backgroundColor: props.color || 'var(--fnb-brand)',
+  backgroundColor: props.color || 'var(--pf-blue)',
   height: `${props.height}px`,
 }))
 </script>
 
 <style scoped lang="scss">
 .fnb-progress__track {
-  @include fnb-border-sm;
-  background: var(--fnb-surface);
+  background: var(--pf-bg);
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
   overflow: hidden;
 }
 
 .fnb-progress__fill {
+  border-radius: inherit;
   transition: width 300ms ease;
 }
 

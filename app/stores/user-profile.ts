@@ -31,10 +31,10 @@ export const useUserProfileStore = defineStore('user-profile', () => {
 
   async function fetchBookmarks(
     userId: string,
-    params: { offset: number; hidden: boolean }
+    params: { offset: number; hidden: boolean; tag?: string }
   ): Promise<{ works: ArtworkInfo[]; total: number }> {
     return pixivClient.getUserBookmarks(userId, {
-      tag: '',
+      tag: params.tag ?? '',
       offset: params.offset,
       limit: BOOKMARK_PAGE_SIZE,
       rest: params.hidden ? 'hide' : 'show',

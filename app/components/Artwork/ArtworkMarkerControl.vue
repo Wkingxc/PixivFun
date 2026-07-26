@@ -1,5 +1,5 @@
 <template lang="pug">
-.artwork-marker-floating
+.artwork-marker-floating(v-if='markerButtonVisible')
   Transition(name='marker-panel')
     aside.artwork-marker-panel(aria-label='已访问作品标记设置' v-if='open')
       .marker-panel-heading
@@ -21,6 +21,21 @@
         input(
           :checked='marker.markArtworkTitle'
           @change='changeBoolean("markArtworkTitle", $event)'
+          type='checkbox'
+        )
+
+      label.marker-setting.marker-setting--author
+        span 作者颜色
+        input(
+          :value='authorColorHex'
+          @change='changeAuthorColor'
+          aria-label='已访问作者名称颜色'
+          type='color'
+        )
+        input(
+          :checked='marker.markAuthorName'
+          @change='changeBoolean("markAuthorName", $event)'
+          aria-label='标记已访问作者名称'
           type='checkbox'
         )
 
@@ -77,10 +92,17 @@ import type { LocalPreferences } from '~~/shared/local-preferences'
 
 const store = useLocalPersistenceStore()
 const open = ref(false)
+const { markerButtonVisible } = useFloatingControlsVisibility()
 let persistTimer: ReturnType<typeof setTimeout> | undefined
 const marker = computed(() => store.viewedMarker)
 const colorHex = computed(() => {
   const { r, g, b } = marker.value.artworkVisitedColor
+  return `#${[r, g, b]
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')}`
+})
+const authorColorHex = computed(() => {
+  const { r, g, b } = marker.value.authorVisitedColor
   return `#${[r, g, b]
     .map((value) => value.toString(16).padStart(2, '0'))
     .join('')}`
@@ -129,6 +151,20 @@ function changeColor(event: Event) {
   })
 }
 
+function changeAuthorColor(event: Event) {
+  const value = (event.target as HTMLInputElement).value
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value)
+  if (!match) return
+  patchMarker({
+    authorVisitedColor: {
+      r: Number.parseInt(match[1]!, 16),
+      g: Number.parseInt(match[2]!, 16),
+      b: Number.parseInt(match[3]!, 16),
+      a: marker.value.authorVisitedColor.a,
+    },
+  })
+}
+
 function changeOpacity(event: Event) {
   patchMarker(
     {
@@ -139,6 +175,10 @@ function changeOpacity(event: Event) {
     true
   )
 }
+
+watch(markerButtonVisible, (visible) => {
+  if (!visible) open.value = false
+})
 
 onBeforeUnmount(() => {
   if (persistTimer) persistMarker()
@@ -271,6 +311,10 @@ onBeforeUnmount(() => {
       color: var(--pf-muted);
       text-align: right;
     }
+  }
+
+  &--author {
+    grid-template-columns: minmax(0, 1fr) 42px 17px;
   }
 }
 

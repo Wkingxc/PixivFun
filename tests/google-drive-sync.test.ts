@@ -49,34 +49,32 @@ test('Google Desktop OAuth 使用最小 Drive 权限、PKCE 和回环回调', ()
   assert.match(request.codeVerifier, /^[A-Za-z0-9_-]{43,128}$/)
 })
 
-test('Google Desktop OAuth 默认凭据可直接使用且允许成对覆盖', () => {
-  const bundled = resolveGoogleOAuthClient({})
-  assert.equal(
-    bundled.clientId,
-    'REDACTED_GOOGLE_CLIENT_ID'
-  )
-  assert.match(bundled.clientSecret, /^GOCSPX-\S+$/)
-
-  assert.deepEqual(
-    resolveGoogleOAuthClient({
-      GOOGLE_DRIVE_CLIENT_ID: 'custom-client.apps.googleusercontent.com',
-      GOOGLE_DRIVE_CLIENT_SECRET: 'custom-client-secret',
-    }),
-    {
-      clientId: 'custom-client.apps.googleusercontent.com',
-      clientSecret: 'custom-client-secret',
-    }
+test('Google Desktop OAuth 要求本地配置完整的客户端凭据', () => {
+  assert.throws(
+    () => resolveGoogleOAuthClient({}),
+    /GOOGLE_DRIVE_CLIENT_ID is not configured/
   )
   assert.throws(
     () =>
       resolveGoogleOAuthClient({
-        GOOGLE_DRIVE_CLIENT_ID: 'incomplete-client.apps.googleusercontent.com',
+        GOOGLE_DRIVE_CLIENT_ID: 'custom-client.apps.googleusercontent.com',
       }),
-    /must be configured together/
+    /GOOGLE_DRIVE_CLIENT_SECRET is not configured/
+  )
+
+  assert.deepEqual(
+    resolveGoogleOAuthClient({
+      GOOGLE_DRIVE_CLIENT_ID: 'custom-client.apps.googleusercontent.com',
+      GOOGLE_DRIVE_CLIENT_SECRET: 'test-client-secret',
+    }),
+    {
+      clientId: 'custom-client.apps.googleusercontent.com',
+      clientSecret: 'test-client-secret',
+    }
   )
 })
 
-test('Google Token 交换和刷新只在服务端请求中提交客户端凭据', async () => {
+test('Google Desktop Token 交换和刷新使用 PKCE 且提交客户端 secret', async () => {
   const requests: URLSearchParams[] = []
   const fetch = async (
     _input: string | URL,

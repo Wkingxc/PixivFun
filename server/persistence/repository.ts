@@ -362,6 +362,27 @@ export class LocalPersistenceRepository {
       .run(this.profileId, authorId)
   }
 
+  getVisitedAuthorIds(ids: unknown[]): string[] {
+    const normalized = Array.from(
+      new Set(ids.map((id) => requirePixivId(id, 'authorId')))
+    )
+    const visited = new Set<string>()
+    for (let index = 0; index < normalized.length; index += MAX_BATCH_IDS) {
+      const batch = normalized.slice(index, index + MAX_BATCH_IDS)
+      if (!batch.length) continue
+      const placeholders = batch.map(() => '?').join(', ')
+      const rows = this.database
+        .prepare(
+          `SELECT author_id
+           FROM author_visits
+           WHERE profile_id = ? AND author_id IN (${placeholders})`
+        )
+        .all(this.profileId, ...batch) as Array<{ author_id: string }>
+      for (const row of rows) visited.add(row.author_id)
+    }
+    return normalized.filter((id) => visited.has(id))
+  }
+
   getCache(namespace: string, key: string, now = Date.now()): unknown | null {
     const row = this.database
       .prepare(

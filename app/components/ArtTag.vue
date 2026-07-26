@@ -69,7 +69,7 @@ function handleActivate(event: Event): void {
 }
 
 .artwork-tag__translation {
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   font-weight: 400;
 }
 </style>

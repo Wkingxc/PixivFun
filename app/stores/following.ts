@@ -20,7 +20,8 @@ export const useFollowingStore = defineStore('following', () => {
 
   async function fetchFollowingList(
     userId: string,
-    hidden: boolean
+    hidden: boolean,
+    page = 1
   ): Promise<void> {
     const pixivClient = usePixivClient()
     const list = hidden ? hiddenList : publicList
@@ -32,11 +33,11 @@ export const useFollowingStore = defineStore('following', () => {
 
     try {
       const data = await pixivClient.getUserFollowing(userId, {
-        offset: list.value.length,
+        offset: (page - 1) * 24,
         limit: 24,
         rest: hidden ? 'hide' : 'show',
       })
-      list.value.push(...data.users)
+      list.value = data.users
       total.value = data.total
       title.value = data.extraData.meta.ogp.title || 'Following'
     } finally {
@@ -54,31 +55,65 @@ export const useFollowingStore = defineStore('following', () => {
     title.value = 'Following'
   }
 
-  // Following latest state
+  // Following latest state. One Pixiv page contains up to 60 works. The
+  // six-column desktop grid therefore stays within the requested ten rows.
+  const LATEST_PAGE_SIZE = 60
   const latestIllusts = ref<ArtworkInfo[]>([])
-  const latestNextPage = ref(1)
+  const latestPage = ref(1)
+  const latestPageSize = ref(LATEST_PAGE_SIZE)
+  const latestLastPage = ref<number>()
   const latestHasNextPage = ref(true)
   const latestLoading = ref(false)
+  const latestPageCache = new Map<number, ArtworkInfo[]>()
+  let latestRequestId = 0
 
-  async function fetchLatest(): Promise<void> {
+  const latestItemCount = computed(() => {
+    if (latestLastPage.value) {
+      const lastPageItems =
+        latestPageCache.get(latestLastPage.value)?.length ?? 0
+      return (latestLastPage.value - 1) * LATEST_PAGE_SIZE + lastPageItems
+    }
+    return latestPage.value * LATEST_PAGE_SIZE + 1
+  })
+
+  async function fetchLatest(page = latestPage.value): Promise<void> {
     if (latestLoading.value) return
+    const cached = latestPageCache.get(page)
+    if (cached) {
+      latestPage.value = page
+      latestIllusts.value = cached
+      latestHasNextPage.value =
+        !latestLastPage.value || page < latestLastPage.value
+      return
+    }
+
+    const requestId = ++latestRequestId
     latestLoading.value = true
     try {
       const data = await usePixivClient().getFollowLatest({
-        p: latestNextPage.value,
+        p: page,
         mode: 'all',
       })
-      latestIllusts.value.push(...data.thumbnails.illust)
-      latestNextPage.value++
+      if (requestId !== latestRequestId) return
+
+      const works = data.thumbnails.illust.slice(0, LATEST_PAGE_SIZE)
+      latestPageCache.set(page, works)
+      latestPage.value = page
+      latestIllusts.value = works
       latestHasNextPage.value = !data.page.isLastPage
+      if (data.page.isLastPage) latestLastPage.value = page
     } finally {
-      latestLoading.value = false
+      if (requestId === latestRequestId) latestLoading.value = false
     }
   }
 
   function resetLatest() {
+    latestRequestId += 1
+    latestPageCache.clear()
     latestIllusts.value = []
-    latestNextPage.value = 1
+    latestPage.value = 1
+    latestPageSize.value = LATEST_PAGE_SIZE
+    latestLastPage.value = undefined
     latestHasNextPage.value = true
     latestLoading.value = false
   }
@@ -96,7 +131,9 @@ export const useFollowingStore = defineStore('following', () => {
     fetchFollowingList,
     resetFollowing,
     latestIllusts,
-    latestNextPage,
+    latestPage,
+    latestPageSize,
+    latestItemCount,
     latestHasNextPage,
     latestLoading,
     fetchLatest,

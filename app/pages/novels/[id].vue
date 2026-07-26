@@ -1,5 +1,5 @@
 <template lang="pug">
-#novel-view
+#novel-view.modern-route-page
   //- Loading
   section.placeholder(v-if='loading')
     .body-inner
@@ -14,7 +14,7 @@
     .body-inner
       .novel-hero
         .cover(v-if='novel.coverUrl')
-          img(:alt='novel.title' :src='novel.coverUrl')
+          img(:alt='novel.title', :src='novel.coverUrl')
         .summary
           h1(:class='{ danger: novel.xRestrict }') {{ novel.title }}
           .meta
@@ -27,7 +27,7 @@
               IFasClock(aria-hidden='true')
               | {{ Math.ceil(novel.readingTime / 60) }} 分钟
           .actions
-            FnbButton(size='sm', variant='primary', @click='scrollToReader')
+            FnbButton(@click='scrollToReader' size='sm' variant='primary')
               template(#icon): IFasBookOpen
               | 立即阅读
             FnbButton(
@@ -55,21 +55,21 @@
           .tags
             ArtTag(
               :key='tag.tag',
-              :tag='tag.tag',
               :search-query='{ type: "novels", s_mode: "s_tag_only" }',
+              :tag='tag.tag'
               v-for='tag in novel.tags.tags'
             )
 
     .body-inner.content-grid
       main.reader-area
         Card(title='正文')
-          NovelReader#reader(:blocks='contentBlocks', ref='readerRef')
+          NovelReader#reader(:blocks='contentBlocks' ref='readerRef')
         Card.comments(title='评论')
           CommentArea(
             :author-id='novel.userId',
             :count='novel.commentCount',
             :disabled='novel.commentOff === 1',
-            :id='novel.id',
+            :id='novel.id'
             type='novel'
           )
 
@@ -78,15 +78,17 @@
           AuthorCard(:user='user')
         Card(title='系列' v-if='novel.seriesNavData')
           .series-nav
-            RouterLink.series-title(:to='`/novel/series/${novel.seriesNavData.seriesId}`') {{ novel.seriesNavData.title }}
+            RouterLink.series-title(
+              :to='`/novel/series/${novel.seriesNavData.seriesId}`'
+            ) {{ novel.seriesNavData.title }}
             .series-links
               RouterLink(
-                v-if='novel.seriesNavData.prev?.available !== false && novel.seriesNavData.prev?.id'
                 :to='`/novels/${novel.seriesNavData.prev.id}`'
+                v-if='novel.seriesNavData.prev?.available !== false && novel.seriesNavData.prev?.id'
               ) 上一篇：{{ novel.seriesNavData.prev.title }}
               RouterLink(
-                v-if='novel.seriesNavData.next?.available !== false && novel.seriesNavData.next?.id'
                 :to='`/novels/${novel.seriesNavData.next.id}`'
+                v-if='novel.seriesNavData.next?.available !== false && novel.seriesNavData.next?.id'
               ) 下一篇：{{ novel.seriesNavData.next.title }}
         Card(title='作者的其他小说' v-if='relatedNovels.length')
           NovelList(:list='relatedNovels')
@@ -255,7 +257,7 @@ onMounted(() => {
 
 <style scoped lang="scss">
 section {
-  padding-top: 1rem;
+  padding-top: 0;
 }
 
 .summary {
@@ -275,18 +277,19 @@ section {
 
 .cover img {
   width: 100%;
-  @include fnb-border;
-  @include fnb-shadow;
+  border: 1px solid var(--pf-line);
+  border-radius: 16px;
+  box-shadow: var(--pf-card-shadow);
 }
 
 h1 {
-  --bg-color: var(--fnb-brand);
-  display: inline-block;
-  box-shadow: 0 4px 0 var(--bg-color);
   margin: 0 0 1rem;
+  color: var(--pf-text);
+  font-family: inherit;
+  font-size: clamp(1.45rem, 2.5vw, 2rem);
 
   &.danger {
-    --bg-color: var(--fnb-danger);
+    color: #ed5a68;
   }
 }
 
@@ -312,10 +315,11 @@ h1 {
   gap: 0.3rem;
   padding: 0.18rem 0.55rem;
   font-size: 0.78rem;
-  font-weight: 800;
-  background: var(--fnb-surface);
-  color: var(--fnb-text);
-  @include fnb-border-sm;
+  font-weight: 700;
+  background: var(--pf-bg);
+  color: var(--pf-text);
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
 
   svg {
     font-size: 0.85em;
@@ -323,14 +327,14 @@ h1 {
   }
 
   &.danger {
-    background: var(--fnb-danger);
-    color: var(--fnb-on-brand);
-    border-color: var(--fnb-border);
+    background: #ed5a68;
+    color: #fff;
+    border-color: #ed5a68;
   }
 
   &.original {
-    background: var(--fnb-highlight);
-    color: var(--fnb-on-light);
+    background: var(--pf-soft-pink);
+    color: var(--pf-pink);
   }
 }
 
@@ -338,9 +342,9 @@ h1 {
 .stats {
   display: inline-flex;
   margin: 1rem 0;
-  background: var(--fnb-surface);
-  @include fnb-border-sm;
-  @include fnb-shadow-xs;
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
 }
 
 .stat-item {
@@ -352,17 +356,17 @@ h1 {
   font-size: 0.92rem;
 
   & + .stat-item {
-    border-left: 2px solid var(--fnb-border);
+    border-left: 1px solid var(--pf-line);
   }
 
   .i-like {
-    color: var(--fnb-brand);
+    color: var(--pf-blue);
   }
   .i-bookmark {
-    color: var(--fnb-bookmark);
+    color: var(--pf-pink);
   }
   .i-view {
-    color: var(--fnb-accent);
+    color: var(--pf-muted);
   }
 }
 
@@ -377,7 +381,7 @@ h1 {
 }
 
 .no-desc {
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
 }
 
 .content-grid {

@@ -2,12 +2,16 @@
 .fnb-tabs
   .fnb-tabs__nav
     button.fnb-tabs__tab(
-      v-for='tab in tabs'
+      :class='{ "fnb-tabs__tab--active": modelValue === tab.key }',
       :key='tab.key'
-      :class='{ "fnb-tabs__tab--active": modelValue === tab.key }'
       @click='$emit("update:modelValue", tab.key)'
+      v-for='tab in tabs'
     ) {{ tab.label }}
-  .fnb-tabs__panel(v-for='tab in tabs' :key='tab.key' v-show='modelValue === tab.key')
+  .fnb-tabs__panel(
+    :key='tab.key'
+    v-for='tab in tabs'
+    v-show='modelValue === tab.key'
+  )
     slot(:name='`panel-${tab.key}`')
 </template>
 
@@ -25,34 +29,37 @@ defineProps<{
 <style scoped lang="scss">
 .fnb-tabs__nav {
   display: flex;
-  @include fnb-border;
-  padding: 3px;
-  gap: 3px;
-  background: var(--fnb-surface);
+  gap: 4px;
+  padding: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--pf-line);
 }
 
 .fnb-tabs__tab {
-  flex: 1;
-  padding: 0.3rem 1rem;
+  flex: 0 1 auto;
+  padding: 10px 18px 9px;
   background: transparent;
-  border: 3px solid transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
   font-family: inherit;
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 0.82rem;
+  font-weight: 680;
   cursor: pointer;
-  transition: color 150ms, background 150ms;
-  color: var(--fnb-text-muted);
+  transition:
+    color 150ms,
+    background 150ms;
+  color: var(--pf-muted);
 
   &:hover:not(.fnb-tabs__tab--active) {
-    color: var(--fnb-text);
-    background: color-mix(in srgb, var(--fnb-brand) 15%, var(--fnb-surface));
+    color: var(--pf-text);
+    background: var(--pf-soft-pink);
   }
 
   &--active {
-    color: var(--fnb-on-brand);
-    font-weight: 900;
-    background: var(--fnb-brand);
-    border-color: var(--fnb-border);
+    color: var(--pf-pink);
+    font-weight: 760;
+    background: transparent;
+    border-color: var(--pf-pink);
   }
 }
 

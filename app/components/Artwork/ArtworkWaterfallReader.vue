@@ -1,7 +1,8 @@
 <template lang="pug">
 Teleport(to='body')
-  Transition(name='reader-fade')
+  Transition(name='reader-cover')
     section.artwork-waterfall-reader(
+      @click='handleReaderBackgroundClick'
       @scroll.passive='scheduleCurrentPageUpdate'
       aria-label='瀑布阅读'
       aria-modal='true'
@@ -120,9 +121,13 @@ Teleport(to='body')
 
   Transition(name='reader-fade')
     section.reader-lightbox(
-      @click.self='closeViewer'
+      :class='{ "reader-lightbox--cursor-nav": viewerPointer.direction }'
+      @click='handleViewerClick'
+      @pointerleave='clearViewerPointer'
+      @pointermove='handleViewerPointerMove'
       aria-label='原图查看器'
       aria-modal='true'
+      ref='lightboxRef'
       role='dialog'
       v-if='active && viewerOpen'
     )
@@ -147,14 +152,6 @@ Teleport(to='body')
         type='button'
       )
         ITablerX(aria-hidden='true')
-      button.reader-lightbox__nav.reader-lightbox__nav--prev(
-        @click.stop='stepViewer(-1)'
-        aria-label='查看上一张原图'
-        title='上一张'
-        type='button'
-        v-if='viewerCanGoPrevious'
-      )
-        ITablerChevronLeft(aria-hidden='true')
       .reader-lightbox__stage(
         :class='{ "reader-lightbox__stage--spread": viewerEntries.length > 1 }'
         @click.stop
@@ -169,16 +166,16 @@ Teleport(to='body')
             :src='entry.page.urls.original',
             :width='entry.page.width'
             @error='handleImageError($event, entry.page.urls.regular)'
-            @load='markOriginalLoaded(entry.index)'
+            @load='handleViewerImageLoad(entry.index)'
           )
-      button.reader-lightbox__nav.reader-lightbox__nav--next(
-        @click.stop='stepViewer(1)'
-        aria-label='查看下一张原图'
-        title='下一张'
-        type='button'
-        v-if='viewerCanGoNext'
+      .reader-lightbox__cursor-nav(
+        :class='`reader-lightbox__cursor-nav--${viewerPointer.direction === -1 ? "prev" : "next"}`',
+        :style='viewerCursorStyle'
+        aria-hidden='true'
+        v-if='viewerPointer.direction'
       )
-        ITablerChevronRight(aria-hidden='true')
+        ITablerChevronLeft(v-if='viewerPointer.direction === -1')
+        ITablerChevronRight(v-else)
 
   .reader-floating(
     @pointerenter='cancelMenuCollapse'
@@ -327,7 +324,15 @@ const preloadStates = ref<PreloadState[]>([])
 const currentPageIndex = ref(0)
 const viewerIndex = ref(0)
 const readerRef = ref<HTMLElement | null>(null)
+const lightboxRef = ref<HTMLElement | null>(null)
 const waterfallRef = ref<{ renderer?: () => void } | null>(null)
+const viewerImageBounds = reactive({ left: 88, right: 1112 })
+const viewerPointer = reactive<{
+  direction: -1 | 1 | null
+  x: number
+  y: number
+}>({ direction: null, x: 0, y: 0 })
+const viewerTransitioning = ref(false)
 let previousBodyOverflow = ''
 let scrollFrame = 0
 let preloadGeneration = 0
@@ -336,6 +341,7 @@ let resolveActivePreload: ((loaded: boolean) => void) | null = null
 let menuCollapseTimer = 0
 let columnLayoutTimer = 0
 let downloadController: AbortController | null = null
+let viewerStepGeneration = 0
 
 const qualityOptions: { label: string; value: ReaderImageQuality }[] = [
   { label: '小图', value: 'small' },
@@ -418,6 +424,10 @@ const readerBreakpoints = computed(() => ({
   9999: { rowPerView: layoutColumns.value },
   760: { rowPerView: 1 },
 }))
+const viewerCursorStyle = computed(() => ({
+  left: `${viewerPointer.x}px`,
+  top: `${viewerPointer.y}px`,
+}))
 
 function handleTrigger() {
   cancelMenuCollapse()
@@ -446,24 +456,33 @@ function closeReader() {
   stopOriginalPreload()
   cancelMenuCollapse()
   downloadController?.abort()
+  viewerStepGeneration++
+  viewerTransitioning.value = false
+  clearViewerPointer()
   active.value = false
   menuOpen.value = false
   viewerOpen.value = false
   document.body.style.overflow = previousBodyOverflow
 }
 
-function openViewer(index: number) {
+async function openViewer(index: number) {
   viewerIndex.value = index
   viewerOpen.value = true
   menuOpen.value = false
+  await nextTick()
+  updateViewerNavBounds()
   if (preloadOriginals.value) void startOriginalPreload(index)
 }
 
 function closeViewer() {
+  viewerStepGeneration++
+  viewerTransitioning.value = false
+  clearViewerPointer()
   viewerOpen.value = false
 }
 
-function stepViewer(step: number) {
+async function stepViewer(step: number) {
+  if (viewerTransitioning.value) return
   const nextIndex = getViewerStepIndex(
     props.pages.length,
     viewerIndex.value,
@@ -471,8 +490,48 @@ function stepViewer(step: number) {
     doublePageMode.value
   )
   if (nextIndex === viewerIndex.value) return
+  const generation = ++viewerStepGeneration
+  const targetIndices = getViewerSpreadIndices(
+    props.pages.length,
+    nextIndex,
+    doublePageMode.value
+  )
+  viewerTransitioning.value = true
+  await Promise.all(targetIndices.map(prepareViewerImage))
+  if (
+    generation !== viewerStepGeneration ||
+    !viewerOpen.value ||
+    !active.value
+  ) {
+    return
+  }
   viewerIndex.value = nextIndex
+  await nextTick()
+  updateViewerNavBounds()
+  updateViewerPointerDirection()
+  viewerTransitioning.value = false
   if (preloadOriginals.value) void startOriginalPreload(viewerIndex.value)
+}
+
+function prepareViewerImage(index: number): Promise<void> {
+  const page = props.pages[index]
+  if (!page) return Promise.resolve()
+
+  return new Promise((resolve) => {
+    const image = new Image()
+    const finish = () => {
+      image.onload = null
+      image.onerror = null
+      void image
+        .decode()
+        .catch(() => {})
+        .finally(resolve)
+    }
+    image.onload = finish
+    image.onerror = resolve
+    image.src = page.urls.original
+    if (image.complete) finish()
+  })
 }
 
 function getGridFallback(page: ArtworkGallery): string {
@@ -491,6 +550,12 @@ function ensurePreloadStates() {
 function markOriginalLoaded(index: number) {
   ensurePreloadStates()
   preloadStates.value[index] = 'loaded'
+}
+
+async function handleViewerImageLoad(index: number) {
+  markOriginalLoaded(index)
+  await nextTick()
+  updateViewerNavBounds()
 }
 
 function handleGridImageLoad(index: number) {
@@ -611,6 +676,75 @@ function adjustColumns(step: number) {
 
 function syncReaderViewport() {
   readerViewportWidth.value = window.innerWidth
+  if (viewerOpen.value) updateViewerNavBounds()
+}
+
+function updateViewerNavBounds() {
+  const lightbox = lightboxRef.value
+  const viewportWidth = window.innerWidth
+  const images = lightbox
+    ? Array.from(
+        lightbox.querySelectorAll<HTMLImageElement>(
+          '.reader-lightbox__page img'
+        )
+      )
+    : []
+  const rects = images
+    .map((image) => image.getBoundingClientRect())
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+
+  viewerImageBounds.left = rects.length
+    ? Math.max(0, Math.min(...rects.map((rect) => rect.left)))
+    : Math.min(88, viewportWidth / 2)
+  viewerImageBounds.right = rects.length
+    ? Math.min(viewportWidth, Math.max(...rects.map((rect) => rect.right)))
+    : Math.max(viewportWidth - 88, viewportWidth / 2)
+}
+
+function getViewerPointerDirection(clientX: number): -1 | 1 | null {
+  if (clientX < viewerImageBounds.left && viewerCanGoPrevious.value) return -1
+  if (clientX > viewerImageBounds.right && viewerCanGoNext.value) return 1
+  return null
+}
+
+function updateViewerPointerDirection() {
+  viewerPointer.direction = getViewerPointerDirection(viewerPointer.x)
+}
+
+function handleViewerPointerMove(event: PointerEvent) {
+  viewerPointer.x = event.clientX
+  viewerPointer.y = event.clientY
+  const target = event.target as Element
+  viewerPointer.direction = target.closest('button, img')
+    ? null
+    : getViewerPointerDirection(event.clientX)
+}
+
+function clearViewerPointer() {
+  viewerPointer.direction = null
+}
+
+function handleViewerClick(event: MouseEvent) {
+  const target = event.target as Element
+  if (target.closest('button, img')) return
+  const direction = getViewerPointerDirection(event.clientX)
+  if (direction) {
+    void stepViewer(direction)
+    return
+  }
+  closeViewer()
+}
+
+function handleReaderBackgroundClick(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (
+    target.closest(
+      '.reader-heading, .reader-page, .reader-lightbox, .reader-toolbox, .reader-trigger'
+    )
+  ) {
+    return
+  }
+  closeReader()
 }
 
 function animateWaterfallColumns(nextColumns: number): boolean {
@@ -871,6 +1005,12 @@ watch(layoutMode, async (nextMode) => {
   waterfallRef.value?.renderer?.()
 })
 
+watch([viewerOpen, viewerPageIndices], async ([open]) => {
+  if (!open) return
+  await nextTick()
+  updateViewerNavBounds()
+})
+
 watch(
   () => props.illustId,
   () => {
@@ -896,7 +1036,8 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 1100;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: scroll;
   color: var(--pf-text);
   background:
     radial-gradient(
@@ -906,7 +1047,6 @@ onBeforeUnmount(() => {
     ),
     var(--pf-bg);
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
 }
 
 .reader-heading {
@@ -1295,56 +1435,39 @@ onBeforeUnmount(() => {
   }
 }
 
-.reader-lightbox__nav {
+.reader-lightbox--cursor-nav {
+  cursor: none;
+
+  button,
+  img {
+    cursor: pointer;
+  }
+}
+
+.reader-lightbox__cursor-nav {
   position: fixed;
-  top: 20%;
-  bottom: 20%;
-  z-index: 2;
-  display: flex;
-  width: min(18vw, 240px);
-  padding: 0 24px;
+  z-index: 5;
+  display: grid;
+  width: 44px;
+  height: 44px;
   color: var(--pf-pink);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  opacity: 0;
-  transition:
-    opacity 160ms ease,
-    background 160ms ease;
+  background: rgb(255 255 255 / 92%);
+  border: 1px solid color-mix(in srgb, var(--pf-pink) 45%, transparent);
+  border-radius: 999px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 30%);
+  pointer-events: none;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  will-change: left, top;
 
   svg {
-    width: 44px;
-    height: 44px;
-    padding: 9px;
-    background: rgb(255 255 255 / 92%);
-    border: 1px solid color-mix(in srgb, var(--pf-pink) 45%, transparent);
-    border-radius: 999px;
-    box-shadow: 0 10px 30px rgb(0 0 0 / 30%);
-  }
-
-  &:hover,
-  &:focus-visible {
-    background: linear-gradient(90deg, rgb(0 0 0 / 26%), transparent);
-    opacity: 1;
-    outline: 0;
+    width: 24px;
+    height: 24px;
   }
 }
 
-.reader-lightbox__nav--prev {
-  left: 0;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.reader-lightbox__nav--next {
-  right: 0;
-  align-items: center;
-  justify-content: flex-end;
-
-  &:hover,
-  &:focus-visible {
-    background: linear-gradient(270deg, rgb(0 0 0 / 26%), transparent);
-  }
+.reader-lightbox__cursor-nav--prev {
+  color: color-mix(in srgb, var(--pf-pink) 84%, #6d5cff);
 }
 
 .reader-floating {
@@ -1594,13 +1717,8 @@ onBeforeUnmount(() => {
     padding: 64px 12px 80px;
   }
 
-  .reader-lightbox__nav {
-    top: auto;
-    bottom: 18px;
-    width: 50%;
-    height: 54px;
-    padding: 0 20px;
-    opacity: 1;
+  .reader-lightbox__cursor-nav {
+    display: none;
   }
 
   .reader-lightbox__status {

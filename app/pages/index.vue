@@ -355,9 +355,9 @@ body[data-route='home'] {
       padding-inline: 54px 18px;
       color: #172033;
       background: #fff;
-      border: 3px solid #111;
-      border-radius: 3px;
-      box-shadow: 0 8px 26px rgb(0 0 0 / 18%);
+      border: 1px solid rgb(255 255 255 / 82%);
+      border-radius: 16px;
+      box-shadow: 0 12px 34px rgb(20 25 34 / 18%);
       font-size: 1.05rem;
 
       &::placeholder {
@@ -390,7 +390,7 @@ body[data-route='home'] {
       color: #fff;
       background: rgb(16 22 28 / 86%);
       border: 1px solid rgb(255 255 255 / 82%);
-      border-radius: 4px;
+      border-radius: 999px;
       box-shadow: none;
       font-size: 0.875rem;
       font-weight: 400;

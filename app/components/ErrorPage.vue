@@ -103,7 +103,7 @@ onMounted(() => {
   margin-bottom: 0.4em;
 
   > span {
-    box-shadow: 0 -0.5em 0 var(--fnb-brand) inset;
+    color: var(--pf-pink);
     padding: 0 0.4em;
   }
 }
@@ -113,7 +113,7 @@ onMounted(() => {
 }
 
 .random {
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   user-select: none;
   margin-top: 1rem;
   cursor: pointer;

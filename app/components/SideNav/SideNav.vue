@@ -33,6 +33,40 @@ aside.global-side-nav(
             GoogleDriveSync
 
       .group
+        .title 悬浮按钮开关
+        ul
+          li(v-if='pageSettingsAvailable')
+            label.floating-control-toggle
+              ITablerAdjustments.link-icon(aria-hidden='true')
+              span 页面设置
+              input(
+                :checked='pageSettingsVisible'
+                @change='changePageSettingsVisibility'
+                aria-label='显示页面设置悬浮按钮'
+                type='checkbox'
+              )
+          li
+            label.floating-control-toggle
+              ITablerLayoutGrid.link-icon(aria-hidden='true')
+              span 作品排列
+              input(
+                :checked='artworkLayoutButtonVisible'
+                @change='changeArtworkLayoutVisibility'
+                aria-label='显示作品排列悬浮按钮'
+                type='checkbox'
+              )
+          li
+            label.floating-control-toggle
+              ITablerColorSwatch.link-icon(aria-hidden='true')
+              span 标记按钮
+              input(
+                :checked='markerButtonVisible'
+                @change='changeMarkerButtonVisibility'
+                aria-label='显示标记悬浮按钮'
+                type='checkbox'
+              )
+
+      .group
         .title PixivFun
         ul
           SideNavListLink(
@@ -49,16 +83,25 @@ import SideNavListLink from './SideNavListLink.vue'
 import GoogleDriveSync from './GoogleDriveSync.vue'
 import SearchBox from '../SearchBox.vue'
 import {
+  IconAdjustmentsHorizontal as ITablerAdjustments,
   IconBook2 as ITablerBook,
+  IconColorSwatch as ITablerColorSwatch,
   IconDownload as ITablerDownload,
   IconExternalLink as ITablerExternalLink,
   IconInfoCircle as ITablerInfoCircle,
+  IconLayoutGrid as ITablerLayoutGrid,
   IconPhoto as ITablerPhoto,
   IconUsers as ITablerUsers,
 } from '@tabler/icons-vue'
 import { useSideNavStore } from '~/stores/session'
 
 const sideNavStore = useSideNavStore()
+const {
+  pageSettingsAvailable,
+  pageSettingsVisible,
+  markerButtonVisible,
+  artworkLayoutButtonVisible,
+} = useFloatingControlsVisibility()
 const router = useRouter()
 router.afterEach(() => sideNavStore.close())
 
@@ -72,6 +115,18 @@ sideNavStore.$subscribe((_mutation, state): void => {
 
 function closeSideNav() {
   sideNavStore.close()
+}
+
+function changePageSettingsVisibility(event: Event) {
+  pageSettingsVisible.value = (event.target as HTMLInputElement).checked
+}
+
+function changeMarkerButtonVisibility(event: Event) {
+  markerButtonVisible.value = (event.target as HTMLInputElement).checked
+}
+
+function changeArtworkLayoutVisibility(event: Event) {
+  artworkLayoutButtonVisible.value = (event.target as HTMLInputElement).checked
 }
 
 useEventListener(document, 'keydown', (event) => {
@@ -144,6 +199,36 @@ useEventListener(document, 'keydown', (event) => {
     margin: 0;
     list-style: none;
     padding: 0;
+  }
+}
+
+.floating-control-toggle {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+  padding: 0 10px;
+  color: var(--pf-text);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.94rem;
+  font-weight: 500;
+
+  &:hover {
+    color: var(--pf-blue);
+    background: var(--pf-soft-blue);
+  }
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  input {
+    width: 17px;
+    height: 17px;
+    accent-color: var(--pf-pink);
   }
 }
 

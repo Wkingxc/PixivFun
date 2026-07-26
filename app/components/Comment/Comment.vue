@@ -9,7 +9,7 @@ li.comment-block
   .right
     .comment-head
       RouterLink.comment-author.plain(:to='"/users/" + comment.userId') {{ comment.userName }}
-      span.tag(:class='{ "tag--author": badge.author }', v-if='badge') {{ badge.text }}
+      span.tag(:class='{ "tag--author": badge.author }' v-if='badge') {{ badge.text }}
       span.comment-reply(v-if='comment.replyToUserName')
         IFasReply.reply-icon(aria-hidden='true')
         | {{ comment.replyToUserName }}
@@ -29,12 +29,12 @@ li.comment-block
           :author-id='authorId',
           :comment='reply',
           :key='reply.id',
-          :type='type',
+          :type='type'
           v-for='reply in replies'
         )
       button.view-replies(
-        :disabled='repliesLoading',
-        @click='loadReplies',
+        :disabled='repliesLoading'
+        @click='loadReplies'
         v-if='replies.length ? repliesHasNext : true'
       )
         | {{ repliesLoading ? '加载中…' : replies.length ? '查看更多回复' : '查看回复' }}
@@ -136,7 +136,7 @@ function replaceStamps(str: string): string {
 
     .comment-author
       font-weight: 700
-      color: var(--fnb-text)
+      color: var(--pf-text)
 
     .tag
       display: inline-flex
@@ -145,19 +145,22 @@ function replaceStamps(str: string): string {
       font-size: .68rem
       font-weight: 700
       line-height: 1.4
-      color: var(--fnb-on-brand)
-      background: var(--fnb-brand)
-      border-radius: var(--fnb-radius-sm)
+      color: var(--pf-blue)
+      background: var(--pf-soft-blue)
+      border: 1px solid color-mix(in srgb, var(--pf-blue) 30%, var(--pf-line))
+      border-radius: 999px
 
       &.tag--author
-        background: var(--fnb-accent)
+        color: var(--pf-pink)
+        background: var(--pf-soft-pink)
+        border-color: color-mix(in srgb, var(--pf-pink) 30%, var(--pf-line))
 
     .comment-reply
       display: inline-flex
       align-items: center
       gap: .25rem
       font-size: .8rem
-      color: var(--fnb-text-muted)
+      color: var(--pf-muted)
 
       .reply-icon
         font-size: .72em
@@ -175,7 +178,7 @@ function replaceStamps(str: string): string {
 
     .comment-date
       font-size: .75em
-      color: var(--fnb-text-muted)
+      color: var(--pf-muted)
 
     .comment-replies
       margin-top: .6rem
@@ -193,12 +196,12 @@ function replaceStamps(str: string): string {
       font: inherit
       font-size: .8rem
       font-weight: 700
-      color: var(--fnb-brand)
+      color: var(--pf-blue)
 
       &:hover:not(:disabled)
         text-decoration: underline
 
       &:disabled
-        color: var(--fnb-text-muted)
+        color: var(--pf-muted)
         cursor: default
 </style>

@@ -1,6 +1,11 @@
 packages:
   - .
 
+overrides:
+  '@electron/get': 5.0.0
+
 allowBuilds:
   '@parcel/watcher': true
+  electron: true
+  electron-winstaller: false
   esbuild: true

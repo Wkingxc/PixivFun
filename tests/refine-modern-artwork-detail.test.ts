@@ -13,6 +13,7 @@ import {
   nextExplicitTheme,
   orderAuthorArtworkPage,
   safeRankingCandidates,
+  userArtworkTagPageOffset,
 } from '../app/utils/refineModernArtwork.ts'
 import {
   artworkDirectoryScrollKey,
@@ -324,6 +325,13 @@ test('收藏分页每页固定 48 件并生成正确接口偏移量', () => {
   assert.equal(bookmarkPageOffset(2), 48)
   assert.equal(bookmarkPageOffset(3), 96)
   assert.equal(bookmarkPageOffset(-2), 0)
+})
+
+test('作者标签作品分页按每页 24 件生成接口偏移量', () => {
+  assert.equal(userArtworkTagPageOffset(1), 0)
+  assert.equal(userArtworkTagPageOffset(2), 24)
+  assert.equal(userArtworkTagPageOffset(3), 48)
+  assert.equal(userArtworkTagPageOffset(-1), 0)
 })
 
 test('主页横幅候选只保留全年龄今日排行作品', () => {

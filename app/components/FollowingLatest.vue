@@ -135,7 +135,7 @@ defineProps<{
   border: 1px solid var(--pf-line);
   border-radius: 999px;
   flex-shrink: 0;
-  background: var(--fnb-skeleton);
+  background: var(--pf-skeleton);
 }
 
 .following-item-info {

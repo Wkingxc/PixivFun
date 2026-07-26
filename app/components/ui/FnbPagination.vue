@@ -1,16 +1,16 @@
 <template lang="pug">
-nav.fnb-pagination(v-if='totalPages > 1' aria-label='分页导航')
+nav.fnb-pagination(aria-label='分页导航' v-if='totalPages > 1')
   button.fnb-pagination__btn(
     :disabled='page <= 1'
     @click='goTo(page - 1)'
     aria-label='上一页'
   ) ‹
-  template(v-for='p in visiblePages' :key='p')
+  template(:key='p' v-for='p in visiblePages')
     span.fnb-pagination__ellipsis(v-if='p === "..."') …
     button.fnb-pagination__btn(
-      v-else
       :class='{ "fnb-pagination__btn--active": p === page }'
       @click='goTo(+p)'
+      v-else
     ) {{ p }}
   button.fnb-pagination__btn(
     :disabled='page >= totalPages'
@@ -81,31 +81,50 @@ function goTo(p: number) {
 .fnb-pagination {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.35rem;
   flex-wrap: wrap;
   justify-content: center;
 }
 
 .fnb-pagination__btn {
-  @include fnb-border-sm;
-  @include fnb-shadow-xs;
-  @include fnb-press;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.25rem;
-  height: 2.25rem;
-  padding: 0 0.5rem;
-  background: var(--fnb-surface);
-  font-weight: 700;
+  min-width: 2.15rem;
+  height: 2.15rem;
+  padding: 0 0.65rem;
+  color: var(--pf-muted);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
+  box-shadow: 0 3px 10px rgb(83 57 75 / 6%);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 680;
   cursor: pointer;
-  border-radius: var(--fnb-radius-sm);
+  transition:
+    color 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
 
   &--active {
-    background: var(--fnb-brand);
-    color: var(--fnb-on-brand);
+    color: #fff;
+    background: var(--pf-pink);
+    border-color: var(--pf-pink);
+    box-shadow: 0 5px 14px color-mix(in srgb, var(--pf-pink) 24%, transparent);
+  }
+
+  &:hover:not(:disabled):not(&--active) {
+    color: var(--pf-pink);
+    background: var(--pf-soft-pink);
+    border-color: color-mix(in srgb, var(--pf-pink) 35%, var(--pf-line));
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pf-pink);
+    outline-offset: 2px;
   }
 
   &:disabled {
@@ -121,6 +140,6 @@ function goTo(p: number) {
   justify-content: center;
   min-width: 2.25rem;
   height: 2.25rem;
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
 }
 </style>

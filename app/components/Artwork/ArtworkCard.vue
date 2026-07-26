@@ -10,9 +10,23 @@
       .author.fnb-media-card__author: a
         FnbSkeleton.avatar(circle height='1.5em' text width='1.5em')
         FnbSkeleton(text width='4em')
-  .artwork-card.fnb-media-card(v-else-if='item')
+  .artwork-card.fnb-media-card(
+    :class='{ "artwork-card--selectable": selectable, "artwork-card--selected": selected }'
+    @click.capture='handleCardClick'
+    v-else-if='item'
+  )
     .artwork-image.fnb-media-card__media
       .side-tags
+        button.batch-select(
+          :aria-label='selected ? "取消选择作品" : "选择作品"',
+          :aria-pressed='selected',
+          :class='{ selected }'
+          @click.stop.prevent='$emit("toggle-selection", item)'
+          type='button'
+          v-if='selectable'
+        )
+          ITablerCheck(aria-hidden='true' v-if='selected')
+          span(aria-hidden='true' v-else)
         .page-count(
           :title='"共 " + item.pageCount + " 张"'
           v-if='item.pageCount > 1'
@@ -20,16 +34,16 @@
           ITablerCopy(aria-hidden='true')
           | {{ item.pageCount }}
         button.bookmark(
-          :aria-label='item.bookmarkData ? "取消收藏" : "添加收藏"',
+          :aria-label='item.bookmarkData ? "编辑收藏设置" : "添加收藏"',
           :class='{ bookmarked: item.bookmarkData, disabled: loadingBookmark }',
-          :title='item.bookmarkData ? "取消收藏" : "添加收藏"'
+          :title='item.bookmarkData ? "编辑收藏设置" : "添加收藏"'
           @click.stop.prevent='handleBookmark'
         )
           IFasHeart(aria-hidden='true')
       RouterLink(:to='workLink')
         DeferLoad.img(
           :alt='item.alt',
-          :src='item.url',
+          :src='cardImageUrl',
           :title='item.alt'
           lazyload
         )
@@ -44,7 +58,11 @@
       .title.fnb-media-card__title(:class='{ "is-viewed": markTitle }')
         RouterLink(:style='titleStyle', :to='workLink') {{ item.title }}
       .author.fnb-media-card__author(:title='item.userName')
-        RouterLink(:to='"/users/" + item.userId')
+        RouterLink(
+          :class='{ "is-viewed": markAuthorName }',
+          :style='authorStyle',
+          :to='"/users/" + item.userId'
+        )
           img.avatar(:src='item.profileImageUrl' lazyload)
           | {{ item.userName }}
 </template>
@@ -55,8 +73,15 @@ import { IllustType } from '~/utils/constants'
 import { toRef } from 'vue'
 import IFasHeart from '~icons/fa-solid/heart'
 import IPlayCircle from '~icons/fa-solid/play-circle'
-import { IconCopyFilled as ITablerCopy } from '@tabler/icons-vue'
+import {
+  IconCheck as ITablerCheck,
+  IconCopyFilled as ITablerCopy,
+} from '@tabler/icons-vue'
 import type { ArtworkInfo } from '~/types'
+import {
+  getArtworkCardImageUrl,
+  type ArtworkCardImageQuality,
+} from '~/utils/artworkLayout'
 
 import { useArtworkStore } from '~/stores/artwork'
 
@@ -65,36 +90,64 @@ const props = defineProps<{
   loading?: boolean
   imageZoom?: boolean
   markerDisabled?: boolean
+  imageQuality?: ArtworkCardImageQuality
+  selectable?: boolean
+  selected?: boolean
+}>()
+
+const emit = defineEmits<{
+  'toggle-selection': [item: ArtworkInfo]
 }>()
 
 const item = toRef(props, 'item')
 const loading = toRef(props, 'loading')
 
 const artworkStore = useArtworkStore()
+const { markBookmarkChanged, openBookmarkEditor } = useBookmarkEditor()
 const { markTitle, titleStyle } = useArtworkViewedState(
   () => item.value?.id,
   () => !!props.markerDisabled || item.value?.type === 'novel'
+)
+const { authorStyle, markName: markAuthorName } = useAuthorViewedState(
+  () => item.value?.userId,
+  () => !!props.markerDisabled
 )
 const workLink = computed(() =>
   item.value?.type === 'novel'
     ? `/novels/${item.value.id}`
     : `/artworks/${item.value?.id}`
 )
+const cardImageUrl = computed(() => {
+  if (!item.value || item.value.type === 'novel') return item.value?.url || ''
+  if (!props.imageQuality) return item.value.url
+  return getArtworkCardImageUrl(item.value.url, props.imageQuality)
+})
 
 const loadingBookmark = ref(false)
+
+function handleCardClick(event: MouseEvent) {
+  if (!props.selectable || !item.value) return
+  const target = event.target as Element | null
+  if (target?.closest('.batch-select, .bookmark')) return
+  event.preventDefault()
+  event.stopPropagation()
+  emit('toggle-selection', item.value)
+}
+
 async function handleBookmark() {
   if (loadingBookmark.value) return
-  loadingBookmark.value = true
   const it = item.value!
+  if (it.bookmarkData) {
+    openBookmarkEditor(it)
+    return
+  }
+
+  loadingBookmark.value = true
   try {
-    if (it.bookmarkData) {
-      await artworkStore.removeBookmark(it.bookmarkData.id)
-      if (item.value) item.value.bookmarkData = null
-    } else {
-      const data = await artworkStore.addBookmark(it.id)
-      if (data.last_bookmark_id && item.value) {
-        item.value.bookmarkData = { id: data.last_bookmark_id, private: false }
-      }
+    const data = await artworkStore.addBookmark(it.id)
+    if (data.last_bookmark_id && item.value) {
+      item.value.bookmarkData = { id: data.last_bookmark_id, private: false }
+      markBookmarkChanged()
     }
   } catch (e) {
     console.warn('handleBookmark', e)
@@ -143,12 +196,12 @@ async function handleBookmark() {
     font: inherit;
     color: inherit;
     cursor: pointer;
-    border-radius: var(--fnb-radius-sm);
+    border-radius: 999px;
     &:hover {
       background-color: rgba(255, 100, 100, 0.2);
     }
     &:focus-visible {
-      outline: 2px solid var(--fnb-brand);
+      outline: 2px solid var(--pf-pink);
       outline-offset: 2px;
     }
     &.disabled {
@@ -186,7 +239,7 @@ async function handleBookmark() {
 
   .router-link-active {
     cursor: default;
-    box-shadow: 0 0 0 2px var(--fnb-divider);
+    box-shadow: 0 0 0 2px var(--pf-line);
 
     & + .cover {
       background-color: rgba(100, 100, 100, 0.6) !important;
@@ -224,6 +277,41 @@ async function handleBookmark() {
     }
   }
 
+  .batch-select {
+    top: 8px;
+    left: 8px;
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    padding: 0;
+    color: var(--pf-muted);
+    background: color-mix(in srgb, var(--pf-surface) 88%, transparent);
+    border: 1px solid color-mix(in srgb, var(--pf-line) 82%, transparent);
+    border-radius: 10px;
+    box-shadow: 0 3px 12px rgb(35 20 29 / 18%);
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+
+    span {
+      width: 13px;
+      height: 13px;
+      border: 1.5px solid currentcolor;
+      border-radius: 4px;
+    }
+
+    svg {
+      width: 17px;
+      height: 17px;
+    }
+
+    &.selected {
+      color: #fff;
+      background: var(--pf-pink);
+      border-color: var(--pf-pink);
+    }
+  }
+
   .bookmark {
     bottom: 0.4rem;
     right: 0.4rem;
@@ -231,8 +319,23 @@ async function handleBookmark() {
     color: #fff;
 
     &.bookmarked {
-      color: var(--fnb-bookmark);
+      color: var(--pf-pink);
     }
+  }
+}
+
+.artwork-card--selected {
+  .artwork-image {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--pf-pink) 72%, transparent);
+  }
+}
+
+.artwork-card--selectable {
+  cursor: pointer;
+
+  .artwork-image a,
+  .artwork-info a {
+    cursor: pointer;
   }
 }
 

@@ -68,9 +68,9 @@ section.artwork-modern(
             )
               PixivShareIcon
             button.action.action--icon.action--more(
-              aria-disabled='true'
-              aria-label='更多功能，暂未开放'
-              title='更多功能（暂未开放）'
+              @click='openBookmarkEditor(illust)'
+              aria-label='收藏设置'
+              title='收藏设置'
               type='button'
             )
               ITablerDots(aria-hidden='true')
@@ -133,11 +133,12 @@ section.artwork-modern(
 
         ModernAuthorCard(:user='user')
 
-  section.modern-recommend
+  section.modern-recommend(:style='artworkLayoutContainerStyle')
     h2.plain 相关作品
     ArtworkList(
       :list='recommendations',
       :loading='recommendLoading && !recommendations.length'
+      controlled
     )
     .recommend-more(v-if='recommendations.length && hasMoreRecommendations')
       FnbButton(
@@ -146,7 +147,10 @@ section.artwork-modern(
         size='sm'
       ) {{ recommendLoading ? '加载中' : '加载更多' }}
 
-  DevDebugPanel(title='作品页调试' v-if='directoryTuningEnabled')
+  DevDebugPanel(
+    title='作品页设置'
+    v-if='directoryTuningEnabled && pageSettingsVisible'
+  )
     .directory-debug-controls
       .directory-debug-heading
         strong 作品页布局
@@ -249,6 +253,10 @@ defineEmits<{
 }>()
 
 const toast = useToast()
+const { openBookmarkEditor } = useBookmarkEditor()
+const { containerStyle: artworkLayoutContainerStyle } =
+  useArtworkLayoutSettings()
+const { pageSettingsVisible } = useFloatingControlsVisibility()
 const {
   accentTone,
   artworkMaxHeight,
@@ -428,7 +436,7 @@ async function shareArtwork() {
     font-size: clamp(1.35rem, 2.3vw, 1.8rem);
 
     &.danger {
-      color: var(--fnb-danger);
+      color: #d74755;
     }
   }
 }
@@ -498,8 +506,8 @@ async function shareArtwork() {
   }
 
   &.r18 {
-    color: var(--fnb-danger);
-    background: color-mix(in srgb, var(--fnb-danger) 12%, transparent);
+    color: #d74755;
+    background: rgb(215 71 85 / 12%);
   }
 }
 
@@ -1110,7 +1118,7 @@ async function shareArtwork() {
 
   output {
     color: var(--pf-text);
-    font-family: var(--fnb-font-mono);
+    font-family: var(--pf-font-mono);
     text-align: right;
   }
 }
@@ -1131,8 +1139,9 @@ async function shareArtwork() {
 }
 
 .modern-recommend {
-  margin-top: 30px;
-  padding: 26px 20px 34px max(24px, calc((100% - 1440px) / 2));
+  width: min(1840px, calc(100% - 96px));
+  margin: 30px auto 0;
+  padding: 26px 0 34px;
   background: transparent;
   border: 0;
 
@@ -1208,7 +1217,7 @@ async function shareArtwork() {
   }
 
   .modern-recommend {
-    padding-inline: 12px;
+    width: calc(100% - 24px);
   }
 }
 </style>

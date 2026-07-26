@@ -115,6 +115,16 @@ export function toRegularUrl(imageUrl: string): string {
 }
 
 /**
+ * Derive the existing 540px small-image tier from any artwork image URL.
+ */
+export function toSmallUrl(imageUrl: string): string {
+  return toRegularUrl(imageUrl).replace(
+    '/img-master/',
+    '/c/540x540_70/img-master/'
+  )
+}
+
+/**
  * Derive original quality URL from any quality level URL.
  *
  * 1. Strip /c/{size}/ prefix

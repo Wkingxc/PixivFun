@@ -22,8 +22,10 @@ export interface LocalPreferences {
   }
   viewedMarker: {
     artworkVisitedColor: MarkerColor
+    authorVisitedColor: MarkerColor
     markArtworkTitle: boolean
     markArtworkImage: boolean
+    markAuthorName: boolean
     hideViewedArtwork: boolean
     artworkImageOverlayOpacity: number
   }
@@ -73,8 +75,10 @@ export const DEFAULT_LOCAL_PREFERENCES: LocalPreferences = {
   },
   viewedMarker: {
     artworkVisitedColor: { r: 244, g: 118, b: 162, a: 1 },
+    authorVisitedColor: { r: 242, g: 209, b: 120, a: 1 },
     markArtworkTitle: true,
     markArtworkImage: true,
+    markAuthorName: true,
     hideViewedArtwork: false,
     artworkImageOverlayOpacity: 0.54,
   },
@@ -129,9 +133,11 @@ const validators: {
     layoutMode: enumValue('artworkReader.layoutMode', ['masonry', 'aligned']),
   },
   viewedMarker: {
-    artworkVisitedColor: colorValue,
+    artworkVisitedColor: colorValue('viewedMarker.artworkVisitedColor'),
+    authorVisitedColor: colorValue('viewedMarker.authorVisitedColor'),
     markArtworkTitle: booleanValue('viewedMarker.markArtworkTitle'),
     markArtworkImage: booleanValue('viewedMarker.markArtworkImage'),
+    markAuthorName: booleanValue('viewedMarker.markAuthorName'),
     hideViewedArtwork: booleanValue('viewedMarker.hideViewedArtwork'),
     artworkImageOverlayOpacity: numberValue(
       'viewedMarker.artworkImageOverlayOpacity',
@@ -244,24 +250,24 @@ function colorChannel(path: string, value: unknown): number {
   throw new RangeError(`${path} must be an integer between 0 and 255`)
 }
 
-function colorValue(value: unknown): MarkerColor {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new TypeError('viewedMarker.artworkVisitedColor must be a color')
-  }
-  const color = value as Record<string, unknown>
-  const unknown = Object.keys(color).filter(
-    (key) => !['r', 'g', 'b', 'a'].includes(key)
-  )
-  if (unknown.length) {
-    throw new TypeError(
-      `viewedMarker.artworkVisitedColor contains unknown key ${unknown[0]}`
+function colorValue(path: string): (value: unknown) => MarkerColor {
+  return (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new TypeError(`${path} must be a color`)
+    }
+    const color = value as Record<string, unknown>
+    const unknown = Object.keys(color).filter(
+      (key) => !['r', 'g', 'b', 'a'].includes(key)
     )
-  }
-  return {
-    r: colorChannel('viewedMarker.artworkVisitedColor.r', color.r),
-    g: colorChannel('viewedMarker.artworkVisitedColor.g', color.g),
-    b: colorChannel('viewedMarker.artworkVisitedColor.b', color.b),
-    a: numberValue('viewedMarker.artworkVisitedColor.a', 0, 1)(color.a),
+    if (unknown.length) {
+      throw new TypeError(`${path} contains unknown key ${unknown[0]}`)
+    }
+    return {
+      r: colorChannel(`${path}.r`, color.r),
+      g: colorChannel(`${path}.g`, color.g),
+      b: colorChannel(`${path}.b`, color.b),
+      a: numberValue(`${path}.a`, 0, 1)(color.a),
+    }
   }
 }
 
@@ -317,6 +323,9 @@ export function mergeLocalPreferences(
   result.viewedMarker.artworkVisitedColor = {
     ...result.viewedMarker.artworkVisitedColor,
   }
+  result.viewedMarker.authorVisitedColor = {
+    ...result.viewedMarker.authorVisitedColor,
+  }
   return result
 }
 
@@ -331,6 +340,9 @@ export function cloneLocalPreferences(
       ...preferences.viewedMarker,
       artworkVisitedColor: {
         ...preferences.viewedMarker.artworkVisitedColor,
+      },
+      authorVisitedColor: {
+        ...preferences.viewedMarker.authorVisitedColor,
       },
     },
     authorPage: { ...preferences.authorPage },

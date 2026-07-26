@@ -50,6 +50,7 @@ interface ArtworkCommon {
   bookmarkData: {
     id: `${number}`
     private: boolean
+    tags?: string[]
   } | null
   titleCaptionTranslation: {
     workTitle: string | null

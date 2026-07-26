@@ -67,7 +67,30 @@ async function submit(): Promise<void> {
 
 textarea
   width: 100%
+  min-height: 90px
+  padding: .7rem .8rem
+  color: var(--pf-text)
+  background: var(--pf-surface)
+  border: 1px solid var(--pf-line)
+  border-radius: 10px
+  font: inherit
+
+  &:focus
+    border-color: var(--pf-pink)
+    outline: 0
+    box-shadow: 0 0 0 3px var(--pf-soft-pink)
+
+button
+  min-height: 36px
+  padding: .45rem .9rem
+  color: #fff
+  background: var(--pf-blue)
+  border: 0
+  border-radius: 10px
+  cursor: pointer
+  font: inherit
+  font-weight: 700
 
 .not-logged-in
-  color: var(--fnb-text-muted)
+  color: var(--pf-muted)
 </style>

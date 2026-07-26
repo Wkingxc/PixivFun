@@ -102,6 +102,7 @@ test('marker v1 只导入作品和作者且重复导入保持唯一记录', () =
       '123',
       '456',
     ])
+    assert.deepEqual(repository.getVisitedAuthorIds(['123', '999']), ['123'])
     assert.equal(
       repository.getPreferences().viewedMarker.artworkImageOverlayOpacity,
       0.54
@@ -354,11 +355,20 @@ test('Vue 响应式偏好可以即时合并标记开关和透明度', () => {
   const merged = mergeLocalPreferences(reactivePreferences, {
     viewedMarker: {
       markArtworkImage: false,
+      markAuthorName: false,
+      authorVisitedColor: { r: 255, g: 224, b: 128, a: 1 },
       artworkImageOverlayOpacity: 0.72,
     },
   })
 
   assert.equal(merged.viewedMarker.markArtworkImage, false)
+  assert.equal(merged.viewedMarker.markAuthorName, false)
+  assert.deepEqual(merged.viewedMarker.authorVisitedColor, {
+    r: 255,
+    g: 224,
+    b: 128,
+    a: 1,
+  })
   assert.equal(merged.viewedMarker.artworkImageOverlayOpacity, 0.72)
 })
 

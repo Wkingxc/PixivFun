@@ -59,15 +59,18 @@ function makeSearch(): void {
     position: absolute;
     left: 0.6em;
     pointer-events: none;
-    color: var(--fnb-text-muted);
+    color: var(--pf-muted);
     transition: all 0.24s ease-in-out;
   }
 
   input {
-    @include fnb-input;
     font-size: inherit;
     box-sizing: border-box;
-    border-radius: var(--fnb-radius-sm);
+    color: var(--pf-text);
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-line);
+    border-radius: 999px;
+    box-shadow: 0 4px 16px rgb(67 41 59 / 7%);
     padding: 0.2rem 0.6em;
     padding-left: 2em;
     height: 2rem;
@@ -75,12 +78,15 @@ function makeSearch(): void {
     transition: all 0.12s ease-in-out;
 
     &:focus {
-      color: var(--fnb-text);
+      color: var(--pf-text);
+      border-color: var(--pf-pink);
+      outline: 0;
+      box-shadow: 0 0 0 3px var(--pf-soft-pink);
     }
 
     &:focus + .icon,
     &:focus + [data-icon] {
-      color: var(--fnb-text);
+      color: var(--pf-pink);
     }
   }
 

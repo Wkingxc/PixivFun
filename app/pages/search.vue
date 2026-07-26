@@ -1,50 +1,50 @@
 <template lang="pug">
-#search-view
-  .body-inner
+#search-view.modern-route-page
+  .modern-page-shell
     SearchBox.big
     .search-filters
       .content-tabs
         button.content-tab(
-          v-for='opt in contentOptions',
-          :key='opt.value',
           :class='{ active: selectedType === opt.value }',
+          :key='opt.value'
           @click='setQuery({ type: opt.value })'
+          v-for='opt in contentOptions'
         ) {{ opt.label }}
       .refine-bar
         .refine-field
           span.refine-label 匹配
           FnbSelect(
             :model-value='selectedSMode',
-            :options='activeSModeOptions',
-            @update:model-value='v => setQuery({ s_mode: v })'
+            :options='activeSModeOptions'
+            @update:model-value='(v) => setQuery({ s_mode: v })'
           )
         .refine-field
           span.refine-label 排序
           FnbSelect(
             :model-value='selectedOrder',
-            :options='orderOptions',
-            @update:model-value='v => setQuery({ order: v })'
+            :options='orderOptions'
+            @update:model-value='(v) => setQuery({ order: v })'
           )
         .refine-field
           span.refine-label 分级
           FnbSelect(
             :model-value='selectedMode',
-            :options='modeOptions',
-            @update:model-value='v => setQuery({ mode: v })'
+            :options='modeOptions'
+            @update:model-value='(v) => setQuery({ mode: v })'
           )
         .refine-field
           span.refine-label AI
           FnbSelect(
             :model-value='selectedAiType',
-            :options='aiTypeOptions',
-            @update:model-value='v => setQuery({ ai_type: v })'
+            :options='aiTypeOptions'
+            @update:model-value='(v) => setQuery({ ai_type: v })'
           )
         .refine-field(v-if='isNovel')
           span.refine-label 语言
           FnbSelect(
             :model-value='selectedLang',
-            :options='langOptions',
-            @update:model-value='v => setQuery({ lang: v })'
+            :options='langOptions'
+            @update:model-value='(v) => setQuery({ lang: v })'
           )
 
   //- Error
@@ -53,16 +53,16 @@
 
   //- Landing: no keyword yet
   section.search-landing(v-else-if='!hasQuery')
-    .body-inner
+    .modern-page-shell
       .fnb-empty(style='padding: 12vh 0; text-align: center') 输入关键词开始搜索
 
   //- Result (has keyword)
   section(v-else)
-
     //- Loading skeleton
     .loading-area(v-if='searchStore.loading && !currentResults.length')
-      ArtworkList(v-if='!isNovel', :list='[]', :loading='16')
-      .body-inner(v-else)
+      .modern-wide-shell(:style='artworkLayoutContainerStyle' v-if='!isNovel')
+        ArtworkList(:list='[]', :loading='16' controlled)
+      .modern-page-shell(v-else)
         NovelList(:list='[]', :loading='12')
 
     //- Empty
@@ -71,29 +71,37 @@
         .fnb-empty 没有了，一滴都没有了……
 
     //- Results
-    FnbSpin.result-area(:show='searchStore.loading', v-if='currentResults.length')
-      .body-inner
+    FnbSpin.result-area(
+      :show='searchStore.loading'
+      v-if='currentResults.length'
+    )
+      .modern-wide-shell(
+        :style='!isNovel ? artworkLayoutContainerStyle : undefined'
+      )
         .pagenator
           FnbPagination(
-            :page='page',
             :item-count='currentTotal',
-            :page-size='currentResults.length',
+            :page='page',
+            :page-size='currentResults.length'
             @update:page='goPage'
           )
-        ArtworkLargeList(v-if='!isNovel', :artwork-list='searchStore.artworkResults')
-        NovelList(v-else, :list='searchStore.novelResults')
+        ArtworkList(
+          :list='searchStore.artworkResults'
+          controlled
+          v-if='!isNovel'
+        )
+        NovelList(:list='searchStore.novelResults' v-else)
         .pagenator
           FnbPagination(
-            :page='page',
             :item-count='currentTotal',
-            :page-size='currentResults.length',
+            :page='page',
+            :page-size='currentResults.length'
             @update:page='goPage'
           )
 </template>
 
 <script lang="ts" setup>
 definePageMeta({ name: 'search' })
-import ArtworkLargeList from '~/components/Artwork/ArtworkLargeList.vue'
 import ArtworkList from '~/components/Artwork/ArtworkList.vue'
 import NovelList from '~/components/Novel/NovelList.vue'
 import ErrorPage from '~/components/ErrorPage.vue'
@@ -149,6 +157,8 @@ const error = ref('')
 const route = useRoute()
 const router = useRouter()
 const searchStore = useSearchStore()
+const { containerStyle: artworkLayoutContainerStyle } =
+  useArtworkLayoutSettings()
 
 const keyword = computed(() => (route.query.q as string) || '')
 const hasQuery = computed(() => !!keyword.value)
@@ -285,27 +295,27 @@ onMounted(() => makeSearch())
 }
 
 .content-tab {
-  @include fnb-border-sm;
-  @include fnb-shadow-xs;
   padding: 0.4rem 0.95rem;
-  font-family: var(--fnb-font-display);
+  color: var(--pf-muted);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
+  font-family: inherit;
   font-size: 0.9rem;
   font-weight: 800;
-  background: var(--fnb-surface);
-  color: var(--fnb-text);
   cursor: pointer;
   transition: all 150ms;
 
   &.active {
-    background: var(--fnb-brand);
-    color: var(--fnb-on-brand);
+    background: var(--pf-blue);
+    color: #fff;
+    border-color: var(--pf-blue);
     box-shadow: none;
-    transform: translate(2px, 2px);
   }
 
   &:hover:not(.active) {
-    background: var(--fnb-highlight);
-    color: var(--fnb-on-light);
+    background: var(--pf-soft-blue);
+    color: var(--pf-blue);
   }
 }
 
@@ -327,7 +337,7 @@ onMounted(() => makeSearch())
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.04em;
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   white-space: nowrap;
 }
 
@@ -346,11 +356,11 @@ onMounted(() => makeSearch())
 .search-box {
   margin: 1rem auto;
   margin-top: 2rem;
-  box-shadow: 0 0 8px var(--fnb-divider);
+  box-shadow: none;
 }
 
 .fnb-empty {
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   padding: 1rem;
 }
 </style>

@@ -1,28 +1,31 @@
 <template lang="pug">
-#discovery-view.body-inner
-  .discover-header
-    h2
-      FnbIcon: ITablerCompass
-      |
-      | 探索发现
-    .discover-controls
-      .tab-nav
-        RouterLink.tab-item(
-          :class='{ active: activeKey === t.key }',
-          :key='t.key',
-          :to='t.to'
-          v-for='t in tabs'
-        ) {{ t.label }}
-      FnbSelect(
-        :model-value='discoveryMode',
-        :options='discoveryModeOptions'
-        @update:model-value='changeMode'
-        v-if='showModeSelect && userStore.isLoggedIn'
-      )
-      FnbButton(:loading='isLoading' @click='refresh' size='sm')
-        template(#icon): IFasRandom
-        | {{ isLoading ? '加载中' : '换一批' }}
-  NuxtPage
+#discovery-view.modern-route-page
+  .modern-page-shell(
+    :style='activeKey === "artworks" ? artworkLayoutContainerStyle : undefined'
+  )
+    .discover-header
+      h2
+        FnbIcon: ITablerCompass
+        |
+        | 探索发现
+      .discover-controls
+        .tab-nav
+          RouterLink.tab-item(
+            :class='{ active: activeKey === t.key }',
+            :key='t.key',
+            :to='t.to'
+            v-for='t in tabs'
+          ) {{ t.label }}
+        FnbSelect(
+          :model-value='discoveryMode',
+          :options='discoveryModeOptions'
+          @update:model-value='changeMode'
+          v-if='showModeSelect && userStore.isLoggedIn'
+        )
+        FnbButton(:loading='isLoading' @click='refresh' size='sm')
+          template(#icon): IFasRandom
+          | {{ isLoading ? '加载中' : '换一批' }}
+    NuxtPage
 </template>
 
 <script lang="ts" setup>
@@ -39,6 +42,8 @@ const discoveryStore = useDiscoveryStore()
 const userStore = useUserStore()
 const route = useRoute()
 const localPersistenceStore = useLocalPersistenceStore()
+const { containerStyle: artworkLayoutContainerStyle } =
+  useArtworkLayoutSettings()
 
 const discoveryModeOptions = [
   { label: '混池', value: 'all' },
@@ -91,7 +96,7 @@ onMounted(() => setTitle('探索发现'))
 
 <style lang="scss" scoped>
 #discovery-view {
-  margin-top: 1.5rem;
+  min-height: calc(100vh - 64px);
 }
 
 .discover-header {
@@ -103,8 +108,8 @@ onMounted(() => setTitle('探索发现'))
   margin-bottom: 1rem;
 
   h2 {
-    font-family: var(--fnb-font-display);
-    font-weight: 900;
+    font-family: inherit;
+    font-weight: 780;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -126,24 +131,24 @@ onMounted(() => setTitle('探索发现'))
 
 .tab-item {
   padding: 0.3rem 1rem;
-  border: 3px solid transparent;
-  border-radius: var(--fnb-radius-sm);
+  border: 1px solid transparent;
+  border-radius: 999px;
   font-weight: 700;
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   text-decoration: none;
   transition:
     color 150ms,
     background 150ms;
 
   &:hover {
-    color: var(--fnb-text);
-    background: color-mix(in srgb, var(--fnb-brand) 15%, var(--fnb-surface));
+    color: var(--pf-blue);
+    background: var(--pf-soft-blue);
   }
 
   &.active {
-    color: var(--fnb-on-brand);
-    background: var(--fnb-brand);
-    border-color: var(--fnb-border);
+    color: #fff;
+    background: var(--pf-blue);
+    border-color: var(--pf-blue);
   }
 }
 </style>

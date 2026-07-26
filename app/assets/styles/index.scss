@@ -26,31 +26,27 @@ textarea {
 }
 
 body {
-  background-color: var(--fnb-bg);
+  background-color: var(--pf-bg);
   // Base typography and text color. The legacy `#app` selector predated the
   // Nuxt migration (real root is `#app-full-container`) and no longer matched,
   // so these fell back to UA defaults — black text (invisible in dark mode)
   // and the system font instead of the loaded Noto Sans SC. Layout
   // (flex/min-height) lives on #app-full-container in app.vue.
-  color: var(--fnb-text);
-  font-family: var(--fnb-font-sans);
+  color: var(--pf-text);
+  font-family: var(--pf-font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-image:
-    linear-gradient(var(--fnb-grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--fnb-grid-line) 1px, transparent 1px);
-  background-size: 72px 72px;
 }
 
 // Env specific
-[data-env="production"] {
+[data-env='production'] {
   .dev-only,
   .dev-test {
     display: none !important;
   }
 }
 
-[data-env="development"] {
+[data-env='development'] {
   .prod-only {
     display: none !important;
   }
@@ -82,7 +78,7 @@ body {
     width: 100%;
     overflow: hidden;
     aspect-ratio: 1 / 1;
-    background: var(--fnb-skeleton);
+    background: var(--pf-skeleton);
     border: 1px solid var(--pf-line);
     border-radius: 16px;
     box-shadow: 0 4px 14px rgb(46 34 54 / 8%);
@@ -122,6 +118,231 @@ body {
 
     &::after {
       display: none;
+    }
+  }
+}
+
+// Shared shell for PixivFun's current soft-surface route language.
+.modern-route-page {
+  min-height: calc(100vh - 64px);
+  padding: 28px 0 48px;
+  color: var(--pf-text);
+  background: var(--pf-bg);
+
+  .modern-page-shell,
+  &.modern-page-shell {
+    width: min(1320px, calc(100% - 48px));
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .modern-wide-shell {
+    width: min(1840px, calc(100% - 96px));
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  h1 {
+    color: var(--pf-text);
+    font-family: inherit;
+    font-size: clamp(1.35rem, 2.2vw, 1.8rem);
+    font-weight: 780;
+  }
+
+  h2:not(.plain) {
+    padding: 0;
+    color: var(--pf-text);
+    background: transparent;
+    border: 0;
+    font-family: inherit;
+    font-size: 1.1rem;
+    font-weight: 760;
+  }
+
+  .card > h2 {
+    display: block;
+    margin: 0 0 10px;
+    font-size: 0.98rem;
+  }
+
+  .card .inner,
+  .fnb-card {
+    padding: 18px;
+    color: var(--pf-text);
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-line);
+    border-radius: 16px;
+    box-shadow: var(--pf-card-shadow);
+  }
+
+  .fnb-button,
+  .show-more a {
+    min-height: 36px;
+    padding: 0.45rem 0.9rem;
+    color: var(--pf-text);
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-line);
+    border-radius: 999px;
+    box-shadow: none;
+    transform: none;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+
+    &:hover:not(.fnb-button--disabled) {
+      color: var(--pf-pink);
+      background: var(--pf-soft-pink);
+      border-color: color-mix(in srgb, var(--pf-pink) 35%, var(--pf-line));
+      box-shadow: none;
+      transform: none;
+    }
+
+    &--primary {
+      color: #fff;
+      background: var(--pf-blue);
+      border-color: var(--pf-blue);
+    }
+  }
+
+  .show-more a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 18px auto;
+  }
+
+  .fnb-select-trigger {
+    min-height: 36px;
+    padding: 0.35rem 0.8rem;
+    color: var(--pf-text);
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-line);
+    border-radius: 10px;
+    box-shadow: none;
+    transform: none;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 650;
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--pf-pink) 38%, var(--pf-line));
+      box-shadow: none;
+      transform: none;
+    }
+  }
+
+  .fnb-select-dropdown {
+    margin-top: 4px;
+    overflow: hidden;
+    color: var(--pf-text);
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-line);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgb(46 34 54 / 14%);
+  }
+
+  .fnb-select-option {
+    &.selected {
+      color: var(--pf-pink);
+      background: var(--pf-soft-pink);
+    }
+
+    &:hover,
+    &.focused {
+      color: var(--pf-text);
+      background: var(--pf-bg);
+    }
+  }
+
+  .fnb-tabs__nav {
+    gap: 4px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--pf-line);
+  }
+
+  .fnb-tabs__tab {
+    flex: 0 1 auto;
+    padding: 10px 18px 9px;
+    color: var(--pf-muted);
+    background: transparent;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    font-size: 0.82rem;
+    font-weight: 680;
+
+    &--active {
+      color: var(--pf-pink);
+      background: transparent;
+      border-color: var(--pf-pink);
+      font-weight: 760;
+    }
+  }
+
+  .fnb-empty,
+  .no-more {
+    color: var(--pf-muted);
+  }
+
+  .fnb-tag {
+    color: var(--pf-text);
+    background: var(--pf-bg);
+    border: 1px solid var(--pf-line);
+    border-radius: 999px;
+    box-shadow: none;
+    transform: none;
+    font-size: 0.72rem;
+    font-weight: 650;
+
+    &:hover {
+      color: var(--pf-pink);
+      background: var(--pf-soft-pink);
+      border-color: color-mix(in srgb, var(--pf-pink) 35%, var(--pf-line));
+      box-shadow: none;
+      transform: none;
+    }
+  }
+
+  .artwork-tag__translation,
+  .novel-reader .page-divider,
+  .novel-reader .page-jump {
+    color: var(--pf-muted);
+  }
+
+  .author-card .left img {
+    object-fit: cover;
+    border: 0;
+    border-radius: 50%;
+  }
+
+  .novel-reader .page-divider {
+    &::before,
+    &::after {
+      height: 1px;
+      background: var(--pf-line);
+      opacity: 1;
+    }
+  }
+
+  .novel-reader .embedded-image img {
+    border: 1px solid var(--pf-line);
+    border-radius: 12px;
+  }
+
+  .novel-reader .pixiv-image {
+    background: var(--pf-bg);
+    border: 1px solid var(--pf-line);
+    border-radius: 10px;
+  }
+
+  @media (max-width: 680px) {
+    padding-top: 18px;
+
+    .modern-page-shell,
+    &.modern-page-shell,
+    .modern-wide-shell {
+      width: calc(100% - 24px);
     }
   }
 }

@@ -1,5 +1,9 @@
 import { defineStore } from 'pinia'
 import type { Artwork, ArtworkGallery, ArtworkInfo } from '~/types'
+import type {
+  ArtworkBookmarkSettings,
+  BookmarkTagGroups,
+} from '~/utils/bookmarkTags'
 
 export const useArtworkStore = defineStore('artwork', () => {
   const pixivClient = usePixivClient()
@@ -59,8 +63,68 @@ export const useArtworkStore = defineStore('artwork', () => {
     return pixivClient.getComments(illustId, params)
   }
 
-  async function addBookmark(illustId: string | number): Promise<any> {
-    return pixivClient.addBookmark(illustId)
+  async function fetchBookmarkTags(userId: string): Promise<BookmarkTagGroups> {
+    return pixivClient.getBookmarkTags(userId)
+  }
+
+  async function fetchArtworkBookmarkSettings(
+    illustId: string | number,
+    fallbackPrivate = false,
+    fallbackTags: string[] = []
+  ): Promise<ArtworkBookmarkSettings> {
+    return pixivClient.getArtworkBookmarkSettings(
+      illustId,
+      fallbackPrivate,
+      fallbackTags
+    )
+  }
+
+  async function addBookmark(
+    illustId: string | number,
+    options: { tags?: string[]; private?: boolean } = {}
+  ): Promise<any> {
+    return pixivClient.addBookmark(illustId, options)
+  }
+
+  async function updateBookmark(
+    bookmarkId: string | number,
+    current: ArtworkBookmarkSettings,
+    next: ArtworkBookmarkSettings
+  ): Promise<void> {
+    const currentTags = new Set(current.tags)
+    const nextTags = new Set(next.tags)
+    const addTags = next.tags.filter((tag) => !currentTags.has(tag))
+    const removeTags = current.tags.filter((tag) => !nextTags.has(tag))
+    const updates: Promise<void>[] = [
+      pixivClient.addBookmarkTags(bookmarkId, addTags),
+      pixivClient.removeBookmarkTags(bookmarkId, removeTags),
+    ]
+    if (current.private !== next.private) {
+      updates.push(
+        pixivClient.editBookmarkVisibility(
+          bookmarkId,
+          next.private ? 'private' : 'public'
+        )
+      )
+    }
+    await Promise.all(updates)
+  }
+
+  async function addTagsToBookmarks(
+    bookmarkIds: Array<string | number>,
+    tags: string[]
+  ): Promise<void> {
+    await pixivClient.addBookmarkTags(bookmarkIds, tags)
+  }
+
+  async function setBookmarksVisibility(
+    bookmarkIds: Array<string | number>,
+    privateBookmarks: boolean
+  ): Promise<void> {
+    await pixivClient.editBookmarkVisibility(
+      bookmarkIds,
+      privateBookmarks ? 'private' : 'public'
+    )
   }
 
   async function removeBookmark(bookmarkId: string | number): Promise<any> {
@@ -88,7 +152,12 @@ export const useArtworkStore = defineStore('artwork', () => {
     fetchRecommendInit,
     fetchRecommendMore,
     fetchComments,
+    fetchBookmarkTags,
+    fetchArtworkBookmarkSettings,
     addBookmark,
+    updateBookmark,
+    addTagsToBookmarks,
+    setBookmarksVisibility,
     removeBookmark,
     likeArtwork,
     clearRecommendations,

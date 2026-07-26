@@ -3,12 +3,12 @@ Teleport(to='body')
   button.dev-debug-trigger(
     :aria-expanded='open'
     @click='open = true'
-    title='打开开发调试面板'
+    title='打开页面设置'
     type='button'
     v-if='!open'
   )
     ITablerAdjustments(aria-hidden='true')
-    span 调试
+    span 页面设置
 
   aside.dev-debug-panel(
     :aria-label='title',
@@ -46,7 +46,7 @@ withDefaults(
     title?: string
   }>(),
   {
-    title: '开发调试',
+    title: '页面设置',
   }
 )
 

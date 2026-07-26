@@ -6,7 +6,8 @@
   section.loading(v-if='loadingUser')
     .cover-banner.no-cover
     .body-inner.user-layout(
-      :class='{ "artwork-grid-layout": isArtworkGridView }'
+      :class='{ "artwork-grid-layout": isArtworkGridView }',
+      :style='isArtworkGridView ? artworkLayoutContainerStyle : undefined'
     )
       .user-sidebar(v-if='!isArtworkGridView')
         FnbCard
@@ -22,7 +23,7 @@
                   text
                 )
       .user-content
-        ArtworkList(:list='[]', :loading='20')
+        ArtworkList(:list='[]', :loading='20' controlled)
 
   //- Error
   section.error(v-else-if='error')
@@ -38,17 +39,18 @@
       span.cover-placeholder(v-else) 用户未设置封面~
 
     .body-inner.user-layout(
-      :class='{ "artwork-grid-layout": isArtworkGridView }'
+      :class='{ "artwork-grid-layout": isArtworkGridView }',
+      :style='isArtworkGridView ? artworkLayoutContainerStyle : undefined'
     )
       //- Left: User info card
       .user-sidebar(v-if='!isArtworkGridView')
-        FnbCard(shadow='md')
+        .user-sidebar-card
           .avatar-area
             a.plain.pointer(@click='showUserMore = true')
               img.user-avatar(:alt='user.name', :src='user.imageBig')
           h2.username {{ user.name }}
           .user-id(v-if='user.premium')
-            FnbTag(color='var(--fnb-highlight)') Premium
+            span.user-premium Premium
           .meta-lines
             .meta-line
               RouterLink(:to='`/users/${user.userId}/following`')
@@ -79,47 +81,97 @@
           hr
           .sidebar-buttons
             template(v-if='!isSelfUserPage')
-              FnbButton(
-                :loading='loadingUserFollow',
-                :variant='user.isFollowed ? "success" : "default"'
+              button.sidebar-follow-button(
+                :class='{ followed: user.isFollowed }',
+                :disabled='loadingUserFollow'
                 @click='handleUserFollow'
-                size='sm'
+                type='button'
               )
-                template(#icon)
-                  FnbIcon
-                    IFasCheck(v-if='user.isFollowed')
-                    IFasPlus(v-else)
+                IFasCheck(v-if='user.isFollowed')
+                IFasPlus(v-else)
                 | {{ user.isFollowed ? '已关注' : '关注' }}
             template(v-else)
-              FnbButton(size='sm') 我真棒
+              span.self-user-badge 这是你自己
 
       //- Right: Artworks
       .user-content
+        UserArtworkOverview(
+          :follow-loading='loadingUserFollow',
+          :is-self='isSelfUserPage',
+          :selected-tag='selectedArtworkTag',
+          :show-tags='tab === UserTabs.illusts',
+          :tags='userArtworkTags',
+          :tags-loading='loadingUserArtworkTags',
+          :user='user'
+          @follow='handleUserFollow'
+          @show-profile='showUserMore = true'
+          @update:selected-tag='selectedArtworkTag = $event'
+          v-if='isAuthorWorksTab'
+        )
         FnbTabs(:tabs='tabsList' v-model='tab')
           template(#panel-illusts)
-            .fnb-empty(v-if='user.illusts && !user.illusts.length') 用户没有插画作品 (｡•́︿•̀｡)
+            ArtworkListByUserTag(
+              :tag='selectedArtworkTag',
+              :user-id='user.userId'
+              controlled
+              v-if='selectedArtworkTag'
+            )
+            .fnb-empty(v-else-if='user.illusts && !user.illusts.length') 用户没有插画作品 (｡•́︿•̀｡)
             .user-illust(v-else)
-              ArtworkListByUser(:user-id='user.userId' work-category='illust')
+              ArtworkListByUser(
+                :user-id='user.userId'
+                controlled
+                work-category='illust'
+              )
           template(#panel-mangas)
             .fnb-empty(v-if='!user.manga?.length') 用户没有漫画作品 (*/ω＼*)
             .user-manga(v-else)
-              ArtworkListByUser(:user-id='user.userId' work-category='manga')
+              ArtworkListByUser(
+                :user-id='user.userId'
+                controlled
+                work-category='manga'
+              )
           template(#panel-novels)
             .fnb-empty(v-if='!user.novels?.length') 用户没有小说作品 (｡•́︿•̀｡)
             .user-novels(v-else)
               NovelList(:list='user.novels')
           template(#panel-public_bookmarks)
+            BookmarkTagFilter(
+              :items='bookmarkTags.public',
+              :loading='loadingBookmarkTags'
+              v-if='isSelfUserPage'
+              v-model='selectedPublicBookmarkTag'
+            )
+            BookmarkBatchToolbar(
+              :active='bookmarkBatchMode',
+              :all-selected='allPageBookmarksSelected',
+              :available-tags='batchAvailableBookmarkTags',
+              :loading='bookmarkBatchLoading',
+              :selected-count='selectedBookmarks.length',
+              :total-count='publicBookmarks.length'
+              @add-tags='handleBatchAddTags'
+              @cancel='cancelBookmarkBatch'
+              @set-visibility='handleBatchVisibility'
+              @start='startBookmarkBatch'
+              @toggle-all='toggleAllPageBookmarks'
+              v-if='isSelfUserPage && publicBookmarks.length'
+            )
             ArtworkList(
               :list='[]',
               :loading='8',
               :marker-disabled='isSelfUserPage'
+              controlled
               v-if='!publicBookmarks?.length && loadingPublicBookmarks'
             )
             .fnb-empty(v-else-if='!publicBookmarks?.length') {{ emptyPublicBookmarksText }}
             .user-bookmarks.bookmark-grid(ref='publicBookmarkGridRef' v-else)
               ArtworkList(
                 :list='publicBookmarks',
-                :marker-disabled='isSelfUserPage'
+                :marker-disabled='isSelfUserPage',
+                :selectable='bookmarkBatchMode',
+                :selected-ids='selectedBookmarkIds'
+                @toggle-selection='toggleBookmarkSelection'
+                controlled
               )
               FnbPagination.bookmark-pagination(
                 :item-count='totalPublicBookmarks',
@@ -128,15 +180,42 @@
                 @update:page='changePublicBookmarkPage'
               )
           template(#panel-hidden_bookmarks v-if='isSelfUserPage')
+            BookmarkTagFilter(
+              :items='bookmarkTags.private',
+              :loading='loadingBookmarkTags'
+              v-model='selectedHiddenBookmarkTag'
+            )
+            BookmarkBatchToolbar(
+              :active='bookmarkBatchMode',
+              :all-selected='allPageBookmarksSelected',
+              :available-tags='batchAvailableBookmarkTags',
+              :loading='bookmarkBatchLoading',
+              :selected-count='selectedBookmarks.length',
+              :total-count='hiddenBookmarks.length'
+              @add-tags='handleBatchAddTags'
+              @cancel='cancelBookmarkBatch'
+              @set-visibility='handleBatchVisibility'
+              @start='startBookmarkBatch'
+              @toggle-all='toggleAllPageBookmarks'
+              v-if='hiddenBookmarks.length'
+            )
             ArtworkList(
               :list='[]',
               :loading='8'
+              controlled
               marker-disabled
               v-if='!hiddenBookmarks?.length && loadingHiddenBookmarks'
             )
-            .fnb-empty(v-else-if='!hiddenBookmarks?.length') 没有隐藏的小秘密 இ௰இ
+            .fnb-empty(v-else-if='!hiddenBookmarks?.length') {{ emptyHiddenBookmarksText }}
             .user-bookmarks.bookmark-grid(ref='hiddenBookmarkGridRef' v-else)
-              ArtworkList(:list='hiddenBookmarks' marker-disabled)
+              ArtworkList(
+                :list='hiddenBookmarks',
+                :selectable='bookmarkBatchMode',
+                :selected-ids='selectedBookmarkIds'
+                @toggle-selection='toggleBookmarkSelection'
+                controlled
+                marker-disabled
+              )
               FnbPagination.bookmark-pagination(
                 :item-count='totalHiddenBookmarks',
                 :page='hiddenBookmarkPage',
@@ -186,7 +265,7 @@
               h4 Debug Info
               details
                 pre(
-                  style='overflow: auto; background: var(--fnb-bg); padding: 4px'
+                  style='overflow: auto; background: var(--pf-bg); padding: 4px'
                 ) {{ JSON.stringify(user, null, 2) }}
 </template>
 
@@ -197,9 +276,13 @@ definePageMeta({
 })
 import ArtworkList from '~/components/Artwork/ArtworkList.vue'
 import ArtworkListByUser from '~/components/Artwork/ArtworkListByUser.vue'
+import ArtworkListByUserTag from '~/components/Artwork/ArtworkListByUserTag.vue'
 import ArtworkMarkerControl from '~/components/Artwork/ArtworkMarkerControl.vue'
+import BookmarkBatchToolbar from '~/components/Bookmark/BookmarkBatchToolbar.vue'
+import BookmarkTagFilter from '~/components/Bookmark/BookmarkTagFilter.vue'
 import ErrorPage from '~/components/ErrorPage.vue'
 import NovelList from '~/components/Novel/NovelList.vue'
+import UserArtworkOverview from '~/components/User/UserArtworkOverview.vue'
 import IFasBirthdayCake from '~icons/fa-solid/birthday-cake'
 import IFasCheck from '~icons/fa-solid/check'
 import IFasHome from '~icons/fa-solid/home'
@@ -208,34 +291,74 @@ import IFasParking from '~icons/fa-solid/parking'
 import IFasPlus from '~icons/fa-solid/plus'
 import IFasVenusMars from '~icons/fa-solid/venus-mars'
 import { useUserStore } from '~/stores/session'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
+import { useUserArtworksStore } from '~/stores/user-artworks'
+import { useArtworkStore } from '~/stores/artwork'
 import { useUserProfileStore } from '~/stores/user-profile'
-import type { ArtworkInfo, User } from '~/types'
+import type { ArtworkInfo, User, UserArtworkTag } from '~/types'
 import {
   BOOKMARK_PAGE_SIZE,
   bookmarkPageOffset,
   isArtworkGridTab,
 } from '~/utils/refineModernArtwork'
 import { setTitle } from '~/utils/setTitle'
+import {
+  bookmarkListCacheKey,
+  mergeBookmarkTags,
+  prioritizeBookmarkTags,
+  type BookmarkTagGroups,
+} from '~/utils/bookmarkTags'
 import { effect } from 'vue'
 
 const loadingUser = ref(true)
 const user = ref<User>()
 const userStore = useUserStore()
+const localPersistenceStore = useLocalPersistenceStore()
+const userArtworksStore = useUserArtworksStore()
+const artworkStore = useArtworkStore()
 const userProfileStore = useUserProfileStore()
 const toast = useToast()
+const { containerStyle: artworkLayoutContainerStyle } =
+  useArtworkLayoutSettings()
 const isSelfUserPage = computed(() => user.value?.userId === userStore.userId)
 
 const publicBookmarks = ref<ArtworkInfo[]>([])
 const loadingPublicBookmarks = ref(false)
 const totalPublicBookmarks = ref(0)
 const publicBookmarkPage = ref(1)
-const publicBookmarkCache = new Map<number, ArtworkInfo[]>()
+const publicBookmarkCache = new Map<string, ArtworkInfo[]>()
+const selectedPublicBookmarkTag = ref('')
+const userArtworkTags = ref<UserArtworkTag[]>([])
+const loadingUserArtworkTags = ref(false)
+const selectedArtworkTag = ref('')
+let artworkTagsRequestId = 0
 
 const hiddenBookmarks = ref<ArtworkInfo[]>([])
 const loadingHiddenBookmarks = ref(false)
 const totalHiddenBookmarks = ref(0)
 const hiddenBookmarkPage = ref(1)
-const hiddenBookmarkCache = new Map<number, ArtworkInfo[]>()
+const hiddenBookmarkCache = new Map<string, ArtworkInfo[]>()
+const selectedHiddenBookmarkTag = ref('')
+const bookmarkTags = ref<BookmarkTagGroups>({ public: [], private: [] })
+const batchAvailableBookmarkTags = computed(() => {
+  const tagCounts = new Map<string, number>()
+  for (const tag of [
+    ...bookmarkTags.value.public,
+    ...bookmarkTags.value.private,
+  ]) {
+    tagCounts.set(tag.name, (tagCounts.get(tag.name) ?? 0) + tag.count)
+  }
+  return prioritizeBookmarkTags(
+    [...tagCounts].map(([name, count]) => ({ name, count })),
+    []
+  )
+})
+const loadingBookmarkTags = ref(false)
+const bookmarkBatchMode = ref(false)
+const bookmarkBatchLoading = ref(false)
+const selectedBookmarkIds = ref<string[]>([])
+let publicBookmarkRequestId = 0
+let hiddenBookmarkRequestId = 0
 const publicBookmarkGridRef = ref<HTMLElement | null>(null)
 const hiddenBookmarkGridRef = ref<HTMLElement | null>(null)
 
@@ -265,11 +388,39 @@ const showArtworkMarkerControl = computed(
 const isArtworkGridView = computed(() =>
   isArtworkGridTab(tab.value || String(route.query.tab || ''))
 )
+const isAuthorWorksTab = computed(
+  () => tab.value === UserTabs.illusts || tab.value === UserTabs.mangas
+)
 
 const emptyPublicBookmarksText = computed(() =>
-  isSelfUserPage.value
-    ? '收藏夹是空的 Σ(⊙▽⊙"a'
-    : user.value?.name + '没有公开的收藏 (❁´◡`❁)'
+  selectedPublicBookmarkTag.value
+    ? '这个标签下还没有公开收藏'
+    : isSelfUserPage.value
+      ? '收藏夹是空的 Σ(⊙▽⊙"a'
+      : user.value?.name + '没有公开的收藏 (❁´◡`❁)'
+)
+const emptyHiddenBookmarksText = computed(() =>
+  selectedHiddenBookmarkTag.value
+    ? '这个标签下还没有私密收藏'
+    : '没有隐藏的小秘密 இ௰இ'
+)
+const activeBookmarkList = computed(() =>
+  tab.value === UserTabs.hidden_bookmarks
+    ? hiddenBookmarks.value
+    : publicBookmarks.value
+)
+const selectedBookmarks = computed(() => {
+  const selected = new Set(selectedBookmarkIds.value)
+  return activeBookmarkList.value.filter(
+    (item) => item.bookmarkData && selected.has(item.id)
+  )
+})
+const allPageBookmarksSelected = computed(
+  () =>
+    !!activeBookmarkList.value.length &&
+    activeBookmarkList.value.every((item) =>
+      selectedBookmarkIds.value.includes(item.id)
+    )
 )
 
 const tabsList = computed(() => {
@@ -315,16 +466,27 @@ async function init(id: string | number, initTab?: UserTabs): Promise<void> {
   totalHiddenBookmarks.value = 0
   publicBookmarkPage.value = 1
   hiddenBookmarkPage.value = 1
+  selectedPublicBookmarkTag.value = ''
+  selectedHiddenBookmarkTag.value = ''
+  bookmarkBatchMode.value = false
+  bookmarkBatchLoading.value = false
+  selectedBookmarkIds.value = []
+  bookmarkTags.value = { public: [], private: [] }
+  publicBookmarkRequestId += 1
+  hiddenBookmarkRequestId += 1
+  userArtworkTags.value = []
+  selectedArtworkTag.value = ''
+  artworkTagsRequestId += 1
   publicBookmarkCache.clear()
   hiddenBookmarkCache.clear()
 
   try {
     loadingUser.value = true
     user.value = await userProfileStore.fetchUser('' + id)
-    void $fetch(`/api/local/authors/${id}/visit`, { method: 'POST' }).catch(
-      () => {}
-    )
+    void localPersistenceStore.recordAuthorVisit(id).catch(() => {})
     tab.value = initTab || UserTabs.illusts
+    void loadUserArtworkTags(String(id))
+    if (isSelfUserPage.value) void loadBookmarkTags()
   } catch (err) {
     if (err instanceof Error) {
       error.value = err.message
@@ -333,6 +495,34 @@ async function init(id: string | number, initTab?: UserTabs): Promise<void> {
     }
   } finally {
     loadingUser.value = false
+  }
+}
+
+async function loadBookmarkTags() {
+  if (!isSelfUserPage.value || !userStore.userId) return
+  loadingBookmarkTags.value = true
+  try {
+    bookmarkTags.value = await artworkStore.fetchBookmarkTags(userStore.userId)
+  } catch (err) {
+    console.warn('failed to fetch bookmark tags', err)
+    bookmarkTags.value = { public: [], private: [] }
+  } finally {
+    loadingBookmarkTags.value = false
+  }
+}
+
+async function loadUserArtworkTags(userId: string) {
+  const requestId = ++artworkTagsRequestId
+  loadingUserArtworkTags.value = true
+  try {
+    const tags = await userArtworksStore.fetchTags(userId)
+    if (requestId === artworkTagsRequestId) userArtworkTags.value = tags
+  } catch {
+    if (requestId === artworkTagsRequestId) userArtworkTags.value = []
+  } finally {
+    if (requestId === artworkTagsRequestId) {
+      loadingUserArtworkTags.value = false
+    }
   }
 }
 
@@ -369,34 +559,49 @@ async function getBookmarks(hidden = false, page = 1): Promise<void> {
   const curTotal = hidden ? totalHiddenBookmarks : totalPublicBookmarks
   const curPage = hidden ? hiddenBookmarkPage : publicBookmarkPage
   const cache = hidden ? hiddenBookmarkCache : publicBookmarkCache
+  const tag = hidden
+    ? selectedHiddenBookmarkTag.value
+    : selectedPublicBookmarkTag.value
+  const cacheKey = bookmarkListCacheKey(tag, page)
+  const requestId = hidden
+    ? ++hiddenBookmarkRequestId
+    : ++publicBookmarkRequestId
 
-  const cached = cache.get(page)
+  const cached = cache.get(cacheKey)
   if (cached) {
     curList.value = cached
     curPage.value = page
+    curLoading.value = false
     return
   }
-
-  if (curLoading.value) return
 
   try {
     curLoading.value = true
     const data = await userProfileStore.fetchBookmarks(curUser.userId, {
       offset: bookmarkPageOffset(page),
       hidden,
+      tag,
     })
+    const isLatest = hidden
+      ? requestId === hiddenBookmarkRequestId
+      : requestId === publicBookmarkRequestId
+    if (!isLatest) return
     curTotal.value = data.total
-    cache.set(page, data.works)
+    cache.set(cacheKey, data.works)
     curList.value = data.works
     curPage.value = page
   } catch (err) {
     console.warn('failed to fetch bookmarks', err)
   } finally {
-    curLoading.value = false
+    const isLatest = hidden
+      ? requestId === hiddenBookmarkRequestId
+      : requestId === publicBookmarkRequestId
+    if (isLatest) curLoading.value = false
   }
 }
 
 async function changePublicBookmarkPage(page: number): Promise<void> {
+  selectedBookmarkIds.value = []
   await getBookmarks(false, page)
   publicBookmarkGridRef.value?.scrollIntoView({
     behavior: 'smooth',
@@ -405,6 +610,7 @@ async function changePublicBookmarkPage(page: number): Promise<void> {
 }
 
 async function changeHiddenBookmarkPage(page: number): Promise<void> {
+  selectedBookmarkIds.value = []
   await getBookmarks(true, page)
   hiddenBookmarkGridRef.value?.scrollIntoView({
     behavior: 'smooth',
@@ -412,8 +618,12 @@ async function changeHiddenBookmarkPage(page: number): Promise<void> {
   })
 }
 
-watch(tab, (newTab) => {
+watch(tab, (newTab, oldTab) => {
   if (!newTab) return
+  if (oldTab && oldTab !== newTab) {
+    selectedArtworkTag.value = ''
+    cancelBookmarkBatch()
+  }
 
   const isPublicBookmarkEmpty = !publicBookmarks.value.length
   const isHiddenBookmarkEmpty = !hiddenBookmarks.value.length
@@ -430,6 +640,112 @@ watch(tab, (newTab) => {
   }
 })
 
+watch(selectedPublicBookmarkTag, () => {
+  selectedBookmarkIds.value = []
+  publicBookmarkPage.value = 1
+  if (tab.value === UserTabs.public_bookmarks) void getBookmarks(false, 1)
+})
+
+watch(selectedHiddenBookmarkTag, () => {
+  selectedBookmarkIds.value = []
+  hiddenBookmarkPage.value = 1
+  if (tab.value === UserTabs.hidden_bookmarks) void getBookmarks(true, 1)
+})
+
+function startBookmarkBatch() {
+  bookmarkBatchMode.value = true
+  selectedBookmarkIds.value = []
+}
+
+function cancelBookmarkBatch() {
+  bookmarkBatchMode.value = false
+  selectedBookmarkIds.value = []
+}
+
+function toggleBookmarkSelection(item: ArtworkInfo) {
+  const selected = new Set(selectedBookmarkIds.value)
+  if (selected.has(item.id)) selected.delete(item.id)
+  else selected.add(item.id)
+  selectedBookmarkIds.value = [...selected]
+}
+
+function toggleAllPageBookmarks() {
+  selectedBookmarkIds.value = allPageBookmarksSelected.value
+    ? []
+    : activeBookmarkList.value.map((item) => item.id)
+}
+
+async function refreshActiveBookmarkPage() {
+  publicBookmarkCache.clear()
+  hiddenBookmarkCache.clear()
+  const hidden = tab.value === UserTabs.hidden_bookmarks
+  const page = hidden ? hiddenBookmarkPage.value : publicBookmarkPage.value
+  await Promise.all([loadBookmarkTags(), getBookmarks(hidden, page)])
+  const list = hidden ? hiddenBookmarks.value : publicBookmarks.value
+  if (!list.length && page > 1) await getBookmarks(hidden, page - 1)
+}
+
+async function handleBatchAddTags(tags: string[]) {
+  const normalizedTags = tags.slice(0, 10)
+  const targets = selectedBookmarks.value
+  const bookmarkIds = targets.flatMap((item) =>
+    item.bookmarkData ? [item.bookmarkData.id] : []
+  )
+  if (!bookmarkIds.length || bookmarkBatchLoading.value) return
+
+  bookmarkBatchLoading.value = true
+  try {
+    await artworkStore.addTagsToBookmarks(bookmarkIds, normalizedTags)
+    for (const item of targets) {
+      if (!item.bookmarkData) continue
+      item.bookmarkData.tags = mergeBookmarkTags(
+        item.bookmarkData.tags ?? [],
+        normalizedTags
+      )
+    }
+    await refreshActiveBookmarkPage()
+    toast.success(`已为 ${bookmarkIds.length} 个收藏添加标签`)
+  } catch (err) {
+    console.warn('failed to add bookmark tags in batch', err)
+    toast.error('批量添加标签失败，请稍后重试')
+  } finally {
+    bookmarkBatchLoading.value = false
+  }
+}
+
+async function handleBatchVisibility(privateBookmarks: boolean) {
+  const targets = selectedBookmarks.value
+  const bookmarkIds = targets.flatMap((item) =>
+    item.bookmarkData ? [item.bookmarkData.id] : []
+  )
+  if (!bookmarkIds.length || bookmarkBatchLoading.value) return
+
+  bookmarkBatchLoading.value = true
+  try {
+    await artworkStore.setBookmarksVisibility(bookmarkIds, privateBookmarks)
+    selectedBookmarkIds.value = []
+    await refreshActiveBookmarkPage()
+    toast.success(
+      `已将 ${bookmarkIds.length} 个收藏转为${privateBookmarks ? '私密' : '公开'}`
+    )
+  } catch (err) {
+    console.warn('failed to edit bookmark visibility in batch', err)
+    toast.error('批量修改可见范围失败，请稍后重试')
+  } finally {
+    bookmarkBatchLoading.value = false
+  }
+}
+
+const { revision: bookmarkRevision } = useBookmarkEditor()
+watch(bookmarkRevision, () => {
+  if (!isSelfUserPage.value) return
+  publicBookmarkCache.clear()
+  hiddenBookmarkCache.clear()
+  void loadBookmarkTags()
+  if (tab.value === UserTabs.public_bookmarks) void getBookmarks(false, 1)
+  if (tab.value === UserTabs.hidden_bookmarks) void getBookmarks(true, 1)
+})
+
 onBeforeRouteUpdate((to) => {
   if (to.name !== 'users') {
     return
@@ -444,22 +760,34 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-// ── Cover Banner ──
+#user-view {
+  min-height: 100vh;
+  color: var(--pf-text);
+  background: var(--pf-bg);
+}
+
 .cover-banner {
-  height: 280px;
   position: relative;
-  border-bottom: 3px solid var(--fnb-border);
+  height: 150px;
   overflow: hidden;
+  background: color-mix(in srgb, var(--pf-pink) 7%, var(--pf-bg));
 
   &.no-cover {
-    height: 120px;
-    background: var(--fnb-bg);
+    height: 86px;
+    background:
+      radial-gradient(
+        circle at 22% 20%,
+        color-mix(in srgb, var(--pf-pink) 18%, transparent),
+        transparent 34%
+      ),
+      var(--pf-bg);
   }
 
   @media (max-width: 768px) {
-    height: 180px;
+    height: 110px;
+
     &.no-cover {
-      height: 80px;
+      height: 70px;
     }
   }
 }
@@ -470,6 +798,7 @@ onMounted(async () => {
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
+  filter: saturate(0.92);
 }
 
 .cover-placeholder {
@@ -477,20 +806,24 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   user-select: none;
 }
 
-// ── Two-Column Layout ──
 .user-layout {
+  position: relative;
   display: grid;
   grid-template-columns: 280px 1fr;
-  gap: 1.5rem;
-  margin-top: 1.5rem;
   align-items: start;
+  gap: 24px;
+  width: min(1320px, calc(100% - 48px));
+  margin: -32px auto 0;
+  padding-bottom: 48px;
 
   @media (max-width: 768px) {
     grid-template-columns: 1fr;
+    width: calc(100% - 24px);
+    margin-top: -20px;
   }
 
   &.artwork-grid-layout {
@@ -542,26 +875,34 @@ onMounted(async () => {
   margin: 2rem 0 0.5rem;
 }
 
-// ── Left Sidebar ──
 .user-sidebar {
   text-align: center;
 
+  .user-sidebar-card {
+    padding: 20px;
+    background: color-mix(in srgb, var(--pf-surface) 96%, transparent);
+    border: 1px solid var(--pf-line);
+    border-radius: 18px;
+    box-shadow: var(--pf-card-shadow);
+  }
+
   .avatar-area {
-    margin-bottom: 0.75rem;
+    margin-bottom: 12px;
   }
 
   .user-avatar {
-    width: 100px;
-    height: 100px;
-    @include fnb-border;
-    @include fnb-shadow-sm;
-    background: var(--fnb-surface);
+    width: 92px;
+    height: 92px;
+    object-fit: cover;
+    background: var(--pf-surface);
+    border: 3px solid var(--pf-surface);
+    border-radius: 50%;
+    box-shadow: 0 8px 22px rgb(67 41 59 / 18%);
   }
 
   .username {
-    font-family: var(--fnb-font-display);
     font-size: 1.3rem;
-    font-weight: 900;
+    font-weight: 780;
     margin: 0 0 0.25rem;
   }
 
@@ -569,17 +910,28 @@ onMounted(async () => {
     margin-bottom: 0.5rem;
   }
 
+  .user-premium {
+    display: inline-flex;
+    padding: 3px 8px;
+    color: #fff;
+    background: #f3a221;
+    border-radius: 999px;
+    font-size: 0.64rem;
+    font-weight: 750;
+    text-transform: uppercase;
+  }
+
   hr {
     border: none;
-    height: 3px;
-    background: var(--fnb-border);
-    margin: 0.75rem -1rem;
+    height: 1px;
+    background: var(--pf-line);
+    margin: 14px 0;
   }
 
   .meta-lines {
     text-align: left;
     font-size: 0.85rem;
-    color: var(--fnb-text);
+    color: var(--pf-text);
   }
 
   .meta-line {
@@ -589,7 +941,7 @@ onMounted(async () => {
     padding: 0.2rem 0;
 
     .fnb-icon {
-      color: var(--fnb-brand);
+      color: var(--pf-pink);
       font-size: 1.3em;
     }
 
@@ -610,7 +962,7 @@ onMounted(async () => {
       margin: 0;
 
       &.muted {
-        color: var(--fnb-text-muted);
+        color: var(--pf-muted);
       }
     }
   }
@@ -628,7 +980,45 @@ onMounted(async () => {
   }
 }
 
-// ── Right Content ──
+.sidebar-follow-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 112px;
+  min-height: 40px;
+  padding: 0 16px;
+  color: #fff;
+  background: var(--pf-blue);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 750;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  &.followed {
+    color: var(--pf-text);
+    background: var(--pf-bg);
+    border: 1px solid var(--pf-line);
+  }
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.64;
+  }
+}
+
+.self-user-badge {
+  color: var(--pf-muted);
+  font-size: 0.76rem;
+}
+
 .user-content {
   min-width: 0;
 
@@ -636,6 +1026,41 @@ onMounted(async () => {
     position: sticky;
     top: 63px;
     z-index: 12;
+    justify-content: center;
+    gap: 4px;
+    padding: 0;
+    background: color-mix(in srgb, var(--pf-bg) 92%, transparent);
+    border: 0;
+    border-bottom: 1px solid var(--pf-line);
+    backdrop-filter: blur(14px);
+  }
+
+  :deep(.fnb-tabs__tab) {
+    flex: 0 1 auto;
+    min-width: 96px;
+    padding: 13px 20px 11px;
+    color: var(--pf-muted);
+    background: transparent;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    font-size: 0.86rem;
+    font-weight: 650;
+
+    &:hover:not(.fnb-tabs__tab--active) {
+      color: var(--pf-text);
+      background: color-mix(in srgb, var(--pf-pink) 6%, transparent);
+    }
+  }
+
+  :deep(.fnb-tabs__tab--active) {
+    color: var(--pf-pink);
+    background: transparent;
+    border-color: var(--pf-pink);
+    font-weight: 760;
+  }
+
+  :deep(.fnb-tabs__panel) {
+    margin-top: 22px;
   }
 }
 
@@ -650,10 +1075,9 @@ onMounted(async () => {
 .fnb-empty {
   margin: 10vh auto;
   text-align: center;
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
 }
 
-// ── Detail Modal ──
 .fnb-dialog-overlay {
   position: fixed;
   inset: 0;
@@ -665,15 +1089,18 @@ onMounted(async () => {
 }
 
 .fnb-dialog-card {
-  @include fnb-border;
-  @include fnb-shadow-lg;
-  background: var(--fnb-surface);
   width: 600px;
   max-width: 86vw;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 18px;
+  box-shadow: 0 22px 70px rgb(0 0 0 / 28%);
 
   &__close {
     position: absolute;
@@ -685,17 +1112,16 @@ onMounted(async () => {
     font-weight: 900;
     line-height: 1;
     cursor: pointer;
-    color: var(--fnb-text-muted);
+    color: var(--pf-muted);
     z-index: 1;
 
     &:hover {
-      color: var(--fnb-text);
+      color: var(--pf-text);
     }
   }
 
   &__header {
-    font-family: var(--fnb-font-display);
-    font-weight: 900;
+    font-weight: 780;
     font-size: 1.1rem;
     padding: 1rem 1.5rem 0.5rem;
     padding-right: 2.5rem;
@@ -711,15 +1137,15 @@ onMounted(async () => {
 .info-modal {
   hr {
     border: none;
-    height: 3px;
-    background: var(--fnb-border);
+    height: 1px;
+    background: var(--pf-line);
     margin: 1rem 0;
   }
 
   .modal-top {
     text-align: center;
-    background: var(--fnb-bg);
-    border-bottom: 3px solid var(--fnb-border);
+    background: var(--pf-bg);
+    border-bottom: 1px solid var(--pf-line);
     padding: 1.5rem 0;
     margin: 0 -1.5rem;
   }
@@ -731,17 +1157,19 @@ onMounted(async () => {
     img {
       width: 80px;
       height: 80px;
-      @include fnb-border;
-      @include fnb-shadow-sm;
+      object-fit: cover;
+      border: 3px solid var(--pf-surface);
+      border-radius: 50%;
+      box-shadow: 0 8px 22px rgb(67 41 59 / 18%);
     }
 
     .premium-icon {
       position: absolute;
       bottom: -4px;
       right: -4px;
-      color: var(--fnb-highlight);
-      background: var(--fnb-surface);
-      border: 2px solid var(--fnb-border);
+      color: #f3a221;
+      background: var(--pf-surface);
+      border: 1px solid var(--pf-line);
       width: 1.4rem;
       height: 1.4rem;
       display: flex;
@@ -753,8 +1181,7 @@ onMounted(async () => {
   }
 
   .modal-name {
-    font-family: var(--fnb-font-display);
-    font-weight: 900;
+    font-weight: 780;
     font-size: 1rem;
     margin-top: 0.5rem;
   }

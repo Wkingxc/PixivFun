@@ -105,6 +105,6 @@ const ob = useIntersectionObserver(
 }
 
 .comments-closed {
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
 }
 </style>

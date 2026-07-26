@@ -1,52 +1,43 @@
 <template lang="pug">
-#about-view.body-inner
-  h1
-    .flex.gap-1
-      FnbButton(
+#following-users-view
+  .following-users-shell
+    header.page-header
+      button.back-button(
         @click='$router.push(`/users/${targetUserId}`)'
-        size='sm'
-        variant='default'
+        aria-label='返回作者页'
+        type='button'
       )
-        template(#icon)
-          IChevronLeft
-      .first-heading {{ followingStore.title }}
+        IChevronLeft
+      .page-heading
+        span.eyebrow FOLLOWING
+        h1 {{ followingStore.title }}
 
-  FnbTabs(
-    v-model='tab'
-    :tabs='tabsList'
-  )
-    template(#panel-public)
-      .user-list
-        Card(
-          title=''
-          v-for='_ in 8'
-          v-if='followingStore.publicList.length === 0 && followingStore.isLoadingPublic'
+    nav.follow-tabs(aria-label='关注用户分组')
+      button(
+        :class='{ active: tab === item.key }',
+        :key='item.key'
+        @click='changeTab(item.key)'
+        type='button'
+        v-for='item in tabsList'
+      ) {{ item.label }}
+
+    .user-list
+      template(v-if='activeLoading && !activeList.length')
+        FollowUserCard(:key='n' v-for='n in 6')
+      template(v-else)
+        FollowUserCard(
+          :key='user.userId',
+          :user='user'
+          v-for='user in activeList'
         )
-          FollowUserCard
-        Card(:key='user.userId' title='' v-for='user in followingStore.publicList')
-          FollowUserCard(:user='user')
-        ShowMore(
-          :loading='followingStore.isLoadingPublic',
-          :method='() => followingStore.fetchFollowingList("" + targetUserId, false)',
-          :text='followingStore.isLoadingPublic ? "加载中..." : "加载更多"'
-          v-if='followingStore.hasMorePublic'
-        )
-    template(#panel-hidden v-if='isSelfPage')
-      .user-list
-        Card(
-          title=''
-          v-for='_ in 8'
-          v-if='followingStore.hiddenList.length === 0 && followingStore.isLoadingHidden'
-        )
-          FollowUserCard
-        Card(:key='user.userId' title='' v-for='user in followingStore.hiddenList')
-          FollowUserCard(:user='user')
-        ShowMore(
-          :loading='followingStore.isLoadingHidden',
-          :method='() => followingStore.fetchFollowingList("" + targetUserId, true)',
-          :text='followingStore.isLoadingHidden ? "加载中..." : "加载更多"'
-          v-if='followingStore.hasMoreHidden'
-        )
+      .empty-state(v-if='!activeLoading && !activeList.length') 暂无关注用户
+
+    FnbPagination.following-user-pagination(
+      :item-count='activeTotal',
+      :page='page',
+      :page-size='PAGE_SIZE'
+      @update:page='changePage'
+    )
 </template>
 
 <script lang="ts" setup>
@@ -66,13 +57,32 @@ onBeforeRouteUpdate((to, from) => {
 })
 
 const route = useRoute()
+const router = useRouter()
 const targetUserId = ref(route.params.id)
 
 const tab = ref<string>('public')
+const PAGE_SIZE = 24
+const page = computed(() => {
+  const value = Number(route.query.p)
+  return Number.isInteger(value) && value > 0 ? value : 1
+})
 
 const userStore = useUserStore()
 const followingStore = useFollowingStore()
 const isSelfPage = computed(() => userStore.userId === targetUserId.value)
+const activeList = computed(() =>
+  tab.value === 'hidden' ? followingStore.hiddenList : followingStore.publicList
+)
+const activeTotal = computed(() =>
+  tab.value === 'hidden'
+    ? followingStore.totalHidden
+    : followingStore.totalPublic
+)
+const activeLoading = computed(() =>
+  tab.value === 'hidden'
+    ? followingStore.isLoadingHidden
+    : followingStore.isLoadingPublic
+)
 
 const tabsList = computed(() => {
   const list = [{ key: 'public', label: '公开关注' }]
@@ -84,36 +94,140 @@ const tabsList = computed(() => {
 
 function resetAndFetch(userId: string) {
   targetUserId.value = userId
-  tab.value = 'public'
+  tab.value =
+    route.query.rest === 'hide' && isSelfPage.value ? 'hidden' : 'public'
   followingStore.resetFollowing()
-  followingStore.fetchFollowingList(userId, false)
+  followingStore.fetchFollowingList(userId, tab.value === 'hidden', page.value)
 }
 
-watch(tab, (newTab) => {
-  const isPublicEmpty = !followingStore.publicList.length
-  const isHiddenEmpty = !followingStore.hiddenList.length
+function changeTab(value: string) {
+  const query = { ...route.query }
+  delete query.p
+  if (value === 'hidden') query.rest = 'hide'
+  else delete query.rest
+  router.push({ query })
+}
 
-  if (newTab === 'public' && isPublicEmpty) {
-    followingStore.fetchFollowingList('' + targetUserId.value, false)
+function changePage(value: number) {
+  const query = { ...route.query }
+  if (value === 1) delete query.p
+  else query.p = String(value)
+  router.push({ query })
+}
+
+watch(
+  () => [route.query.p, route.query.rest],
+  () => {
+    tab.value =
+      route.query.rest === 'hide' && isSelfPage.value ? 'hidden' : 'public'
+    void followingStore.fetchFollowingList(
+      String(targetUserId.value),
+      tab.value === 'hidden',
+      page.value
+    )
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-  if (newTab === 'hidden' && isHiddenEmpty) {
-    followingStore.fetchFollowingList('' + targetUserId.value, true)
-  }
-})
+)
 </script>
 
 <style scoped lang="scss">
-#about-view {
-  padding-top: 2rem;
+#following-users-view {
+  min-height: calc(100vh - 64px);
+  padding: 28px 0 48px;
+  color: var(--pf-text);
+  background: var(--pf-bg);
 }
 
-h1 {
-  margin-top: 0;
+.following-users-shell {
+  width: min(1540px, calc(100% - 64px));
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.back-button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 50%;
+  cursor: pointer;
+  place-items: center;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.page-heading {
+  display: grid;
+  gap: 2px;
+
+  .eyebrow {
+    color: var(--pf-pink);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+  }
+
+  h1 {
+    margin: 0;
+    font-family: inherit;
+    font-size: clamp(1.25rem, 2vw, 1.65rem);
+    font-weight: 780;
+  }
+}
+
+.follow-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--pf-line);
+
+  button {
+    padding: 10px 18px 9px;
+    color: var(--pf-muted);
+    background: transparent;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 680;
+
+    &.active {
+      color: var(--pf-pink);
+      border-color: var(--pf-pink);
+    }
+  }
 }
 
 .user-list {
-  .card:not(:first-of-type) {
-    margin-top: 1rem;
+  display: grid;
+  gap: 20px;
+}
+
+.empty-state {
+  padding: 16vh 0;
+  color: var(--pf-muted);
+  text-align: center;
+}
+
+.following-user-pagination {
+  margin-top: 30px;
+}
+
+@media (max-width: 680px) {
+  .following-users-shell {
+    width: calc(100% - 24px);
   }
 }
 </style>

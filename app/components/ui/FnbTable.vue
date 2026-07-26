@@ -7,21 +7,24 @@ table.fnb-table
 .fnb-table {
   width: 100%;
   border-collapse: collapse;
+  overflow: hidden;
+  color: var(--pf-text);
+  background: var(--pf-surface);
 
   :deep(th),
   :deep(td) {
-    @include fnb-border-sm;
-    padding: 0.5rem 0.75rem;
+    padding: 0.65rem 0.8rem;
+    border-bottom: 1px solid var(--pf-line);
     text-align: left;
   }
 
   :deep(th) {
-    background: var(--fnb-bg);
+    background: var(--pf-bg);
     font-weight: 700;
   }
 
   :deep(tr:hover td) {
-    background: var(--fnb-bg);
+    background: color-mix(in srgb, var(--pf-soft-pink) 42%, transparent);
   }
 }
 </style>

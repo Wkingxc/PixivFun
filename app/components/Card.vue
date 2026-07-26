@@ -11,7 +11,11 @@ defineProps<{ title: string | undefined }>()
 
 <style scoped lang="scss">
 .inner {
-  @include fnb-card;
   padding: 1rem;
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 16px;
+  box-shadow: var(--pf-card-shadow);
 }
 </style>

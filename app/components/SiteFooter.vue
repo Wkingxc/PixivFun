@@ -48,10 +48,10 @@ const yearStr = ref(new Date().getFullYear().toString())
 
 <style scoped lang="scss">
 .global-footer {
-  background-color: var(--fnb-surface);
+  background-color: var(--pf-surface);
   font-size: 1rem;
-  color: var(--fnb-text);
-  border-top: 3px solid var(--fnb-border);
+  color: var(--pf-text);
+  border-top: 1px solid var(--pf-line);
 }
 
 .top {
@@ -63,7 +63,7 @@ const yearStr = ref(new Date().getFullYear().toString())
 .bottom {
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
-  background-color: var(--fnb-bg);
+  background-color: var(--pf-bg);
 }
 
 .compact {
@@ -84,12 +84,12 @@ const yearStr = ref(new Date().getFullYear().toString())
 }
 
 a {
-  color: var(--fnb-text);
+  color: var(--pf-text);
   font-weight: 600;
 
   &:hover {
-    background: var(--fnb-highlight);
-    color: var(--fnb-on-light);
+    color: var(--pf-pink);
+    background: var(--pf-soft-pink);
     padding: 0 0.2em;
   }
 
@@ -110,8 +110,8 @@ h4 {
   margin: 1rem 0 0.5rem 0;
   padding: 0.2em 0.4em;
   font-size: 1.1rem;
-  background: var(--fnb-highlight);
-  color: var(--fnb-on-light);
+  color: var(--pf-text);
+  background: transparent;
   display: inline-block;
 }
 

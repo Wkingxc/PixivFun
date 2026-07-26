@@ -1,12 +1,12 @@
 <template lang="pug">
 template(v-if='repeat > 1')
   span.fnb-skeleton(
-    v-for='i in repeat'
-    :key='i'
-    :class='classes'
+    :class='classes',
+    :key='i',
     :style='sizeStyle'
+    v-for='i in repeat'
   )
-span.fnb-skeleton(v-else :class='classes' :style='sizeStyle')
+span.fnb-skeleton(:class='classes', :style='sizeStyle' v-else)
 </template>
 
 <script lang="ts" setup>
@@ -39,9 +39,9 @@ const sizeStyle = computed(() => ({
 <style scoped lang="scss">
 .fnb-skeleton {
   display: inline-block;
-  background: var(--fnb-skeleton);
+  background: var(--pf-skeleton);
   animation: imgProgress 0.8s ease infinite alternate;
-  border-radius: var(--fnb-radius-sm);
+  border-radius: 8px;
 
   &--circle {
     border-radius: 50%;

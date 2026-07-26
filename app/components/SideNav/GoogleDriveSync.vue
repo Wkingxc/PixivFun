@@ -154,7 +154,10 @@ async function sync() {
       toast.info('云端还没有 PixivFun 数据，请先上传')
       return
     }
-    await localPersistenceStore.refreshCheckedArtworkVisits()
+    await Promise.all([
+      localPersistenceStore.refreshCheckedArtworkVisits(),
+      localPersistenceStore.refreshCheckedAuthorVisits(),
+    ])
     toast.success(
       `已新增 ${result.artworksAdded} 个作品和 ${result.authorsAdded} 个作者记录`
     )

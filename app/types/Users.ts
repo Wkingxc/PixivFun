@@ -4,6 +4,13 @@ import type { NovelInfo } from './Novels'
 // Enums moved to ~/utils/constants.ts for runtime usage
 import type { UserXRestrict, UserPrivacyLevel } from '~/utils/constants'
 
+export interface UserArtworkTag {
+  tag: string
+  tag_translation: string
+  tag_yomigana: string
+  cnt: number
+}
+
 export interface User {
   userId: `${number}`
   name: string

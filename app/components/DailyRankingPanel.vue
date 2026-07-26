@@ -173,7 +173,7 @@ watch(
   height: 104px;
   object-fit: cover;
   border-radius: 10px;
-  background: var(--fnb-skeleton);
+  background: var(--pf-skeleton);
 }
 
 .ranking-thumb-wrap {

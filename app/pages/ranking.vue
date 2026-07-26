@@ -1,40 +1,40 @@
 <template lang="pug">
-#ranking-view
-  .body-inner
+#ranking-view.modern-route-page
+  .modern-page-shell
     h1 排行榜
 
   //- Error
   section(v-if='error && !rankingStore.loading')
-    .body-inner
+    .modern-page-shell
       ErrorPage(:description='error' title='出大问题')
 
   FnbSpin(:show='rankingStore.loading')
-    .body-inner
+    .modern-page-shell
       .ranking-filters
         .filter-row
           span.filter-label 内容
           .filter-tabs
             button.content-tab(
-              v-for='opt in contentOptions',
-              :key='opt.value',
               :class='{ active: selectedContent === opt.value }',
+              :key='opt.value'
               @click='setContentFilter(opt.value)'
+              v-for='opt in contentOptions'
             )
               | {{ opt.label }}
         .filter-row
           span.filter-label 模式
           .filter-tabs
             button.filter-tab(
-              v-for='opt in activeBaseModes',
-              :key='opt.value',
               :class='{ active: selectedMode === opt.value }',
+              :key='opt.value'
               @click='setModeFilter(opt.value)'
+              v-for='opt in activeBaseModes'
             ) {{ opt.label }}
           .refine-field
             span.refine-label 分级
             FnbSelect(
               :model-value='selectedRating',
-              :options='ratingOptions',
+              :options='ratingOptions'
               @update:model-value='setRatingFilter'
             )
 
@@ -141,13 +141,9 @@ const rankingStore = useRankingStore()
 const route = useRoute()
 const router = useRouter()
 
-const selectedContent = computed(
-  () => (route.query.content as string) || 'all'
-)
+const selectedContent = computed(() => (route.query.content as string) || 'all')
 const selectedMode = computed(() => (route.query.mode as string) || 'daily')
-const selectedRating = computed(
-  () => (route.query.rating as string) || 'safe'
-)
+const selectedRating = computed(() => (route.query.rating as string) || 'safe')
 const isNovel = computed(() => selectedContent.value === 'novel')
 const isR18 = computed(() => selectedRating.value === 'r18')
 
@@ -177,9 +173,14 @@ function setModeFilter(value: string) {
 }
 
 function setRatingFilter(value: string) {
-  const modes = value === 'r18'
-    ? (isNovel.value ? novelR18Modes : artworkR18Modes)
-    : (isNovel.value ? novelSafeModes : artworkSafeModes)
+  const modes =
+    value === 'r18'
+      ? isNovel.value
+        ? novelR18Modes
+        : artworkR18Modes
+      : isNovel.value
+        ? novelSafeModes
+        : artworkSafeModes
   const currentModeValid = modes.some((m) => m.value === selectedMode.value)
   const updates: Record<string, string> = { rating: value }
   if (!currentModeValid) updates.mode = 'daily'
@@ -219,9 +220,12 @@ async function init(): Promise<void> {
 
 effect(() => setTitle(rankingStore.rankingData?.date, 'Ranking'))
 
-watch(() => route.query, () => {
-  init()
-})
+watch(
+  () => route.query,
+  () => {
+    init()
+  }
+)
 
 onMounted(() => {
   init()
@@ -244,8 +248,8 @@ onMounted(() => {
 }
 
 .filter-label {
-  font-family: var(--fnb-font-display);
-  font-weight: 900;
+  font-family: inherit;
+  font-weight: 760;
   font-size: 0.85rem;
   flex-shrink: 0;
   width: 2.5em;
@@ -259,23 +263,23 @@ onMounted(() => {
 
 .filter-tab,
 .content-tab {
-  @include fnb-border-sm;
-  @include fnb-shadow-xs;
-  background: var(--fnb-surface);
-  color: var(--fnb-text);
+  background: var(--pf-surface);
+  color: var(--pf-muted);
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
   cursor: pointer;
   transition: all 150ms;
 
   &.active {
-    background: var(--fnb-brand);
-    color: var(--fnb-on-brand);
+    background: var(--pf-blue);
+    color: #fff;
+    border-color: var(--pf-blue);
     box-shadow: none;
-    transform: translate(2px, 2px);
   }
 
   &:hover:not(.active) {
-    background: var(--fnb-highlight);
-    color: var(--fnb-on-light);
+    background: var(--pf-soft-blue);
+    color: var(--pf-blue);
   }
 }
 
@@ -290,7 +294,7 @@ onMounted(() => {
 // Primary axis: content tabs
 .content-tab {
   padding: 0.4rem 0.95rem;
-  font-family: var(--fnb-font-display);
+  font-family: inherit;
   font-size: 0.9rem;
   font-weight: 800;
 }
@@ -305,7 +309,7 @@ onMounted(() => {
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.04em;
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   white-space: nowrap;
 }
 

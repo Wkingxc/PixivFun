@@ -36,10 +36,10 @@ svg.spin {
 
 @keyframes imgProgress {
   from {
-    background-color: color-mix(in srgb, var(--fnb-skeleton) 92%, white);
+    background-color: color-mix(in srgb, var(--pf-skeleton) 92%, white);
   }
   to {
-    background-color: var(--fnb-skeleton);
+    background-color: var(--pf-skeleton);
   }
 }
 

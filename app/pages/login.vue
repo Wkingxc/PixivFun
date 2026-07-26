@@ -14,11 +14,10 @@
       .fnb-form-item
         label.fnb-form-item__label(for='phpsessid-input') PHPSESSID
           span.fnb-form-item__required *
-        FnbInput(
+        FnbInput#phpsessid-input(
           :class='validateSessionId(sessionIdInput) ? "valid" : "invalid"'
           aria-describedby='phpsessid-feedback'
           autocomplete='off'
-          id='phpsessid-input'
           v-model='sessionIdInput'
         )
         #phpsessid-feedback.fnb-form-item__feedback(
@@ -26,7 +25,7 @@
         ) {{ !sessionIdInput ? '请输入令牌' : !validateSessionId(sessionIdInput) ? '哎呀，这个格式看上去不太对……' : error ? error : '这个格式看上去没问题，点击保存试试' }}
       #submit
         FnbButton(
-          :disabled='!!error || loading || !validateSessionId(sessionIdInput)'
+          :disabled='!!error || loading || !validateSessionId(sessionIdInput)',
           :loading='loading'
           type='submit'
           variant='primary'
@@ -63,7 +62,7 @@
     p.intro 当前已连接 #[strong {{ userStore.userName }}]。为保护账户安全，本站不会再次显示 PHPSESSID。
     #submit
       FnbButton(
-        :disabled='loading'
+        :disabled='loading',
         :loading='loading'
         @click='remove'
         variant='danger'
@@ -73,11 +72,7 @@
 
 <script lang="ts" setup>
 definePageMeta({ name: 'login' })
-import {
-  validateSessionId,
-  login,
-  logout,
-} from '~/composables/userData'
+import { validateSessionId, login, logout } from '~/composables/userData'
 import { useUserStore } from '~/stores/session'
 import { getSafeLoginBackTarget } from '~/utils/loginNavigation'
 import IFasAngleLeft from '~icons/fa-solid/angle-left'
@@ -88,9 +83,7 @@ const loading = ref(false)
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
-const backTarget = computed(() =>
-  getSafeLoginBackTarget(route.query.back)
-)
+const backTarget = computed(() => getSafeLoginBackTarget(route.query.back))
 
 function goBack(): void {
   router.replace(backTarget.value)
@@ -241,7 +234,7 @@ watch(sessionIdInput, () => (error.value = ''))
 
 .logout-error {
   margin-top: 14px;
-  color: var(--fnb-danger);
+  color: #d74755;
 }
 
 input {
@@ -293,10 +286,9 @@ kbd {
   padding: 0.1em 0.4em;
   font-size: 0.85em;
   font-family: inherit;
-  background: var(--fnb-bg-alt);
-  border: 1px solid var(--fnb-border);
-  border-radius: 3px;
-  box-shadow: 0 1px 0 var(--fnb-border);
+  background: var(--pf-bg);
+  border: 1px solid var(--pf-line);
+  border-radius: 6px;
 }
 
 .fnb-form-item {
@@ -309,7 +301,7 @@ kbd {
   }
 
   &__required {
-    color: var(--fnb-danger);
+    color: #d74755;
     margin-left: 0.25rem;
   }
 
@@ -319,11 +311,11 @@ kbd {
     font-size: 0.82rem;
 
     &--error {
-      color: var(--fnb-danger);
+      color: #d74755;
     }
 
     &--success {
-      color: var(--fnb-success, green);
+      color: #16864c;
     }
   }
 }
@@ -353,7 +345,7 @@ kbd {
 
   &__hint {
     padding: 8px;
-    color: var(--fnb-text-muted);
+    color: var(--pf-muted);
     font-size: 0.76rem;
     text-align: center;
   }

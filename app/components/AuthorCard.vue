@@ -3,8 +3,11 @@
   .author-inner(v-if='user')
     .flex-center
       .left
-        RouterLink(:to='"/users/" + user.userId' :aria-label='"查看作者: " + user.name')
-          img(:alt='user.name + " 的头像"' :src='user.imageBig')
+        RouterLink(
+          :aria-label='"查看作者: " + user.name',
+          :to='"/users/" + user.userId'
+        )
+          img(:alt='user.name + " 的头像"', :src='user.imageBig')
       .right
         .flex
           h4.plain
@@ -20,7 +23,7 @@
               IFasCheck(v-if='user.isFollowed')
               IFasPlus(v-else)
             | {{ user.isFollowed ? '已关注' : '关注' }}
-        FnbEllipsis.description.pre(:line-clamp='3' :tooltip='false') {{ user.comment }}
+        FnbEllipsis.description.pre(:line-clamp='3', :tooltip='false') {{ user.comment }}
     ArtworkList.tiny(:list='user.illusts' inline)
 
   .author-placeholder(v-else)
@@ -74,10 +77,11 @@ async function handleUserFollow() {
   margin-right: 1rem;
 
   img {
-    border-radius: var(--fnb-radius-sm);
-    @include fnb-border-sm;
     width: 80px;
     height: 80px;
+    object-fit: cover;
+    border: 1px solid var(--pf-line);
+    border-radius: 50%;
   }
 }
 

@@ -70,12 +70,14 @@ h3 {
 
 .artwork-large-card {
   display: block;
-  @include fnb-border;
-  @include fnb-shadow;
-  @include fnb-press;
-  background-color: var(--fnb-surface);
   width: 100%;
+  overflow: hidden;
   box-sizing: border-box;
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 16px;
+  box-shadow: var(--pf-card-shadow);
 }
 
 .top {
@@ -84,7 +86,6 @@ h3 {
     display: block;
   }
   .thumb {
-    border-radius: var(--fnb-radius) var(--fnb-radius) 0 0;
     overflow: hidden;
     position: relative;
     width: 100%;
@@ -125,29 +126,30 @@ h3 {
     position: absolute;
     top: -0.6rem;
     left: -0.6rem;
-    font-family: var(--fnb-font-display);
-    font-size: 1rem;
-    font-weight: 900;
-    color: var(--fnb-text);
-    background-color: var(--fnb-surface);
-    border: 2px solid var(--fnb-border);
-    box-shadow: var(--fnb-shadow-xs);
-    width: 1.8rem;
-    height: 1.8rem;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--pf-text);
+    background: color-mix(in srgb, var(--pf-surface) 92%, transparent);
+    border: 1px solid var(--pf-line);
+    border-radius: 50%;
+    box-shadow: 0 5px 14px rgb(0 0 0 / 14%);
+    width: 2rem;
+    height: 2rem;
     text-align: center;
     line-height: 1.7;
     z-index: 6;
     &.gold {
-      background-color: var(--fnb-highlight);
-      color: var(--fnb-on-light);
+      background-color: #ffbd2e;
+      color: #fff;
     }
     &.silver {
-      background-color: var(--fnb-silver);
-      color: var(--fnb-on-light);
+      background-color: #aeb7c8;
+      color: #fff;
     }
     &.bronze {
-      background-color: var(--fnb-bronze);
-      color: var(--fnb-on-light);
+      background-color: #d98a55;
+      color: #fff;
     }
   }
 
@@ -173,7 +175,7 @@ h3 {
 }
 
 .bottom {
-  padding: 0.5rem;
+  padding: 11px 12px 13px;
   .title a {
     display: inline;
   }
@@ -192,7 +194,7 @@ h3 {
     a {
       align-items: center;
       &.router-link-active {
-        color: var(--fnb-text);
+        color: var(--pf-text);
         font-weight: 600;
         font-style: normal;
         cursor: default;
@@ -203,17 +205,20 @@ h3 {
 
       .avatar {
         display: inline-block;
-        width: 2rem;
-        height: 2rem;
+        width: 1.5rem;
+        height: 1.5rem;
         box-sizing: border-box;
-        @include fnb-border-sm;
         margin-right: 0.4rem;
+        object-fit: cover;
+        border-radius: 50%;
       }
     }
   }
 
   .author {
     margin: 0.4rem 0;
+    color: var(--pf-muted);
+    font-size: 0.78rem;
   }
   .tags {
     overflow-x: auto;

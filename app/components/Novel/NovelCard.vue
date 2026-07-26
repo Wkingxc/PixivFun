@@ -44,17 +44,23 @@ const fallbackCover =
   grid-template-columns: 96px minmax(0, 1fr);
   gap: 0.85rem;
   width: 100%;
-  max-width: 280px;
+  max-width: 340px;
+  padding: 12px;
+  color: var(--pf-text);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 14px;
+  box-shadow: var(--pf-card-shadow);
 }
 
 .cover {
   position: relative;
   display: block;
   overflow: hidden;
-  @include fnb-border;
-  @include fnb-shadow-xs;
   aspect-ratio: 5 / 7;
-  background: var(--fnb-skeleton);
+  background: var(--pf-skeleton);
+  border: 1px solid var(--pf-line);
+  border-radius: 10px;
   animation: imgProgress 0.6s ease infinite alternate;
 
   :deep(img),
@@ -69,11 +75,11 @@ const fallbackCover =
   position: absolute;
   top: 0.4rem;
   left: 0.4rem;
-  color: var(--fnb-on-brand);
+  color: #fff;
   width: 1.4rem;
   height: 1.4rem;
   font-size: 0.7rem;
-  border-radius: var(--fnb-radius-sm);
+  border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -101,7 +107,7 @@ const fallbackCover =
 
 .author,
 .meta {
-  color: var(--fnb-text-muted);
+  color: var(--pf-muted);
   font-size: 0.85rem;
 }
 
