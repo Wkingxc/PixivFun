@@ -23,6 +23,8 @@ aside.global-side-nav(
       .group
         .title 数据
         ul
+          SideNavListLink(link='/blocklist' text='屏蔽作者管理')
+            ITablerUserOff.link-icon
           SideNavListLink(
             @activate='closeSideNav'
             download-link='/api/local/export'
@@ -91,6 +93,7 @@ import {
   IconInfoCircle as ITablerInfoCircle,
   IconLayoutGrid as ITablerLayoutGrid,
   IconPhoto as ITablerPhoto,
+  IconUserOff as ITablerUserOff,
   IconUsers as ITablerUsers,
 } from '@tabler/icons-vue'
 import { useSideNavStore } from '~/stores/session'

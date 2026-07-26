@@ -25,15 +25,13 @@ const props = defineProps<{
   rankList?: RankedArtworkInfo[]
   artworkList?: ArtworkInfo[]
   markerDisabled?: boolean
+  /** Skip the author blocklist (own bookmarks / author's own page). */
+  filterDisabled?: boolean
 }>()
+const { filterBlocked } = useAuthorBlocklist()
 const artworks = computed(() => {
-  if (props.rankList) {
-    return props.rankList
-  } else if (props.artworkList) {
-    return props.artworkList
-  } else {
-    return []
-  }
+  const items = props.rankList ?? props.artworkList ?? []
+  return props.filterDisabled ? items : filterBlocked(items)
 })
 
 const waterfallRef = ref<any>()

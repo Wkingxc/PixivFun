@@ -3,6 +3,9 @@ section.artwork-modern(
   :class='{ "artwork-modern--accent-blue": accentTone === "blue", "artwork-modern--panel-pixiv-gray": panelTone === "pixiv-gray" }',
   :style='directoryTuningStyle'
 )
+  .modern-blocked-banner(v-if='authorBlocked')
+    span 该作品的作者已被你屏蔽。
+    button(@click='handleUnblockAuthor' type='button') 解除屏蔽
   .modern-shell
     main.modern-content
       .media-panel
@@ -147,7 +150,7 @@ section.artwork-modern(
         size='sm'
       ) {{ recommendLoading ? '加载中' : '加载更多' }}
 
-  DevDebugPanel(
+  PageSettingsPanel(
     title='作品页设置'
     v-if='directoryTuningEnabled && pageSettingsVisible'
   )
@@ -253,6 +256,17 @@ defineEmits<{
 }>()
 
 const toast = useToast()
+const { isBlocked, unblockAuthor } = useAuthorBlocklist()
+const authorBlocked = computed(() => isBlocked(props.illust.userId))
+
+async function handleUnblockAuthor(): Promise<void> {
+  try {
+    await unblockAuthor(props.illust.userId)
+    toast.success('已解除屏蔽该作者')
+  } catch {
+    toast.error('操作失败，请重试')
+  }
+}
 const { openBookmarkEditor } = useBookmarkEditor()
 const { containerStyle: artworkLayoutContainerStyle } =
   useArtworkLayoutSettings()
@@ -311,6 +325,29 @@ async function shareArtwork() {
   padding: 28px 0 0;
   color: var(--pf-text);
   background: var(--pf-bg);
+}
+
+.modern-blocked-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: -28px 0 20px;
+  padding: 10px 16px;
+  color: #fff;
+  background: color-mix(in srgb, var(--pf-pink) 82%, #000);
+  font-size: 0.85rem;
+
+  button {
+    padding: 4px 14px;
+    color: inherit;
+    background: rgb(255 255 255 / 16%);
+    border: 1px solid rgb(255 255 255 / 45%);
+    border-radius: 999px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+  }
 }
 
 .modern-shell {
@@ -436,7 +473,7 @@ async function shareArtwork() {
     font-size: clamp(1.35rem, 2.3vw, 1.8rem);
 
     &.danger {
-      color: #d74755;
+      color: #ff8c42;
     }
   }
 }

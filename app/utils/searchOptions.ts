@@ -10,4 +10,5 @@ export const contentOptions: SearchContentOption[] = [
   { label: '动图', value: 'ugoira' },
   { label: '漫画', value: 'manga' },
   { label: '小说', value: 'novels' },
+  { label: '用户', value: 'users' },
 ]

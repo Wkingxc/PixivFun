@@ -19,7 +19,7 @@
           IFasPlus(v-else)
           | {{ loadingUserFollow ? '处理中' : user.following ? '已关注' : '关注' }}
     .user-artworks
-      ArtworkList(:list='user.illusts' inline)
+      ArtworkList(:list='user.illusts' filter-disabled inline)
 
   .follow-user-inner.placeholder(v-else)
     .profile

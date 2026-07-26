@@ -1,6 +1,6 @@
 <template lang="pug">
 Teleport(to='body')
-  button.dev-debug-trigger(
+  button.page-settings-trigger(
     :aria-expanded='open'
     @click='open = true'
     title='打开页面设置'
@@ -10,28 +10,28 @@ Teleport(to='body')
     ITablerAdjustments(aria-hidden='true')
     span 页面设置
 
-  aside.dev-debug-panel(
+  aside.page-settings-panel(
     :aria-label='title',
     :style='panelStyle'
     ref='panelRef'
     role='dialog'
     v-else
   )
-    header.dev-debug-heading(
+    header.page-settings-heading(
       :class='{ "is-dragging": dragging }'
       @pointerdown='startDrag'
     )
-      .dev-debug-title
+      .page-settings-title
         ITablerAdjustments(aria-hidden='true')
         strong {{ title }}
       button(
         @click='open = false'
-        aria-label='关闭开发调试面板'
+        aria-label='关闭页面设置'
         title='关闭'
         type='button'
       )
         ITablerX(aria-hidden='true')
-    .dev-debug-content
+    .page-settings-content
       slot
 </template>
 
@@ -116,8 +116,8 @@ onBeforeUnmount(stopDrag)
 </script>
 
 <style scoped lang="scss">
-.dev-debug-trigger,
-.dev-debug-panel {
+.page-settings-trigger,
+.page-settings-panel {
   position: fixed;
   z-index: 1200;
   color: var(--pf-text);
@@ -126,7 +126,7 @@ onBeforeUnmount(stopDrag)
   box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
 }
 
-.dev-debug-trigger {
+.page-settings-trigger {
   left: 18px;
   bottom: 74px;
   display: inline-flex;
@@ -147,7 +147,7 @@ onBeforeUnmount(stopDrag)
   }
 }
 
-.dev-debug-panel {
+.page-settings-panel {
   left: 18px;
   bottom: 18px;
   width: min(330px, calc(100vw - 24px));
@@ -155,7 +155,7 @@ onBeforeUnmount(stopDrag)
   border-radius: 16px;
 }
 
-.dev-debug-heading {
+.page-settings-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -171,7 +171,7 @@ onBeforeUnmount(stopDrag)
   }
 }
 
-.dev-debug-title {
+.page-settings-title {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -184,7 +184,7 @@ onBeforeUnmount(stopDrag)
   }
 }
 
-.dev-debug-heading button {
+.page-settings-heading button {
   display: grid;
   width: 30px;
   height: 30px;
@@ -207,7 +207,7 @@ onBeforeUnmount(stopDrag)
   }
 }
 
-.dev-debug-content {
+.page-settings-content {
   padding: 14px;
 }
 </style>

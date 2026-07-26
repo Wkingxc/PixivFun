@@ -10,7 +10,7 @@
           @click='setQuery({ type: opt.value })'
           v-for='opt in contentOptions'
         ) {{ opt.label }}
-      .refine-bar
+      .refine-bar(v-if='!isUsers')
         .refine-field
           span.refine-label 匹配
           FnbSelect(
@@ -39,6 +39,13 @@
             :options='aiTypeOptions'
             @update:model-value='(v) => setQuery({ ai_type: v })'
           )
+        .refine-field
+          span.refine-label 收藏数
+          FnbSelect(
+            :model-value='selectedMinBookmarks',
+            :options='minBookmarksOptions'
+            @update:model-value='(v) => setQuery({ min_bm: v })'
+          )
         .refine-field(v-if='isNovel')
           span.refine-label 语言
           FnbSelect(
@@ -58,9 +65,31 @@
 
   //- Result (has keyword)
   section(v-else)
+    //- Popular preview (free tier: embedded in the search response)
+    .popular-preview(v-if='!isNovel && !isUsers && hasPopular')
+      .modern-wide-shell(:style='artworkLayoutContainerStyle')
+        button.popular-toggle(
+          @click='popularExpanded = !popularExpanded'
+          type='button'
+        )
+          span.popular-title 热门作品
+          span.popular-hint {{ popularExpanded ? '收起' : '展开' }}
+        template(v-if='popularExpanded')
+          .popular-group(v-if='searchStore.popular.recent.length')
+            .popular-group-label 近期热门
+            ArtworkList(:list='searchStore.popular.recent' controlled)
+          .popular-group(v-if='searchStore.popular.permanent.length')
+            .popular-group-label 历史热门
+            ArtworkList(:list='searchStore.popular.permanent' controlled)
+
     //- Loading skeleton
     .loading-area(v-if='searchStore.loading && !currentResults.length')
-      .modern-wide-shell(:style='artworkLayoutContainerStyle' v-if='!isNovel')
+      .modern-page-shell(v-if='isUsers')
+        .fnb-empty(style='padding: 8vh 0; text-align: center') 搜索用户中…
+      .modern-wide-shell(
+        :style='artworkLayoutContainerStyle'
+        v-else-if='!isNovel'
+      )
         ArtworkList(:list='[]', :loading='16' controlled)
       .modern-page-shell(v-else)
         NovelList(:list='[]', :loading='12')
@@ -76,7 +105,7 @@
       v-if='currentResults.length'
     )
       .modern-wide-shell(
-        :style='!isNovel ? artworkLayoutContainerStyle : undefined'
+        :style='!isNovel && !isUsers ? artworkLayoutContainerStyle : undefined'
       )
         .pagenator
           FnbPagination(
@@ -85,12 +114,35 @@
             :page-size='currentResults.length'
             @update:page='goPage'
           )
-        ArtworkList(
-          :list='searchStore.artworkResults'
-          controlled
-          v-if='!isNovel'
-        )
-        NovelList(:list='searchStore.novelResults' v-else)
+        ul.user-result-list(v-if='isUsers')
+          li.user-result-item(
+            :key='item.userId'
+            v-for='item in visibleUserResults'
+          )
+            RouterLink.user-result-avatar(:to='`/users/${item.userId}`')
+              img(
+                :alt='item.userName',
+                :src='item.profileImageUrl'
+                loading='lazy'
+                v-if='item.profileImageUrl'
+              )
+            .user-result-copy
+              RouterLink.user-result-name(:to='`/users/${item.userId}`') {{ item.userName || `用户 ${item.userId}` }}
+              p.user-result-comment(v-if='item.comment') {{ item.comment }}
+            .user-result-works(v-if='item.works.length')
+              RouterLink(
+                :key='work.id',
+                :to='`/artworks/${work.id}`'
+                v-for='work in item.works'
+              )
+                img(:alt='work.title', :src='work.url' loading='lazy')
+        template(v-else)
+          ArtworkList(
+            :list='searchStore.artworkResults'
+            controlled
+            v-if='!isNovel'
+          )
+          NovelList(:list='searchStore.novelResults' v-else)
         .pagenator
           FnbPagination(
             :item-count='currentTotal',
@@ -132,6 +184,14 @@ const orderOptions = [
   { label: '旧到新', value: 'date' },
 ]
 
+const minBookmarksOptions = [
+  { label: '不限', value: '' },
+  { label: '1000+', value: '1000' },
+  { label: '5000+', value: '5000' },
+  { label: '10000+', value: '10000' },
+  { label: '50000+', value: '50000' },
+]
+
 const modeOptions = [
   { label: '混池', value: 'all' },
   { label: '全年龄', value: 'safe' },
@@ -157,6 +217,13 @@ const error = ref('')
 const route = useRoute()
 const router = useRouter()
 const searchStore = useSearchStore()
+const popularExpanded = ref(true)
+
+const hasPopular = computed(
+  () =>
+    searchStore.popular.recent.length > 0 ||
+    searchStore.popular.permanent.length > 0
+)
 const { containerStyle: artworkLayoutContainerStyle } =
   useArtworkLayoutSettings()
 
@@ -173,20 +240,39 @@ const selectedOrder = computed(() => (route.query.order as string) || 'date_d')
 const selectedMode = computed(() => (route.query.mode as string) || 'all')
 const selectedAiType = computed(() => (route.query.ai_type as string) || '')
 const selectedLang = computed(() => (route.query.lang as string) || '')
+const selectedMinBookmarks = computed(
+  () => (route.query.min_bm as string) || ''
+)
+
+// Bookmark-count floor via community `Nusers入り` tags — the only
+// server-side popularity filter available without premium.
+const effectiveKeyword = computed(() =>
+  selectedMinBookmarks.value
+    ? `${keyword.value} ${selectedMinBookmarks.value}users入り`
+    : keyword.value
+)
 
 const isNovel = computed(() => selectedType.value === 'novels')
+const isUsers = computed(() => selectedType.value === 'users')
+
+const { filterBlocked } = useAuthorBlocklist()
+const visibleUserResults = computed(() =>
+  filterBlocked(searchStore.userResults)
+)
 
 const activeSModeOptions = computed(() =>
   isNovel.value ? novelSModeOptions : artworkSModeOptions
 )
 
-const currentResults = computed(() =>
-  isNovel.value ? searchStore.novelResults : searchStore.artworkResults
-)
+const currentResults = computed(() => {
+  if (isUsers.value) return searchStore.userResults
+  return isNovel.value ? searchStore.novelResults : searchStore.artworkResults
+})
 
-const currentTotal = computed(() =>
-  isNovel.value ? searchStore.novelTotal : searchStore.artworkTotal
-)
+const currentTotal = computed(() => {
+  if (isUsers.value) return searchStore.userTotal
+  return isNovel.value ? searchStore.novelTotal : searchStore.artworkTotal
+})
 
 // ── Query helpers ──
 
@@ -197,6 +283,7 @@ const defaults: Record<string, string> = {
   mode: 'all',
   ai_type: '',
   lang: '',
+  min_bm: '',
 }
 
 function setQuery(updates: Record<string, string>) {
@@ -235,8 +322,10 @@ async function makeSearch(): Promise<void> {
   if (!keyword.value) return
 
   try {
-    if (isNovel.value) {
-      await searchStore.searchNovels(keyword.value, {
+    if (isUsers.value) {
+      await searchStore.searchUsers(keyword.value, { p: page.value })
+    } else if (isNovel.value) {
+      await searchStore.searchNovels(effectiveKeyword.value, {
         p: page.value,
         s_mode: selectedSMode.value,
         order: selectedOrder.value,
@@ -246,7 +335,7 @@ async function makeSearch(): Promise<void> {
       })
     } else {
       await searchStore.searchArtworks(
-        keyword.value,
+        effectiveKeyword.value,
         selectedType.value as SearchContentType,
         {
           p: page.value,
@@ -347,6 +436,46 @@ onMounted(() => makeSearch())
   margin: 1rem auto;
 }
 
+// ── Popular preview (non-premium hot works) ──
+.popular-preview {
+  margin-top: 1rem;
+}
+
+.popular-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.35rem 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.popular-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--pf-text);
+}
+
+.popular-hint {
+  font-size: 0.78rem;
+  color: var(--pf-muted);
+}
+
+.popular-group {
+  margin-bottom: 0.6rem;
+}
+
+.popular-group-label {
+  margin: 0.4rem 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--pf-muted);
+}
+
 .no-more {
   text-align: center;
   padding: 1rem;
@@ -362,5 +491,81 @@ onMounted(() => makeSearch())
 .fnb-empty {
   color: var(--pf-muted);
   padding: 1rem;
+}
+
+// ── User search results ──
+.user-result-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.user-result-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 14px;
+}
+
+.user-result-avatar img {
+  display: block;
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.user-result-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.user-result-name {
+  overflow: hidden;
+  color: var(--pf-text);
+  font-weight: 750;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--pf-pink);
+  }
+}
+
+.user-result-comment {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+  color: var(--pf-muted);
+  font-size: 0.78rem;
+}
+
+.user-result-works {
+  display: flex;
+  gap: 6px;
+
+  img {
+    display: block;
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+}
+
+@media (max-width: 640px) {
+  .user-result-works {
+    display: none;
+  }
 }
 </style>

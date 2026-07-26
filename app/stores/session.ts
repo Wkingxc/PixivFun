@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import type { PixivUser } from '~/types'
 import { initUser } from '~/composables/userData'
+import { requestCache } from '~/api/request-cache'
 
 export const useSideNavStore = defineStore('sidenav', () => {
   const openState = ref(false)
@@ -28,9 +29,12 @@ export const useUserStore = defineStore('user', () => {
 
   function login(data: PixivUser) {
     user.value = data
+    // Cached responses may reflect the previous (or anonymous) session.
+    requestCache.clear()
   }
   function logout() {
     user.value = null
+    requestCache.clear()
   }
 
   async function initFromSession(): Promise<PixivUser> {

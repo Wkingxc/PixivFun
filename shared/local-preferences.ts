@@ -5,6 +5,12 @@ export interface MarkerColor {
   a: number
 }
 
+export interface BlockedAuthor {
+  id: string
+  name: string
+  addedAt: number
+}
+
 export interface LocalPreferences {
   appearance: {
     theme: 'auto' | 'light' | 'dark'
@@ -51,6 +57,9 @@ export interface LocalPreferences {
     hideComments: boolean
     smoothScrollEnabled: boolean
     smoothScrollScreens: number
+  }
+  contentFilter: {
+    blockedAuthors: BlockedAuthor[]
   }
 }
 
@@ -104,6 +113,9 @@ export const DEFAULT_LOCAL_PREFERENCES: LocalPreferences = {
     hideComments: false,
     smoothScrollEnabled: false,
     smoothScrollScreens: 1,
+  },
+  contentFilter: {
+    blockedAuthors: [],
   },
 }
 
@@ -186,6 +198,9 @@ const validators: {
       10
     ),
   },
+  contentFilter: {
+    blockedAuthors: blockedAuthorsValue('contentFilter.blockedAuthors'),
+  },
 }
 
 function enumValue<const T extends string>(
@@ -248,6 +263,51 @@ function colorChannel(path: string, value: unknown): number {
     return value
   }
   throw new RangeError(`${path} must be an integer between 0 and 255`)
+}
+
+function blockedAuthorsValue(
+  path: string
+): (value: unknown) => BlockedAuthor[] {
+  return (value) => {
+    if (!Array.isArray(value)) {
+      throw new TypeError(`${path} must be an array`)
+    }
+    const seen = new Set<string>()
+    const result: BlockedAuthor[] = []
+    for (const [index, entry] of value.entries()) {
+      const entryPath = `${path}[${index}]`
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw new TypeError(`${entryPath} must be an object`)
+      }
+      const record = entry as Record<string, unknown>
+      const unknown = Object.keys(record).filter(
+        (key) => !['id', 'name', 'addedAt'].includes(key)
+      )
+      if (unknown.length) {
+        throw new TypeError(`${entryPath} contains unknown key ${unknown[0]}`)
+      }
+      if (typeof record.id !== 'string' || !/^\d+$/.test(record.id)) {
+        throw new TypeError(`${entryPath}.id must be a numeric string`)
+      }
+      if (typeof record.name !== 'string') {
+        throw new TypeError(`${entryPath}.name must be a string`)
+      }
+      if (
+        typeof record.addedAt !== 'number' ||
+        !Number.isFinite(record.addedAt)
+      ) {
+        throw new TypeError(`${entryPath}.addedAt must be a number`)
+      }
+      if (seen.has(record.id)) continue
+      seen.add(record.id)
+      result.push({
+        id: record.id,
+        name: record.name,
+        addedAt: record.addedAt,
+      })
+    }
+    return result
+  }
 }
 
 function colorValue(path: string): (value: unknown) => MarkerColor {
@@ -348,5 +408,10 @@ export function cloneLocalPreferences(
     authorPage: { ...preferences.authorPage },
     relatedWorks: { ...preferences.relatedWorks },
     artworkPage: { ...preferences.artworkPage },
+    contentFilter: {
+      blockedAuthors: preferences.contentFilter.blockedAuthors.map((entry) => ({
+        ...entry,
+      })),
+    },
   }
 }

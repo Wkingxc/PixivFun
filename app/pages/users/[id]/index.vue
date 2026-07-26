@@ -31,6 +31,9 @@
 
   //- :)
   section.user(v-else-if='user')
+    .blocked-banner(v-if='authorBlocked')
+      span 该作者已被你屏蔽，其作品不会出现在任何列表中。
+      button(@click='handleUnblock' type='button') 解除屏蔽
     .cover-banner(:class='{ "no-cover": !user?.background }')
       .cover-image(
         :style='{ backgroundImage: `url("${user.background.url}")` }'
@@ -90,6 +93,11 @@
                 IFasCheck(v-if='user.isFollowed')
                 IFasPlus(v-else)
                 | {{ user.isFollowed ? '已关注' : '关注' }}
+              button.sidebar-block-button(
+                :class='{ blocked: authorBlocked }'
+                @click='handleToggleBlock'
+                type='button'
+              ) {{ authorBlocked ? '解除屏蔽' : '屏蔽此作者' }}
             template(v-else)
               span.self-user-badge 这是你自己
 
@@ -134,7 +142,7 @@
           template(#panel-novels)
             .fnb-empty(v-if='!user.novels?.length') 用户没有小说作品 (｡•́︿•̀｡)
             .user-novels(v-else)
-              NovelList(:list='user.novels')
+              NovelList(:list='user.novels' filter-disabled)
           template(#panel-public_bookmarks)
             BookmarkTagFilter(
               :items='bookmarkTags.public',
@@ -172,6 +180,7 @@
                 :selected-ids='selectedBookmarkIds'
                 @toggle-selection='toggleBookmarkSelection'
                 controlled
+                filter-disabled
               )
               FnbPagination.bookmark-pagination(
                 :item-count='totalPublicBookmarks',
@@ -214,6 +223,7 @@
                 :selected-ids='selectedBookmarkIds'
                 @toggle-selection='toggleBookmarkSelection'
                 controlled
+                filter-disabled
                 marker-disabled
               )
               FnbPagination.bookmark-pagination(
@@ -222,6 +232,16 @@
                 :page-size='BOOKMARK_PAGE_SIZE'
                 @update:page='changeHiddenBookmarkPage'
               )
+
+    //- Related authors (silently hidden on failure / empty result)
+    .body-inner.related-authors(v-if='relatedAuthors.length')
+      h2.related-authors-title 相关作者
+      .related-authors-list
+        FollowUserCard(
+          :key='item.userId',
+          :user='item'
+          v-for='item in relatedAuthors'
+        )
 
     //- User detail dialog
     .fnb-dialog-overlay(@click.self='showUserMore = false' v-if='showUserMore')
@@ -295,7 +315,7 @@ import { useLocalPersistenceStore } from '~/stores/local-persistence'
 import { useUserArtworksStore } from '~/stores/user-artworks'
 import { useArtworkStore } from '~/stores/artwork'
 import { useUserProfileStore } from '~/stores/user-profile'
-import type { ArtworkInfo, User, UserArtworkTag } from '~/types'
+import type { ArtworkInfo, User, UserArtworkTag, UserListItem } from '~/types'
 import {
   BOOKMARK_PAGE_SIZE,
   bookmarkPageOffset,
@@ -318,9 +338,42 @@ const userArtworksStore = useUserArtworksStore()
 const artworkStore = useArtworkStore()
 const userProfileStore = useUserProfileStore()
 const toast = useToast()
+const dialog = useDialog()
 const { containerStyle: artworkLayoutContainerStyle } =
   useArtworkLayoutSettings()
 const isSelfUserPage = computed(() => user.value?.userId === userStore.userId)
+
+const { isBlocked, blockAuthor, unblockAuthor, filterBlocked } =
+  useAuthorBlocklist()
+const authorBlocked = computed(() => isBlocked(user.value?.userId))
+
+async function handleUnblock(): Promise<void> {
+  if (!user.value) return
+  try {
+    await unblockAuthor(user.value.userId)
+    toast.success(`已解除屏蔽 ${user.value.name}`)
+  } catch {
+    toast.error('操作失败，请重试')
+  }
+}
+
+async function handleToggleBlock(): Promise<void> {
+  if (!user.value) return
+  if (authorBlocked.value) return handleUnblock()
+  try {
+    const confirmed = await dialog.open({
+      title: '屏蔽作者',
+      content: `屏蔽后，${user.value.name} 的作品将不再出现在任何列表中。可在侧边栏“屏蔽作者管理”中解除。`,
+      positiveText: '屏蔽',
+      negativeText: '取消',
+    })
+    if (!confirmed) return
+    await blockAuthor({ id: user.value.userId, name: user.value.name })
+    toast.success(`已屏蔽 ${user.value.name}`)
+  } catch {
+    toast.error('操作失败，请重试')
+  }
+}
 
 const publicBookmarks = ref<ArtworkInfo[]>([])
 const loadingPublicBookmarks = ref(false)
@@ -455,6 +508,27 @@ const workspaceNameMap: Record<string, string> = {
   wsBigUrl: '工作空间大图片URL',
 }
 
+const rawRelatedAuthors = ref<UserListItem[]>([])
+let relatedAuthorsRequestId = 0
+
+const relatedAuthors = computed(() => filterBlocked(rawRelatedAuthors.value))
+
+async function loadRelatedAuthors(id: string): Promise<void> {
+  const requestId = ++relatedAuthorsRequestId
+  rawRelatedAuthors.value = []
+  try {
+    const pixivClient = usePixivClient()
+    const users = await pixivClient.getUserRecommends(id, {
+      userNum: 12,
+      workNum: 3,
+    })
+    if (requestId !== relatedAuthorsRequestId) return
+    rawRelatedAuthors.value = users.filter((item) => item.userId !== id)
+  } catch {
+    // The section hides itself when the endpoint fails or returns nothing.
+  }
+}
+
 async function init(id: string | number, initTab?: UserTabs): Promise<void> {
   // reset states
   user.value = undefined
@@ -486,6 +560,7 @@ async function init(id: string | number, initTab?: UserTabs): Promise<void> {
     void localPersistenceStore.recordAuthorVisit(id).catch(() => {})
     tab.value = initTab || UserTabs.illusts
     void loadUserArtworkTags(String(id))
+    void loadRelatedAuthors(String(id))
     if (isSelfUserPage.value) void loadBookmarkTags()
   } catch (err) {
     if (err instanceof Error) {
@@ -1017,6 +1092,65 @@ onMounted(async () => {
 .self-user-badge {
   color: var(--pf-muted);
   font-size: 0.76rem;
+}
+
+.sidebar-block-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  color: var(--pf-muted);
+  background: transparent;
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+
+  &.blocked {
+    color: #fff;
+    background: var(--pf-muted);
+    border-color: var(--pf-muted);
+  }
+}
+
+.related-authors {
+  margin-top: 28px;
+  padding-bottom: 28px;
+}
+
+.related-authors-title {
+  margin: 0 0 14px;
+  font-size: 1.05rem;
+}
+
+.related-authors-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.blocked-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 16px;
+  color: #fff;
+  background: color-mix(in srgb, var(--pf-pink) 82%, #000);
+  font-size: 0.85rem;
+
+  button {
+    padding: 4px 14px;
+    color: inherit;
+    background: rgb(255 255 255 / 16%);
+    border: 1px solid rgb(255 255 255 / 45%);
+    border-radius: 999px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+  }
 }
 
 .user-content {

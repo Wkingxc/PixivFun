@@ -298,7 +298,8 @@ function selectTag(tag: string) {
     min-width: 1.35rem;
     height: 1.35rem;
     padding: 0 0.3rem;
-    color: #fff;
+    // Inverted pair keeps the count readable in both light and dark themes.
+    color: var(--pf-bg);
     background: var(--pf-text);
     border-radius: 999px;
     font-size: 0.68rem;

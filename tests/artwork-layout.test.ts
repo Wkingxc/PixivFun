@@ -8,6 +8,16 @@ import {
   normalizeArtworkLayoutValue,
   resolveArtworkCardImageQuality,
 } from '../app/utils/artworkLayout.ts'
+import { PAGE_SETTINGS_CONFIG } from '../app/utils/pageSettings.ts'
+
+test('页面设置作为正式功能在生产版可用并默认显示悬浮按钮', () => {
+  assert.equal(PAGE_SETTINGS_CONFIG.available, true)
+  assert.equal(PAGE_SETTINGS_CONFIG.visibleByDefault, true)
+  assert.equal(
+    PAGE_SETTINGS_CONFIG.visibilityStorageKey,
+    'pixivfun:page-settings-button-visible'
+  )
+})
 
 test('作品排列设置会恢复非法值并限制到允许范围', () => {
   assert.equal(

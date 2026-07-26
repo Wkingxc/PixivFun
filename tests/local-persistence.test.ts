@@ -348,6 +348,53 @@ test('设置校验保留合法值并拒绝未知键和越界透明度', () => {
   )
 })
 
+test('屏蔽作者列表校验:去重、拒绝非法条目', () => {
+  assert.deepEqual(
+    normalizeLocalPreferencesPatch({
+      contentFilter: {
+        blockedAuthors: [
+          { id: '123', name: '作者A', addedAt: 1700000000000 },
+          { id: '123', name: '重复条目', addedAt: 1700000000001 },
+          { id: '456', name: '', addedAt: 1700000000002 },
+        ],
+      },
+    }),
+    {
+      contentFilter: {
+        blockedAuthors: [
+          { id: '123', name: '作者A', addedAt: 1700000000000 },
+          { id: '456', name: '', addedAt: 1700000000002 },
+        ],
+      },
+    }
+  )
+  assert.throws(
+    () =>
+      normalizeLocalPreferencesPatch({
+        contentFilter: {
+          blockedAuthors: [{ id: 'abc', name: 'x', addedAt: 1 }],
+        },
+      }),
+    /id must be a numeric string/
+  )
+  assert.throws(
+    () =>
+      normalizeLocalPreferencesPatch({
+        contentFilter: {
+          blockedAuthors: [{ id: '1', name: 'x', addedAt: 1, extra: true }],
+        },
+      }),
+    /unknown key extra/
+  )
+  assert.throws(
+    () =>
+      normalizeLocalPreferencesPatch({
+        contentFilter: { blockedAuthors: 'nope' },
+      }),
+    /must be an array/
+  )
+})
+
 test('Vue 响应式偏好可以即时合并标记开关和透明度', () => {
   const reactivePreferences = reactive(
     structuredClone(DEFAULT_LOCAL_PREFERENCES)

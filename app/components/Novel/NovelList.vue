@@ -1,10 +1,10 @@
 <template lang="pug">
 ul.novel-list
   template(v-if='loading')
-    li(v-for='i in skeletonNumber' :key='`skeleton-${i}`')
+    li(:key='`skeleton-${i}`' v-for='i in skeletonNumber')
       NovelCard(loading)
   template(v-else)
-    li(v-for='item in list' :key='item.id')
+    li(:key='item.id' v-for='item in novels')
       NovelCard(:item='item')
 </template>
 
@@ -15,7 +15,15 @@ import type { NovelInfo } from '~/types'
 const props = defineProps<{
   list: NovelInfo[]
   loading?: boolean | number
+  /** Skip the author blocklist (own bookmarks / author's own page). */
+  filterDisabled?: boolean
 }>()
+
+const { filterBlocked } = useAuthorBlocklist()
+
+const novels = computed(() =>
+  props.filterDisabled ? props.list : filterBlocked(props.list)
+)
 
 const skeletonNumber = computed(() =>
   typeof props.loading === 'number' ? props.loading : 6

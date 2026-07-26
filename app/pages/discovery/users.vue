@@ -38,8 +38,9 @@ const scrollSentinel = ref<HTMLElement | null>(null)
 const PAGE_SIZE = 10
 const visibleCount = ref(PAGE_SIZE)
 
+const { filterBlocked } = useAuthorBlocklist()
 const visibleUsers = computed(() =>
-  discoveryStore.userDiscoveryList.slice(0, visibleCount.value)
+  filterBlocked(discoveryStore.userDiscoveryList).slice(0, visibleCount.value)
 )
 
 // buffer fully revealed AND store says nothing more to fetch

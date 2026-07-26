@@ -10,6 +10,7 @@
     :controlled='controlled',
     :list='artworks',
     :loading='loading ? pageSize : false'
+    filter-disabled
   )
   .fnb-empty(v-if='error && !loading') {{ error }}
   .fnb-empty(v-else-if='!loading && !artworks.length') 此标签下暂无作品

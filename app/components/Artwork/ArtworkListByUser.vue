@@ -11,6 +11,7 @@
     :controlled='controlled',
     :list='curArtworks',
     :loading='!curArtworks.length ? userArtworksStore.pageSize : false'
+    filter-disabled
   )
   .pagination-row
     FnbPagination(

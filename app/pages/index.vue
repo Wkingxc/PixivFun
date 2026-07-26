@@ -10,6 +10,9 @@
       SearchBox.big.hero-search(placeholder='搜索关键词，或输入 id:作品编号')
 
       nav.quick-links(aria-label='主页快捷入口')
+        FnbTag(@click='$router.push("/search")' clickable)
+          ITablerSearch(aria-hidden='true')
+          | 搜索页
         FnbTag(@click='$router.push("/ranking")' clickable)
           ITablerChartBar(aria-hidden='true')
           | 排行榜
@@ -133,6 +136,7 @@ import {
   IconCompass as ITablerCompass,
   IconInfoCircle as ITablerInfoCircle,
   IconRefresh as ITablerRefresh,
+  IconSearch as ITablerSearch,
   IconArrowsShuffle as ITablerShuffle,
   IconSparkles as ITablerSparkles,
   IconX as ITablerX,

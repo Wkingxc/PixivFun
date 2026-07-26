@@ -4,6 +4,7 @@ import {
   type ArtworkAccentTone,
   type ArtworkPanelTone,
 } from '~/utils/artworkDetailTuning'
+import { PAGE_SETTINGS_CONFIG } from '../utils/pageSettings.ts'
 
 const CARD_SIZE_KEY = 'pixivfun:artwork-directory-card-size'
 const ARTWORK_MAX_HEIGHT_KEY = 'pixivfun:artwork-detail-max-height'
@@ -23,7 +24,7 @@ function clamp(value: number, min: number, max: number, fallback: number) {
 }
 
 export function useArtworkDirectoryTuning() {
-  const enabled = import.meta.dev
+  const enabled = PAGE_SETTINGS_CONFIG.available
   const storedCardSize = useLocalStorage<number>(
     CARD_SIZE_KEY,
     DEFAULT_ARTWORK_DIRECTORY_CARD_SIZE

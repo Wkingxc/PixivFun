@@ -35,6 +35,8 @@ const props = defineProps<{
   controlled?: boolean
   selectable?: boolean
   selectedIds?: string[]
+  /** Skip the author blocklist (own bookmarks / author's own page). */
+  filterDisabled?: boolean
 }>()
 
 defineEmits<{
@@ -45,8 +47,13 @@ const skeletonNumber = computed(() =>
   typeof props.loading === 'number' ? props.loading : 8
 )
 
+const { filterBlocked } = useAuthorBlocklist()
+
 const artworks = computed(() => {
-  return props.list.filter((item): item is ArtworkInfo => isArtwork(item))
+  const items = props.list.filter((item): item is ArtworkInfo =>
+    isArtwork(item)
+  )
+  return props.filterDisabled ? items : filterBlocked(items)
 })
 
 const localPersistence = useLocalPersistenceStore()

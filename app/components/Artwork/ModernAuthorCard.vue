@@ -10,13 +10,19 @@
       RouterLink(:to='`/users/${user.userId}`') {{ user.name }}
       FnbEllipsis(:line-clamp='1') {{ user.comment || '作者暂未填写简介' }}
 
-  button.follow-button(
-    :class='{ followed: user.isFollowed }',
-    :disabled='followLoading'
-    @click='toggleFollow'
-    type='button'
-    v-if='user.userId !== userStore.userId'
-  ) {{ followLoading ? '处理中…' : user.isFollowed ? '已关注' : '关注' }}
+  .author-actions(v-if='user.userId !== userStore.userId')
+    button.follow-button(
+      :class='{ followed: user.isFollowed }',
+      :disabled='followLoading'
+      @click='toggleFollow'
+      type='button'
+    ) {{ followLoading ? '处理中…' : user.isFollowed ? '已关注' : '关注' }}
+    button.block-button(
+      :class='{ blocked: authorBlocked }',
+      :title='authorBlocked ? "解除屏蔽此作者" : "屏蔽此作者"'
+      @click='toggleBlock'
+      type='button'
+    ) {{ authorBlocked ? '已屏蔽' : '屏蔽' }}
 .modern-author-card.modern-author-card--loading(v-else)
   .author-identity
     FnbSkeleton(circle height='46px' width='46px')
@@ -35,7 +41,33 @@ const props = defineProps<{ user?: User }>()
 const userStore = useUserStore()
 const userProfileStore = useUserProfileStore()
 const toast = useToast()
+const dialog = useDialog()
 const followLoading = ref(false)
+
+const { isBlocked, blockAuthor, unblockAuthor } = useAuthorBlocklist()
+const authorBlocked = computed(() => isBlocked(props.user?.userId))
+
+async function toggleBlock(): Promise<void> {
+  if (!props.user) return
+  try {
+    if (authorBlocked.value) {
+      await unblockAuthor(props.user.userId)
+      toast.success(`已解除屏蔽 ${props.user.name}`)
+      return
+    }
+    const confirmed = await dialog.open({
+      title: '屏蔽作者',
+      content: `屏蔽后，${props.user.name} 的作品将不再出现在任何列表中。可在侧边栏“屏蔽作者管理”中解除。`,
+      positiveText: '屏蔽',
+      negativeText: '取消',
+    })
+    if (!confirmed) return
+    await blockAuthor({ id: props.user.userId, name: props.user.name })
+    toast.success(`已屏蔽 ${props.user.name}`)
+  } catch {
+    toast.error('操作失败，请重试')
+  }
+}
 
 async function toggleFollow(): Promise<void> {
   if (!props.user || followLoading.value) return
@@ -92,7 +124,7 @@ async function toggleFollow(): Promise<void> {
   a {
     overflow: hidden;
     color: var(--modern-text);
-    font-size: 0.95rem;
+    font-size: 1.12rem;
     font-weight: 700;
     text-decoration: none;
     text-overflow: ellipsis;
@@ -101,7 +133,32 @@ async function toggleFollow(): Promise<void> {
 
   .fnb-ellipsis {
     color: var(--modern-muted);
-    font-size: 0.7rem;
+    font-size: 0.82rem;
+  }
+}
+
+.author-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.block-button {
+  min-height: 36px;
+  padding: 0 14px;
+  color: var(--modern-muted);
+  background: transparent;
+  border: 1px solid var(--modern-line, var(--pf-line));
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  white-space: nowrap;
+
+  &.blocked {
+    color: #fff;
+    background: var(--modern-muted);
+    border-color: var(--modern-muted);
   }
 }
 
