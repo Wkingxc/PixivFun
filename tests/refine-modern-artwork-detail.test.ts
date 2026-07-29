@@ -164,6 +164,18 @@ test('翻页模式的鼠标滚轮每次只切换一页且不越界', () => {
   assert.equal(getWheelPageTarget(3, 8, 0), 3)
 })
 
+test('快速翻页模式可在页面切换完成前累计连续滚轮输入', () => {
+  let target = 3
+  target = getWheelPageTarget(target, 8, 120)
+  target = getWheelPageTarget(target, 8, 120)
+  target = getWheelPageTarget(target, 8, 120)
+  assert.equal(target, 6)
+
+  target = getWheelPageTarget(target, 8, -120)
+  target = getWheelPageTarget(target, 8, -120)
+  assert.equal(target, 4)
+})
+
 test('新版多图作品默认只展示首图，展开后显示全部图片', () => {
   const pages = [{ id: 1 }, { id: 2 }, { id: 3 }]
 

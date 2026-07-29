@@ -148,6 +148,8 @@ section.artwork-modern(
       FnbButton(
         :loading='recommendLoading'
         @click='$emit("more-recommend")'
+        @mouseenter='startRecommendHover'
+        @mouseleave='cancelRecommendHover'
         size='sm'
       ) {{ recommendLoading ? '加载中' : '加载更多' }}
 
@@ -249,7 +251,7 @@ const props = defineProps<{
   likeLoading?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   like: []
   'add-bookmark': []
   'remove-bookmark': []
@@ -286,6 +288,7 @@ const {
 const isUgoira = computed(() => props.illust.illustType === 2)
 const pagesExpanded = ref(false)
 const commentsExpanded = ref(false)
+let recommendHoverTimer: ReturnType<typeof setTimeout> | undefined
 const visiblePages = computed(() =>
   getVisibleArtworkPages(props.pages, pagesExpanded.value)
 )
@@ -303,6 +306,26 @@ watch(
     commentsExpanded.value = false
   }
 )
+
+function cancelRecommendHover(): void {
+  if (!recommendHoverTimer) return
+  clearTimeout(recommendHoverTimer)
+  recommendHoverTimer = undefined
+}
+
+function startRecommendHover(): void {
+  cancelRecommendHover()
+  if (props.recommendLoading || !props.hasMoreRecommendations) return
+
+  recommendHoverTimer = setTimeout(() => {
+    recommendHoverTimer = undefined
+    if (!props.recommendLoading && props.hasMoreRecommendations) {
+      emit('more-recommend')
+    }
+  }, 100)
+}
+
+onBeforeUnmount(cancelRecommendHover)
 
 async function shareArtwork() {
   const url = window.location.href
@@ -539,6 +562,24 @@ async function shareArtwork() {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+
+  :deep(.artwork-tag) {
+    margin: 0;
+    padding: 6px 11px;
+    font-family: var(--pf-font-sans);
+    font-size: 0.88rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1.45;
+  }
+
+  :deep(.artwork-tag__name) {
+    font-weight: 680;
+  }
+
+  :deep(.artwork-tag__translation) {
+    font-size: 0.8rem;
+  }
 }
 
 .status-tag {
@@ -1005,13 +1046,16 @@ async function shareArtwork() {
   gap: 6px;
 
   :deep(.fnb-tag) {
-    padding: 6px 10px;
+    padding: 6px 11px;
     color: var(--modern-pink-strong);
     background: var(--modern-soft-pink);
     border: 0;
     border-radius: 999px;
     box-shadow: none;
-    font-size: 0.7rem;
+    font-family: var(--pf-font-sans);
+    font-size: 0.88rem;
+    font-weight: 600;
+    line-height: 1.45;
     transform: none;
   }
 

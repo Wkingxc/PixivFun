@@ -61,18 +61,19 @@
           :to='workLink'
           @mousedown='handleOpenGesture'
         ) {{ item.title }}
-      .author.fnb-media-card__author(:title='item.userName')
-        RouterLink(
-          :class='{ "is-viewed": markAuthorName }',
-          :style='authorStyle',
-          :to='"/users/" + item.userId'
+      .author.fnb-media-card__author
+        ArtworkAuthorPopover(
+          :profile-image-url='item.profileImageUrl',
+          :user-id='item.userId',
+          :user-name='item.userName',
+          :viewed='markAuthorName',
+          :viewed-style='authorStyle'
         )
-          img.avatar(:src='item.profileImageUrl' lazyload)
-          | {{ item.userName }}
 </template>
 
 <script lang="ts" setup>
 import DeferLoad from '../DeferLoad.vue'
+import ArtworkAuthorPopover from './ArtworkAuthorPopover.vue'
 import { IllustType } from '~/utils/constants'
 import { toRef } from 'vue'
 import IFasHeart from '~icons/fa-solid/heart'

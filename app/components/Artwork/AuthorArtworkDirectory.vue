@@ -6,11 +6,11 @@ section.author-artwork-directory
         ITablerPosition(aria-hidden='true')
         strong {{ currentPositionLabel }} / {{ totalArtworkCount }}
       span.directory-badge.directory-badge--page(
-        :title='mode === "page" ? "当前目录页" : "已载入目录页"'
+        :title='mode === "scroll" ? "已载入目录页" : "当前目录页"'
       )
         ITablerPages(aria-hidden='true')
-        span {{ mode === 'page' ? '页码' : '已载入' }}
-        strong {{ mode === 'page' ? currentPage : scrollPage }} / {{ totalPages }}
+        span {{ mode === 'scroll' ? '已载入' : mode === 'quick-page' ? '目标' : '页码' }}
+        strong {{ displayedDirectoryPage }} / {{ totalPages }}
     .directory-tools
       button.locate-current(
         :disabled='!currentArtworkPosition'
@@ -35,6 +35,15 @@ section.author-artwork-directory
         )
           ITablerBook(aria-hidden='true')
           | 翻页
+        button(
+          :class='{ active: mode === "quick-page" }'
+          @click='setMode("quick-page")'
+          aria-label='快速翻页'
+          title='快速翻页：连续滚轮可累计跨页'
+          type='button'
+        )
+          ITablerQuick(aria-hidden='true')
+          | 快速
 
   .directory-state(v-if='initialLoading')
     .directory-grid
@@ -47,7 +56,7 @@ section.author-artwork-directory
   .directory-state.directory-state--empty(v-else-if='!entries.length') 作者暂时没有可展示作品
   template(v-else)
     .directory-viewport(
-      :class='{ "is-page": mode === "page", "is-scroll": mode === "scroll" }'
+      :class='{ "is-page": mode !== "scroll", "is-scroll": mode === "scroll" }'
       @scroll.passive='handleScroll'
       @wheel='handleWheel'
       ref='viewportRef'
@@ -100,6 +109,7 @@ import {
 } from '~/utils/refineModernArtwork'
 import {
   IconBook2 as ITablerBook,
+  IconBolt as ITablerQuick,
   IconCurrentLocation as ITablerPosition,
   IconCopy as ITablerPageCount,
   IconFiles as ITablerPages,
@@ -129,13 +139,16 @@ const totalArtworkCount = ref(0)
 const pageCache = ref<Record<number, ArtworkInfo[]>>({})
 const currentPage = ref(1)
 const scrollPage = ref(1)
-const mode = ref<'scroll' | 'page'>('page')
+type DirectoryMode = 'scroll' | 'page' | 'quick-page'
+const mode = ref<DirectoryMode>('page')
 const initialLoading = ref(false)
 const error = ref('')
 const viewportRef = ref<HTMLElement | null>(null)
 const pageLoads = new Map<number, Promise<void>>()
+const quickPageTarget = ref(1)
 let wheelLocked = false
 let wheelTimer: ReturnType<typeof setTimeout> | undefined
+let quickPageTimer: ReturnType<typeof setTimeout> | undefined
 let directoryRequestId = 0
 
 const totalPages = computed(() =>
@@ -147,8 +160,13 @@ const currentPositionLabel = computed(
 const currentArtworkPage = computed(() =>
   getAuthorArtworkPositionPage(currentArtworkPosition.value, pageSize)
 )
+const displayedDirectoryPage = computed(() => {
+  if (mode.value === 'scroll') return scrollPage.value
+  if (mode.value === 'quick-page') return quickPageTarget.value
+  return currentPage.value
+})
 const loadedArtworks = computed(() => {
-  if (mode.value === 'page') {
+  if (mode.value !== 'scroll') {
     return pageCache.value[currentPage.value] || []
   }
 
@@ -264,6 +282,12 @@ async function initializeDirectory(): Promise<void> {
   totalArtworkCount.value = 0
   pageCache.value = {}
   currentPage.value = 1
+  quickPageTarget.value = 1
+  wheelLocked = false
+  if (wheelTimer) clearTimeout(wheelTimer)
+  wheelTimer = undefined
+  if (quickPageTimer) clearTimeout(quickPageTimer)
+  quickPageTimer = undefined
   scrollPage.value = 1
   mode.value = 'page'
   error.value = ''
@@ -285,6 +309,7 @@ async function initializeDirectory(): Promise<void> {
       pageSize
     )
     currentPage.value = initialPage
+    quickPageTarget.value = initialPage
     await loadPage(initialPage, requestId)
     if (requestId !== directoryRequestId) return
     void preloadAdjacentPages(initialPage, requestId)
@@ -299,7 +324,10 @@ async function initializeDirectory(): Promise<void> {
   }
 }
 
-async function changePage(page: number): Promise<void> {
+async function changePage(
+  page: number,
+  expectedQuickTarget?: number
+): Promise<void> {
   const requestId = directoryRequestId
   const target = Math.min(Math.max(page, 1), totalPages.value)
   try {
@@ -308,8 +336,16 @@ async function changePage(page: number): Promise<void> {
     return
   }
   if (requestId !== directoryRequestId || !pageCache.value[target]) return
+  if (
+    expectedQuickTarget !== undefined &&
+    (mode.value !== 'quick-page' ||
+      quickPageTarget.value !== expectedQuickTarget)
+  ) {
+    return
+  }
 
   currentPage.value = target
+  quickPageTarget.value = target
   viewportRef.value?.scrollTo({ top: 0 })
   void preloadAdjacentPages(target, requestId)
 }
@@ -350,7 +386,8 @@ async function locateCurrentArtwork(): Promise<void> {
   if (!currentArtworkPosition.value) return
 
   const targetPage = currentArtworkPage.value
-  if (mode.value === 'page') {
+  if (mode.value !== 'scroll') {
+    quickPageTarget.value = targetPage
     await changePage(targetPage)
     return
   }
@@ -376,9 +413,14 @@ async function locateCurrentArtwork(): Promise<void> {
   })
 }
 
-async function setMode(nextMode: 'scroll' | 'page'): Promise<void> {
+async function setMode(nextMode: DirectoryMode): Promise<void> {
   if (mode.value === nextMode) return
   mode.value = nextMode
+  wheelLocked = false
+  if (wheelTimer) clearTimeout(wheelTimer)
+  wheelTimer = undefined
+  if (quickPageTimer) clearTimeout(quickPageTimer)
+  quickPageTimer = undefined
 
   if (nextMode === 'scroll') {
     const target = Math.min(
@@ -395,6 +437,7 @@ async function setMode(nextMode: 'scroll' | 'page'): Promise<void> {
     try {
       await loadPage(currentPage.value)
       void preloadAdjacentPages(currentPage.value)
+      quickPageTarget.value = currentPage.value
     } catch {
       return
     }
@@ -435,25 +478,45 @@ watch([displayedArtworks, mode], () => {
   void loadNextScrollPage()
 })
 
+function scheduleQuickPageCommit(): void {
+  if (quickPageTimer) clearTimeout(quickPageTimer)
+  quickPageTimer = setTimeout(() => {
+    quickPageTimer = undefined
+    const target = quickPageTarget.value
+    if (mode.value === 'quick-page' && target !== currentPage.value) {
+      void changePage(target, target)
+    }
+  }, 180)
+}
+
 async function handleWheel(event: WheelEvent): Promise<void> {
-  if (mode.value !== 'page') return
+  if (mode.value === 'scroll') return
   event.preventDefault()
   event.stopPropagation()
 
-  const target = getWheelPageTarget(
-    currentPage.value,
+  if (mode.value === 'page') {
+    const target = getWheelPageTarget(
+      currentPage.value,
+      totalPages.value,
+      event.deltaY
+    )
+    if (target === currentPage.value || wheelLocked) return
+
+    wheelLocked = true
+    await changePage(target)
+    wheelTimer = setTimeout(() => {
+      wheelLocked = false
+      wheelTimer = undefined
+    }, 360)
+    return
+  }
+
+  quickPageTarget.value = getWheelPageTarget(
+    quickPageTarget.value,
     totalPages.value,
     event.deltaY
   )
-  if (target === currentPage.value) return
-
-  if (wheelLocked) return
-
-  wheelLocked = true
-  await changePage(target)
-  wheelTimer = setTimeout(() => {
-    wheelLocked = false
-  }, 360)
+  scheduleQuickPageCommit()
 }
 
 watch(() => [props.userId, props.currentArtworkId], initializeDirectory, {
@@ -462,6 +525,7 @@ watch(() => [props.userId, props.currentArtworkId], initializeDirectory, {
 
 onBeforeUnmount(() => {
   if (wheelTimer) clearTimeout(wheelTimer)
+  if (quickPageTimer) clearTimeout(quickPageTimer)
 })
 </script>
 
@@ -476,6 +540,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .directory-status {
