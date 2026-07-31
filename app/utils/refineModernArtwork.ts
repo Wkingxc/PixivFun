@@ -1,6 +1,8 @@
 export type ExplicitTheme = 'light' | 'dark'
 export type AuthorArtworkCategory = 'illust' | 'manga'
 export const BOOKMARK_PAGE_SIZE = 48
+export const AUTHOR_ARTWORK_PAGE_ROWS = 8
+export const AUTHOR_ARTWORK_PAGE_SIZE = 6 * AUTHOR_ARTWORK_PAGE_ROWS
 
 export interface AuthorArtworkEntry {
   id: string
@@ -94,7 +96,25 @@ export function bookmarkPageOffset(
   return (safePage - 1) * pageSize
 }
 
-export function userArtworkTagPageOffset(page: number, pageSize = 24): number {
+export function getActiveBookmarkRefreshPage(
+  publicPage: number,
+  hiddenPage: number,
+  hidden: boolean
+): number {
+  return Math.max(1, Math.floor(hidden ? hiddenPage : publicPage))
+}
+
+export function bookmarkBelongsToVisibility(
+  bookmarkData: { private: boolean } | null | undefined,
+  hidden: boolean
+): boolean {
+  return bookmarkData?.private === hidden
+}
+
+export function userArtworkTagPageOffset(
+  page: number,
+  pageSize = AUTHOR_ARTWORK_PAGE_SIZE
+): number {
   const safePage = Math.max(1, Math.floor(page))
   return (safePage - 1) * Math.max(1, Math.floor(pageSize))
 }

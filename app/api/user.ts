@@ -58,6 +58,7 @@ export class UserApi extends PixivApiBase {
   async getUserProfileAll(id: string): Promise<{
     illusts: Record<string, null>
     manga: Record<string, null>
+    pickup?: Record<string, unknown>[] | null
   }> {
     return requestCache.fetch(
       cacheKey('user-profile-all', id),
@@ -66,6 +67,7 @@ export class UserApi extends PixivApiBase {
           PixivResponse<{
             illusts: Record<string, null>
             manga: Record<string, null>
+            pickup?: Record<string, unknown>[] | null
           }>
         >(`/ajax/user/${id}/profile/all`)
         return this.unwrap(data)

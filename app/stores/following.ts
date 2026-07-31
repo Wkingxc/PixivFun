@@ -5,10 +5,13 @@ export const useFollowingStore = defineStore('following', () => {
   // Following list state
   const publicList = ref<UserListItem[]>([])
   const hiddenList = ref<UserListItem[]>([])
+  const featuredList = ref<UserListItem[]>([])
   const totalPublic = ref(0)
   const totalHidden = ref(0)
+  const totalFeatured = ref(0)
   const isLoadingPublic = ref(false)
   const isLoadingHidden = ref(false)
+  const isLoadingFeatured = ref(false)
   const title = ref('Following')
 
   const hasMorePublic = computed(
@@ -45,13 +48,33 @@ export const useFollowingStore = defineStore('following', () => {
     }
   }
 
+  async function fetchFeaturedAuthors(page = 1): Promise<void> {
+    if (isLoadingFeatured.value) return
+    isLoadingFeatured.value = true
+    try {
+      const data = await $fetch<{
+        authors: UserListItem[]
+        total: number
+      }>('/api/local/featured-authors', {
+        query: { page, limit: 24 },
+      })
+      featuredList.value = data.authors
+      totalFeatured.value = data.total
+    } finally {
+      isLoadingFeatured.value = false
+    }
+  }
+
   function resetFollowing() {
     publicList.value = []
     hiddenList.value = []
+    featuredList.value = []
     totalPublic.value = 0
     totalHidden.value = 0
+    totalFeatured.value = 0
     isLoadingPublic.value = false
     isLoadingHidden.value = false
+    isLoadingFeatured.value = false
     title.value = 'Following'
   }
 
@@ -121,14 +144,18 @@ export const useFollowingStore = defineStore('following', () => {
   return {
     publicList,
     hiddenList,
+    featuredList,
     totalPublic,
     totalHidden,
+    totalFeatured,
     isLoadingPublic,
     isLoadingHidden,
+    isLoadingFeatured,
     hasMorePublic,
     hasMoreHidden,
     title,
     fetchFollowingList,
+    fetchFeaturedAuthors,
     resetFollowing,
     latestIllusts,
     latestPage,

@@ -3,7 +3,9 @@ import { test } from 'node:test'
 import routerOptions from '../app/router.options.ts'
 import {
   buildAuthorArtworkEntries,
+  bookmarkBelongsToVisibility,
   bookmarkPageOffset,
+  getActiveBookmarkRefreshPage,
   getAuthorArtworkPage,
   getAuthorArtworkPositionPage,
   getVisibleArtworkPages,
@@ -20,7 +22,15 @@ import {
   parseArtworkDirectoryScroll,
   serializeArtworkDirectoryScroll,
 } from '../app/utils/artworkDirectoryNavigation.ts'
+import {
+  bookmarkViewStorageKey,
+  createBookmarkViewState,
+  parseBookmarkViewState,
+  serializeBookmarkViewState,
+} from '../app/utils/bookmarkViewNavigation.ts'
 import { shouldNavigateArtworkTag } from '../app/utils/artworkTagNavigation.ts'
+import { getAuthorArtworkVisibilityPage } from '../app/utils/authorArtworkHiding.ts'
+import { ArtworkSelectionDrag } from '../app/utils/artworkSelectionDrag.ts'
 import { getOriginalImageViewerUrl } from '../app/utils/pximg.ts'
 import {
   clampReaderColumns,
@@ -339,11 +349,101 @@ test('收藏分页每页固定 48 件并生成正确接口偏移量', () => {
   assert.equal(bookmarkPageOffset(-2), 0)
 })
 
-test('作者标签作品分页按每页 24 件生成接口偏移量', () => {
+test('收藏变更保留当前页并让已取消或移出当前范围的卡片消失', () => {
+  assert.equal(getActiveBookmarkRefreshPage(5, 30, false), 5)
+  assert.equal(getActiveBookmarkRefreshPage(5, 30, true), 30)
+
+  assert.equal(bookmarkBelongsToVisibility(null, false), false)
+  assert.equal(bookmarkBelongsToVisibility({ private: true }, false), false)
+  assert.equal(bookmarkBelongsToVisibility({ private: false }, false), true)
+  assert.equal(bookmarkBelongsToVisibility({ private: true }, true), true)
+})
+
+test('从作品页后退时按用户和收藏类型恢复原页码、标签与滚动位置', () => {
+  const state = createBookmarkViewState({
+    userId: '42',
+    tab: 'public_bookmarks',
+    page: 3,
+    tag: '风景',
+    scrollTop: 1280,
+    savedAt: 1_000,
+  })
+  const serialized = serializeBookmarkViewState(state)
+
+  assert.equal(
+    bookmarkViewStorageKey('42', 'public_bookmarks'),
+    'pixivfun:bookmark-view:42:public_bookmarks'
+  )
+  assert.deepEqual(
+    parseBookmarkViewState(serialized, '42', 'public_bookmarks', 2_000),
+    state
+  )
+  assert.equal(
+    parseBookmarkViewState(serialized, '42', 'hidden_bookmarks', 2_000),
+    null
+  )
+  assert.equal(
+    parseBookmarkViewState(
+      serialized,
+      'another-user',
+      'public_bookmarks',
+      2_000
+    ),
+    null
+  )
+})
+
+test('作者作品分页按默认六列八行的每页 48 件生成接口偏移量', () => {
   assert.equal(userArtworkTagPageOffset(1), 0)
-  assert.equal(userArtworkTagPageOffset(2), 24)
-  assert.equal(userArtworkTagPageOffset(3), 48)
+  assert.equal(userArtworkTagPageOffset(2), 48)
+  assert.equal(userArtworkTagPageOffset(3), 96)
   assert.equal(userArtworkTagPageOffset(-1), 0)
+})
+
+test('作者隐藏作品在分页前过滤并在末页清空后夹紧页码', () => {
+  const allIds = ['9', '8', '7', '6', '5', '4', '3', '2', '1']
+  const hiddenIds = new Set(['8', '7', '6', '2'])
+
+  assert.deepEqual(
+    getAuthorArtworkVisibilityPage(allIds, hiddenIds, 2, 3, false),
+    {
+      ids: ['3', '1'],
+      page: 2,
+      total: 5,
+    }
+  )
+  assert.deepEqual(
+    getAuthorArtworkVisibilityPage(allIds, hiddenIds, 9, 3, false),
+    {
+      ids: ['3', '1'],
+      page: 2,
+      total: 5,
+    }
+  )
+  assert.deepEqual(
+    getAuthorArtworkVisibilityPage(allIds, hiddenIds, 1, 3, true),
+    {
+      ids: ['8', '7', '6'],
+      page: 1,
+      total: 4,
+    }
+  )
+})
+
+test('鼠标划选沿同一轨迹统一选中或取消且每张卡片只处理一次', () => {
+  const drag = new ArtworkSelectionDrag()
+
+  assert.equal(drag.start('1', false), true)
+  assert.equal(drag.enter('1', true), false)
+  assert.equal(drag.enter('2', false), true)
+  assert.equal(drag.enter('2', false), false)
+  assert.equal(drag.enter('3', true), false)
+
+  drag.stop()
+  assert.equal(drag.enter('4', false), false)
+  assert.equal(drag.start('5', true), true)
+  assert.equal(drag.enter('6', true), true)
+  assert.equal(drag.enter('7', false), false)
 })
 
 test('主页横幅候选只从今日排行前十名中筛选全年龄作品', () => {

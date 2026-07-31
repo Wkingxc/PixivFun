@@ -2,6 +2,13 @@ export interface UgoiraTimelineFrame {
   delay: number
 }
 
+export function shouldNotifyUgoiraInitFailure(
+  disposed: boolean,
+  downloadFailureNotified: boolean
+): boolean {
+  return !disposed && !downloadFailureNotified
+}
+
 export function getUgoiraDuration(frames: UgoiraTimelineFrame[]): number {
   return frames.reduce((total, frame) => total + Math.max(0, frame.delay), 0)
 }

@@ -238,6 +238,18 @@ test('旧数据库升级后只保留作品和作者访问集合', () => {
       ).map((row) => row.name)
     assert.deepEqual(columns('artwork_visits'), ['profile_id', 'artwork_id'])
     assert.deepEqual(columns('author_visits'), ['profile_id', 'author_id'])
+    assert.deepEqual(columns('author_artwork_exclusions'), [
+      'profile_id',
+      'author_id',
+      'artwork_id',
+      'added_at',
+    ])
+    assert.deepEqual(columns('featured_authors'), [
+      'profile_id',
+      'author_id',
+      'snapshot_json',
+      'added_at',
+    ])
     assert.equal(
       migrated
         .prepare(
@@ -255,6 +267,100 @@ test('旧数据库升级后只保留作品和作者访问集合', () => {
     )
   } finally {
     migrated.close()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('作者作品隐藏按作者隔离、批量幂等且不写入访问记录', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pixivfun-hidden-artworks-'))
+  const repository = new LocalPersistenceRepository({
+    databasePath: join(directory, 'pixivfun.sqlite'),
+  })
+
+  try {
+    assert.deepEqual(repository.hideAuthorArtworks('100', ['1', '2', '2']), [
+      '1',
+      '2',
+    ])
+    assert.deepEqual(repository.hideAuthorArtworks('100', ['2', '3']), [
+      '2',
+      '3',
+    ])
+    repository.hideAuthorArtworks('200', ['1'])
+
+    assert.deepEqual(repository.getHiddenAuthorArtworkIds('100'), [
+      '1',
+      '2',
+      '3',
+    ])
+    assert.deepEqual(repository.getHiddenAuthorArtworkIds('200'), ['1'])
+    assert.deepEqual(repository.getVisitedArtworkIds(['1', '2', '3']), [])
+
+    assert.deepEqual(repository.restoreAuthorArtworks('100', ['2', '999']), [
+      '2',
+      '999',
+    ])
+    assert.deepEqual(repository.getHiddenAuthorArtworkIds('100'), ['1', '3'])
+    assert.deepEqual(repository.getHiddenAuthorArtworkIds('200'), ['1'])
+  } finally {
+    repository.close()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('精选作者可持久化卡片快照、分页读取并独立移除', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pixivfun-featured-authors-'))
+  const databasePath = join(directory, 'pixivfun.sqlite')
+  let repository = new LocalPersistenceRepository({ databasePath })
+  const author = (userId: string, userName: string) => ({
+    userId,
+    userName,
+    profileImageUrl: `https://example.test/${userId}.jpg`,
+    userComment: `${userName} 的简介`,
+    following: true,
+    followed: false,
+    isBlocking: false,
+    isMypixiv: false,
+    illusts: [{ id: `${userId}01` }],
+    novels: [{ id: `${userId}02` }],
+    acceptRequest: false,
+  })
+
+  try {
+    repository.saveFeaturedAuthor('100', author('100', '作者 A'))
+    repository.saveFeaturedAuthor('200', author('200', '作者 B'))
+    repository.saveFeaturedAuthor('100', author('100', '作者 A（更新）'))
+
+    assert.deepEqual(repository.getFeaturedAuthorIds(['100', '200', '300']), [
+      '100',
+      '200',
+    ])
+    const page = repository.getFeaturedAuthors(0, 1)
+    assert.equal(page.total, 2)
+    assert.equal(page.authors.length, 1)
+
+    repository.close()
+    repository = new LocalPersistenceRepository({ databasePath })
+    const restored = repository.getFeaturedAuthors(0, 24)
+    assert.equal(restored.total, 2)
+    assert.equal(
+      restored.authors.find((item) => item.userId === '100')?.userName,
+      '作者 A（更新）'
+    )
+    assert.deepEqual(
+      restored.authors.find((item) => item.userId === '100')?.novels,
+      []
+    )
+
+    repository.removeFeaturedAuthor('100')
+    assert.deepEqual(repository.getFeaturedAuthorIds(['100', '200']), ['200'])
+    assert.equal(repository.getFeaturedAuthors(0, 24).total, 1)
+    assert.throws(
+      () => repository.saveFeaturedAuthor('999', author('100', 'ID 不一致')),
+      /does not match/
+    )
+  } finally {
+    repository.close()
     rmSync(directory, { recursive: true, force: true })
   }
 })

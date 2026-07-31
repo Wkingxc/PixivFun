@@ -4,6 +4,10 @@ import type { NovelInfo } from './Novels'
 // Enums moved to ~/utils/constants.ts for runtime usage
 import type { UserXRestrict, UserPrivacyLevel } from '~/utils/constants'
 
+export type UserFeaturedArtwork = ArtworkInfo & { type: 'illust' }
+export type UserFeaturedNovel = NovelInfo & { type: 'novel' }
+export type UserFeaturedWork = UserFeaturedArtwork | UserFeaturedNovel
+
 export interface UserArtworkTag {
   tag: string
   tag_translation: string
@@ -84,6 +88,8 @@ export interface User {
   illusts: ArtworkInfo[]
   manga: ArtworkInfo[]
   novels: NovelInfo[]
+  /** Creator-selected profile pickup items. Pixiv limits this list to three. */
+  featuredWorks?: UserFeaturedWork[]
 }
 
 export interface PixivUser {

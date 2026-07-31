@@ -80,6 +80,7 @@
 <script lang="ts" setup>
 import type { Artwork } from '~/types'
 import { UgoiraPlayer } from '~/utils/UgoiraPlayer'
+import { shouldNotifyUgoiraInitFailure } from '~/utils/ugoiraTimeline'
 import DeferLoad from './DeferLoad.vue'
 import {
   IconPlayerPause as ITablerPlayerPause,
@@ -106,6 +107,8 @@ const playbackProgress = ref(0)
 const playbackFrameIndex = ref(0)
 const playbackTotalFrames = ref(0)
 const showPlaybackControls = ref(false)
+let disposed = false
+let downloadFailureNotified = false
 const player = computed(() => {
   const p = new UgoiraPlayer(props.illust, {
     progressiveRender: false,
@@ -128,6 +131,8 @@ const player = computed(() => {
       playbackTotalFrames.value = totalFrames
     },
     onDownloadError: (error) => {
+      if (disposed) return
+      downloadFailureNotified = true
       console.error('下载失败:', error)
 
       // 下载失败后还原状态，让用户可以重新尝试
@@ -153,7 +158,8 @@ const roundedDownloadProgress = computed(() =>
 )
 
 async function handleInit(originalQuality?: boolean) {
-  if (isLoading.value) return
+  if (disposed || isLoading.value) return
+  downloadFailureNotified = false
   isLoading.value = true
   isPlaying.value = false
   downloadProgress.value = 0
@@ -179,7 +185,12 @@ async function handleInit(originalQuality?: boolean) {
     isPlaying.value = true
     isLoading.value = false
   } catch (error) {
-    console.error('Ugoira 初始化失败:', error)
+    const shouldNotify = shouldNotifyUgoiraInitFailure(
+      disposed,
+      downloadFailureNotified
+    )
+    if (disposed) return
+    if (shouldNotify) console.error('Ugoira 初始化失败:', error)
 
     // 初始化失败后还原状态，让用户可以重新尝试
     firstLoaded.value = false
@@ -196,7 +207,7 @@ async function handleInit(originalQuality?: boolean) {
     // 清理播放器状态
     player.value.destroy()
 
-    toast.error('Ugoira 初始化失败，请重试')
+    if (shouldNotify) toast.error('Ugoira 初始化失败，请重试')
   }
 }
 
@@ -225,6 +236,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  disposed = true
   player.value.destroy()
 })
 </script>

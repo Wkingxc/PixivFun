@@ -27,6 +27,11 @@ export interface PixivFunImportResult {
   authorVisits: number
 }
 
+export interface FeaturedAuthorPage {
+  authors: Record<string, unknown>[]
+  total: number
+}
+
 export interface LocalPersistenceRepositoryOptions {
   databasePath: string
   profileId?: string
@@ -41,9 +46,10 @@ interface NormalizedMarkerBackup {
   authors: MarkerRecord[]
 }
 
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 5
 const MAX_IMPORT_RECORDS = 200_000
 const MAX_BATCH_IDS = 500
+const MAX_FEATURED_AUTHOR_SNAPSHOT_BYTES = 512 * 1024
 
 const INITIAL_SCHEMA = `
   CREATE TABLE profiles (
@@ -72,6 +78,28 @@ const INITIAL_SCHEMA = `
     author_id TEXT NOT NULL,
     PRIMARY KEY (profile_id, author_id)
   );
+
+  CREATE TABLE author_artwork_exclusions (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    author_id TEXT NOT NULL,
+    artwork_id TEXT NOT NULL,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (profile_id, author_id, artwork_id)
+  );
+
+  CREATE INDEX author_artwork_exclusions_author_idx
+    ON author_artwork_exclusions(profile_id, author_id);
+
+  CREATE TABLE featured_authors (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    author_id TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (profile_id, author_id)
+  );
+
+  CREATE INDEX featured_authors_added_idx
+    ON featured_authors(profile_id, added_at DESC);
 
   CREATE TABLE cloud_credentials (
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -214,6 +242,48 @@ export class LocalPersistenceRepository {
             'INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)'
           )
           .run(3, Date.now())
+      })
+    }
+    if (row.version >= 1 && row.version < 4) {
+      this.transaction(() => {
+        this.database.exec(`
+          CREATE TABLE IF NOT EXISTS author_artwork_exclusions (
+            profile_id TEXT NOT NULL
+              REFERENCES profiles(id) ON DELETE CASCADE,
+            author_id TEXT NOT NULL,
+            artwork_id TEXT NOT NULL,
+            added_at INTEGER NOT NULL,
+            PRIMARY KEY (profile_id, author_id, artwork_id)
+          );
+          CREATE INDEX IF NOT EXISTS author_artwork_exclusions_author_idx
+            ON author_artwork_exclusions(profile_id, author_id);
+        `)
+        this.database
+          .prepare(
+            'INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)'
+          )
+          .run(4, Date.now())
+      })
+    }
+    if (row.version >= 1 && row.version < 5) {
+      this.transaction(() => {
+        this.database.exec(`
+          CREATE TABLE IF NOT EXISTS featured_authors (
+            profile_id TEXT NOT NULL
+              REFERENCES profiles(id) ON DELETE CASCADE,
+            author_id TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            added_at INTEGER NOT NULL,
+            PRIMARY KEY (profile_id, author_id)
+          );
+          CREATE INDEX IF NOT EXISTS featured_authors_added_idx
+            ON featured_authors(profile_id, added_at DESC);
+        `)
+        this.database
+          .prepare(
+            'INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)'
+          )
+          .run(5, Date.now())
       })
     }
 
@@ -381,6 +451,133 @@ export class LocalPersistenceRepository {
       for (const row of rows) visited.add(row.author_id)
     }
     return normalized.filter((id) => visited.has(id))
+  }
+
+  getFeaturedAuthorIds(ids: unknown[]): string[] {
+    const normalized = Array.from(
+      new Set(ids.map((id) => requirePixivId(id, 'authorId')))
+    )
+    const featured = new Set<string>()
+    for (let index = 0; index < normalized.length; index += MAX_BATCH_IDS) {
+      const batch = normalized.slice(index, index + MAX_BATCH_IDS)
+      if (!batch.length) continue
+      const placeholders = batch.map(() => '?').join(', ')
+      const rows = this.database
+        .prepare(
+          `SELECT author_id
+           FROM featured_authors
+           WHERE profile_id = ? AND author_id IN (${placeholders})`
+        )
+        .all(this.profileId, ...batch) as Array<{ author_id: string }>
+      for (const row of rows) featured.add(row.author_id)
+    }
+    return normalized.filter((id) => featured.has(id))
+  }
+
+  getFeaturedAuthors(offsetValue = 0, limitValue = 24): FeaturedAuthorPage {
+    const offset = requireBoundedInteger(offsetValue, 'offset', 0, 200_000)
+    const limit = requireBoundedInteger(limitValue, 'limit', 1, 100)
+    const total = (
+      this.database
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM featured_authors
+           WHERE profile_id = ?`
+        )
+        .get(this.profileId) as { count: number }
+    ).count
+    const rows = this.database
+      .prepare(
+        `SELECT snapshot_json
+         FROM featured_authors
+         WHERE profile_id = ?
+         ORDER BY added_at DESC, LENGTH(author_id), author_id
+         LIMIT ? OFFSET ?`
+      )
+      .all(this.profileId, limit, offset) as Array<{ snapshot_json: string }>
+    return {
+      authors: rows.map((row) => JSON.parse(row.snapshot_json)),
+      total,
+    }
+  }
+
+  saveFeaturedAuthor(authorIdValue: unknown, snapshotValue: unknown): void {
+    const authorId = requirePixivId(authorIdValue, 'authorId')
+    const snapshot = normalizeFeaturedAuthorSnapshot(snapshotValue, authorId)
+    const snapshotJson = JSON.stringify(snapshot)
+    if (
+      Buffer.byteLength(snapshotJson, 'utf8') >
+      MAX_FEATURED_AUTHOR_SNAPSHOT_BYTES
+    ) {
+      throw new RangeError('featured author snapshot is too large')
+    }
+    this.database
+      .prepare(
+        `INSERT INTO featured_authors(
+          profile_id, author_id, snapshot_json, added_at
+        ) VALUES (?, ?, ?, ?)
+        ON CONFLICT(profile_id, author_id) DO UPDATE SET
+          snapshot_json = excluded.snapshot_json`
+      )
+      .run(this.profileId, authorId, snapshotJson, Date.now())
+  }
+
+  removeFeaturedAuthor(authorIdValue: unknown): void {
+    const authorId = requirePixivId(authorIdValue, 'authorId')
+    this.database
+      .prepare(
+        `DELETE FROM featured_authors
+         WHERE profile_id = ? AND author_id = ?`
+      )
+      .run(this.profileId, authorId)
+  }
+
+  getHiddenAuthorArtworkIds(authorIdValue: unknown): string[] {
+    const authorId = requirePixivId(authorIdValue, 'authorId')
+    const rows = this.database
+      .prepare(
+        `SELECT artwork_id
+         FROM author_artwork_exclusions
+         WHERE profile_id = ? AND author_id = ?
+         ORDER BY LENGTH(artwork_id), artwork_id`
+      )
+      .all(this.profileId, authorId) as Array<{ artwork_id: string }>
+    return rows.map((row) => row.artwork_id)
+  }
+
+  hideAuthorArtworks(authorIdValue: unknown, artworkIds: unknown[]): string[] {
+    const authorId = requirePixivId(authorIdValue, 'authorId')
+    const normalized = normalizePixivIdBatch(artworkIds, 'artworkIds')
+    const insert = this.database.prepare(
+      `INSERT OR IGNORE INTO author_artwork_exclusions(
+        profile_id, author_id, artwork_id, added_at
+      ) VALUES (?, ?, ?, ?)`
+    )
+    this.transaction(() => {
+      const now = Date.now()
+      for (const artworkId of normalized) {
+        insert.run(this.profileId, authorId, artworkId, now)
+      }
+    })
+    return normalized
+  }
+
+  restoreAuthorArtworks(
+    authorIdValue: unknown,
+    artworkIds: unknown[]
+  ): string[] {
+    const authorId = requirePixivId(authorIdValue, 'authorId')
+    const normalized = normalizePixivIdBatch(artworkIds, 'artworkIds')
+    const remove = this.database.prepare(
+      `DELETE FROM author_artwork_exclusions
+       WHERE profile_id = ? AND author_id = ? AND artwork_id = ?`
+    )
+    this.transaction(() => {
+      for (const artworkId of normalized) {
+        remove.run(this.profileId, authorId, artworkId)
+      }
+    })
+    return normalized
   }
 
   getCache(namespace: string, key: string, now = Date.now()): unknown | null {
@@ -666,6 +863,71 @@ function requirePixivId(value: unknown, path: string): string {
   const id = normalizePixivId(value)
   if (!id) throw new TypeError(`${path} must be a decimal Pixiv ID`)
   return id
+}
+
+function requireBoundedInteger(
+  value: unknown,
+  path: string,
+  minimum: number,
+  maximum: number
+): number {
+  const number = Number(value)
+  if (!Number.isInteger(number) || number < minimum || number > maximum) {
+    throw new RangeError(
+      `${path} must be an integer from ${minimum} to ${maximum}`
+    )
+  }
+  return number
+}
+
+function normalizeFeaturedAuthorSnapshot(
+  value: unknown,
+  expectedAuthorId: string
+): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('featured author snapshot must be an object')
+  }
+  const author = value as Record<string, unknown>
+  const authorId = requirePixivId(author.userId, 'author.userId')
+  if (authorId !== expectedAuthorId) {
+    throw new TypeError('featured author ID does not match the route')
+  }
+  const requiredString = (key: string, maximum: number): string => {
+    const entry = author[key]
+    if (typeof entry !== 'string') {
+      throw new TypeError(`author.${key} must be a string`)
+    }
+    return entry.slice(0, maximum)
+  }
+  const illusts = Array.isArray(author.illusts)
+    ? author.illusts.slice(0, 4)
+    : []
+  return {
+    userId: authorId,
+    userName: requiredString('userName', 200),
+    profileImageUrl: requiredString('profileImageUrl', 4096),
+    userComment: requiredString('userComment', 5000),
+    following: Boolean(author.following),
+    followed: Boolean(author.followed),
+    isBlocking: Boolean(author.isBlocking),
+    isMypixiv: Boolean(author.isMypixiv),
+    illusts,
+    novels: [],
+    acceptRequest: Boolean(author.acceptRequest),
+  }
+}
+
+function normalizePixivIdBatch(value: unknown, path: string): string[] {
+  if (!Array.isArray(value) || value.length > MAX_BATCH_IDS) {
+    throw new TypeError(
+      `${path} must be an array with at most ${MAX_BATCH_IDS} entries`
+    )
+  }
+  return Array.from(
+    new Set(
+      value.map((item, index) => requirePixivId(item, `${path}.${index}`))
+    )
+  )
 }
 
 function validTimestamp(value: unknown, path: string): number {

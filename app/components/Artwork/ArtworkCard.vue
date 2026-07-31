@@ -13,6 +13,8 @@
   .artwork-card.fnb-media-card(
     :class='{ "artwork-card--selectable": selectable, "artwork-card--selected": selected }'
     @click.capture='handleCardClick'
+    @pointerdown.capture='handleSelectionPointerDown'
+    @pointerenter='handleSelectionPointerEnter'
     v-else-if='item'
   )
     .artwork-image.fnb-media-card__media
@@ -104,6 +106,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'toggle-selection': [item: ArtworkInfo]
+  'selection-drag-start': [item: ArtworkInfo]
+  'selection-drag-enter': [item: ArtworkInfo]
 }>()
 
 const item = toRef(props, 'item')
@@ -132,6 +136,7 @@ const cardImageUrl = computed(() => {
 })
 
 const loadingBookmark = ref(false)
+let suppressSelectionClick = false
 
 // Opening in a new tab keeps this list mounted, so the destination page never
 // refreshes our visited set — mark it here so the overlay lands immediately.
@@ -148,7 +153,41 @@ function handleCardClick(event: MouseEvent) {
   if (target?.closest('.batch-select, .bookmark')) return
   event.preventDefault()
   event.stopPropagation()
+  if (suppressSelectionClick) {
+    suppressSelectionClick = false
+    return
+  }
   emit('toggle-selection', item.value)
+}
+
+function handleSelectionPointerDown(event: PointerEvent) {
+  if (
+    !props.selectable ||
+    !item.value ||
+    event.pointerType !== 'mouse' ||
+    event.button !== 0
+  ) {
+    return
+  }
+  const target = event.target as Element | null
+  if (target?.closest('.bookmark, .batch-select')) return
+  suppressSelectionClick = true
+  event.preventDefault()
+  event.stopPropagation()
+  emit('selection-drag-start', item.value)
+}
+
+function handleSelectionPointerEnter(event: PointerEvent) {
+  if (
+    !props.selectable ||
+    !item.value ||
+    event.pointerType !== 'mouse' ||
+    !(event.buttons & 1)
+  ) {
+    return
+  }
+  event.preventDefault()
+  emit('selection-drag-enter', item.value)
 }
 
 async function handleBookmark() {

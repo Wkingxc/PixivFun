@@ -16,6 +16,8 @@ Component.artworks-list(
         :marker-disabled='markerDisabled',
         :selectable='selectable',
         :selected='selectedIds?.includes(item.id)'
+        @selection-drag-enter='handleSelectionDragEnter'
+        @selection-drag-start='handleSelectionDragStart'
         @toggle-selection='$emit("toggle-selection", $event)'
       )
 </template>
@@ -26,6 +28,7 @@ import { isArtwork } from '~/utils'
 import type { ArtworkInfo, ArtworkInfoOrAd } from '~/types'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
 import { filterArtworksByPageCount } from '~/utils/artworkLayout'
+import { ArtworkSelectionDrag } from '~/utils/artworkSelectionDrag'
 
 const props = defineProps<{
   list: ArtworkInfoOrAd[]
@@ -46,7 +49,7 @@ const props = defineProps<{
   pageCountFiltered?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'toggle-selection': [item: ArtworkInfo]
 }>()
 
@@ -84,6 +87,69 @@ watch(
   },
   { immediate: true }
 )
+
+const selectionDrag = new ArtworkSelectionDrag()
+let dragPointerY = 0
+let autoScrollFrame = 0
+
+function isSelected(id: string): boolean {
+  return props.selectedIds?.includes(id) ?? false
+}
+
+function handleSelectionDragStart(item: ArtworkInfo) {
+  if (selectionDrag.start(item.id, isSelected(item.id))) {
+    emit('toggle-selection', item)
+  }
+}
+
+function handleSelectionDragEnter(item: ArtworkInfo) {
+  if (selectionDrag.enter(item.id, isSelected(item.id))) {
+    emit('toggle-selection', item)
+  }
+}
+
+function runAutoScroll() {
+  autoScrollFrame = 0
+  if (!selectionDrag.active) return
+  const threshold = 88
+  let speed = 0
+  if (dragPointerY < threshold) {
+    speed = -Math.ceil(((threshold - dragPointerY) / threshold) * 18)
+  } else if (dragPointerY > window.innerHeight - threshold) {
+    speed = Math.ceil(
+      ((dragPointerY - (window.innerHeight - threshold)) / threshold) * 18
+    )
+  }
+  if (speed) {
+    window.scrollBy({ top: speed, behavior: 'auto' })
+    autoScrollFrame = requestAnimationFrame(runAutoScroll)
+  }
+}
+
+function handleSelectionPointerMove(event: PointerEvent) {
+  if (!selectionDrag.active) return
+  dragPointerY = event.clientY
+  if (!autoScrollFrame) autoScrollFrame = requestAnimationFrame(runAutoScroll)
+}
+
+function stopSelectionDrag() {
+  selectionDrag.stop()
+  if (autoScrollFrame) cancelAnimationFrame(autoScrollFrame)
+  autoScrollFrame = 0
+}
+
+onMounted(() => {
+  window.addEventListener('pointermove', handleSelectionPointerMove)
+  window.addEventListener('pointerup', stopSelectionDrag)
+  window.addEventListener('blur', stopSelectionDrag)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pointermove', handleSelectionPointerMove)
+  window.removeEventListener('pointerup', stopSelectionDrag)
+  window.removeEventListener('blur', stopSelectionDrag)
+  stopSelectionDrag()
+})
 </script>
 
 <style lang="scss">

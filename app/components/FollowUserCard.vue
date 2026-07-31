@@ -8,16 +8,26 @@
         h4.plain
           RouterLink(:to='"/users/" + user.userId') {{ user.userName }}
         FnbEllipsis.description.pre(:line-clamp='3', :tooltip='false') {{ user.userComment || '这个用户还没有填写简介。' }}
-        button.follow-action(
-          :class='{ followed: user.following }',
-          :disabled='loadingUserFollow'
-          @click='handleUserFollow'
-          type='button'
-          v-if='user.userId !== userStore.userId'
-        )
-          IFasCheck(v-if='user.following')
-          IFasPlus(v-else)
-          | {{ loadingUserFollow ? '处理中' : user.following ? '已关注' : '关注' }}
+        .profile-actions(v-if='user.userId !== userStore.userId')
+          button.follow-action(
+            :class='{ followed: user.following }',
+            :disabled='loadingUserFollow'
+            @click='handleUserFollow'
+            type='button'
+          )
+            IFasCheck(v-if='user.following')
+            IFasPlus(v-else)
+            | {{ loadingUserFollow ? '处理中' : user.following ? '已关注' : '关注' }}
+          button.featured-action(
+            :aria-label='isFeatured ? `将 ${user.userName} 移出精选作者` : `将 ${user.userName} 设为精选作者`',
+            :class='{ featured: isFeatured }',
+            :disabled='loadingFeatured',
+            :title='isFeatured ? "移出精选作者" : "设为精选作者"'
+            @click='handleToggleFeatured'
+            type='button'
+          )
+            IFasStar
+            | {{ loadingFeatured ? '处理中' : isFeatured ? '已精选' : '设为精选' }}
     .user-artworks
       ArtworkList(:list='user.illusts' filter-disabled inline)
 
@@ -35,16 +45,37 @@ import ArtworkList from './Artwork/ArtworkList.vue'
 import type { UserListItem } from '~/types'
 import IFasCheck from '~icons/fa-solid/check'
 import IFasPlus from '~icons/fa-solid/plus'
+import IFasStar from '~icons/fa-solid/star'
 import { useUserStore } from '~/stores/session'
 import { useUserProfileStore } from '~/stores/user-profile'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 
 const userStore = useUserStore()
 const userProfileStore = useUserProfileStore()
+const localPersistenceStore = useLocalPersistenceStore()
 const toast = useToast()
 
 const props = defineProps<{
   user?: UserListItem
 }>()
+
+const emit = defineEmits<{
+  'featured-change': [featured: boolean, userId: string]
+}>()
+
+const isFeatured = computed(() =>
+  localPersistenceStore.isFeaturedAuthor(props.user?.userId)
+)
+
+watch(
+  () => props.user?.userId,
+  (userId) => {
+    if (userId) {
+      void localPersistenceStore.ensureFeaturedAuthors([userId]).catch(() => {})
+    }
+  },
+  { immediate: true }
+)
 
 const loadingUserFollow = ref(false)
 async function handleUserFollow() {
@@ -57,12 +88,38 @@ async function handleUserFollow() {
       await userProfileStore.followUser(props.user.userId)
     }
     props.user.following = !props.user.following
+    if (isFeatured.value) {
+      void localPersistenceStore.featureAuthor(props.user).catch(() => {})
+    }
   } catch {
     toast.error(
       props.user.following ? '取消关注失败，请重试' : '关注失败，请重试'
     )
   } finally {
     loadingUserFollow.value = false
+  }
+}
+
+const loadingFeatured = ref(false)
+async function handleToggleFeatured() {
+  if (!props.user || loadingFeatured.value) return
+  const removing = isFeatured.value
+  loadingFeatured.value = true
+  try {
+    if (removing) {
+      await localPersistenceStore.unfeatureAuthor(props.user.userId)
+    } else {
+      await localPersistenceStore.featureAuthor(props.user)
+    }
+    const featured = !removing
+    emit('featured-change', featured, props.user.userId)
+    toast.success(featured ? '已加入精选作者' : '已移出精选作者')
+  } catch {
+    toast.error(
+      removing ? '移出精选作者失败，请重试' : '设为精选作者失败，请重试'
+    )
+  } finally {
+    loadingFeatured.value = false
   }
 }
 </script>
@@ -132,6 +189,12 @@ h4 {
   line-height: 1.6;
 }
 
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .follow-action {
   display: inline-flex;
   align-items: center;
@@ -158,6 +221,39 @@ h4 {
     color: var(--pf-text);
     background: var(--pf-bg);
     border: 1px solid var(--pf-line);
+  }
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.62;
+  }
+}
+
+.featured-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  color: var(--pf-muted);
+  background: transparent;
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.73rem;
+  font-weight: 720;
+
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  &.featured {
+    color: #f3a221;
+    background: color-mix(in srgb, #f3a221 10%, transparent);
+    border-color: color-mix(in srgb, #f3a221 48%, var(--pf-line));
   }
 
   &:disabled {

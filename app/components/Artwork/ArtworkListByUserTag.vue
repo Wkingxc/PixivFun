@@ -8,7 +8,7 @@
 
   ArtworkList(
     :controlled='controlled',
-    :list='artworks',
+    :list='visibleArtworks',
     :loading='loading ? pageSize : false'
     filter-disabled
     page-count-filtered
@@ -43,10 +43,17 @@ const artworks = ref<ArtworkInfo[]>([])
 const loading = ref(false)
 const error = ref('')
 const userArtworksStore = useUserArtworksStore()
+const localPersistence = useLocalPersistenceStore()
 const pageSize = userArtworksStore.pageSize
 let requestId = 0
+const visibleArtworks = computed(() =>
+  artworks.value.filter(
+    (artwork) =>
+      !localPersistence.isAuthorArtworkHidden(props.userId, artwork.id)
+  )
+)
 
-async function loadPage(scroll = false) {
+async function loadPage() {
   const currentRequest = ++requestId
   loading.value = true
   error.value = ''
@@ -61,12 +68,6 @@ async function loadPage(scroll = false) {
     if (currentRequest !== requestId) return
     artworks.value = result.works
     total.value = result.total
-    if (scroll) {
-      containerRef.value?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      })
-    }
   } catch {
     if (currentRequest !== requestId) return
     artworks.value = []
@@ -77,10 +78,17 @@ async function loadPage(scroll = false) {
   }
 }
 
-watch(page, () => loadPage(true))
+watch(page, () => {
+  containerRef.value?.scrollIntoView({
+    behavior: 'auto',
+    block: 'start',
+  })
+  void loadPage()
+})
 watch(
   () => [props.userId, props.tag],
   () => {
+    void localPersistence.loadHiddenAuthorArtworks(props.userId).catch(() => {})
     if (page.value !== 1) {
       page.value = 1
     } else {
@@ -89,7 +97,10 @@ watch(
   }
 )
 
-onMounted(() => loadPage())
+onMounted(() => {
+  void localPersistence.loadHiddenAuthorArtworks(props.userId).catch(() => {})
+  void loadPage()
+})
 </script>
 
 <style scoped lang="scss">

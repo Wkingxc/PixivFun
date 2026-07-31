@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import type { ArtworkInfo, User } from '~/types'
 import { sortArtList } from '~/utils'
 import { BOOKMARK_PAGE_SIZE } from '~/utils/refineModernArtwork'
+import { normalizeUserFeaturedWorks } from '~/utils/userFeaturedWorks'
 
 export const useUserProfileStore = defineStore('user-profile', () => {
   const pixivClient = usePixivClient()
@@ -15,15 +16,21 @@ export const useUserProfileStore = defineStore('user-profile', () => {
     const cached = userCache.value.get(id)
     if (cached) return cached
 
-    const [userData, profileData] = await Promise.all([
+    const [userData, profileData, profileAllData] = await Promise.all([
       pixivClient.getUser(id),
       pixivClient.getUserProfileTop(id),
+      pixivClient.getUserProfileAll(id),
     ])
     const userValue: User = {
       ...userData,
       illusts: sortArtList(profileData.illusts),
       manga: sortArtList(profileData.manga),
       novels: sortArtList(profileData.novels),
+      featuredWorks: normalizeUserFeaturedWorks(profileAllData.pickup, {
+        userId: userData.userId,
+        userName: userData.name,
+        profileImageUrl: userData.imageBig || userData.image,
+      }),
     }
     userCache.value.set(id, userValue)
     return userValue

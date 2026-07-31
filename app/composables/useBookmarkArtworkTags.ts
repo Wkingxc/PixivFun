@@ -83,6 +83,13 @@ export function useBookmarkArtworkTags(fetchPage: BookmarkPageFetcher) {
     selectedTags.value = [...new Set(tags.filter(Boolean))]
   }
 
+  function removeWork(artworkId: string): void {
+    const nextWorks = works.value.filter((work) => work.id !== artworkId)
+    if (nextWorks.length === works.value.length) return
+    works.value = nextWorks
+    total.value = Math.max(0, total.value - 1)
+  }
+
   return {
     works,
     stats,
@@ -97,6 +104,7 @@ export function useBookmarkArtworkTags(fetchPage: BookmarkPageFetcher) {
     scan,
     reset,
     setSelectedTags,
+    removeWork,
   }
 }
 

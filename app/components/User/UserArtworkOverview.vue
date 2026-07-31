@@ -30,6 +30,16 @@ section.user-artwork-overview
         IFasCheck(v-if='user.isFollowed')
         IFasPlus(v-else)
         | {{ user.isFollowed ? '已关注' : '关注' }}
+      button.feature-button(
+        :aria-label='featured ? `将 ${user.name} 移出精选作者` : `将 ${user.name} 设为精选作者`',
+        :class='{ featured }',
+        :disabled='featureLoading'
+        @click='$emit("toggle-featured")'
+        type='button'
+        v-if='!isSelf'
+      )
+        IFasStar
+        | {{ featured ? '已精选' : '设为精选' }}
       span.follow-loading(v-if='followLoading') 处理中
       span.self-badge(v-else-if='isSelf') 这是你自己
 
@@ -91,6 +101,7 @@ section.user-artwork-overview
 import { IconAdjustmentsHorizontal as ITablerAdjustments } from '@tabler/icons-vue'
 import IFasCheck from '~icons/fa-solid/check'
 import IFasPlus from '~icons/fa-solid/plus'
+import IFasStar from '~icons/fa-solid/star'
 import type { User, UserArtworkTag } from '~/types'
 
 const props = defineProps<{
@@ -100,11 +111,14 @@ const props = defineProps<{
   tagsLoading?: boolean
   showTags?: boolean
   followLoading?: boolean
+  featured?: boolean
+  featureLoading?: boolean
   isSelf?: boolean
 }>()
 
 const emit = defineEmits<{
   follow: []
+  'toggle-featured': []
   'show-profile': []
   'update:selectedTag': [value: string]
 }>()
@@ -249,6 +263,7 @@ function describeTag(tag: string) {
 
 .author-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
@@ -279,6 +294,39 @@ function describeTag(tag: string) {
     color: var(--pf-text);
     background: var(--pf-bg);
     border: 1px solid var(--pf-line);
+  }
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.64;
+  }
+}
+
+.feature-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 16px;
+  color: var(--pf-muted);
+  background: transparent;
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 750;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  &.featured {
+    color: #f3a221;
+    background: color-mix(in srgb, #f3a221 10%, transparent);
+    border-color: color-mix(in srgb, #f3a221 48%, var(--pf-line));
   }
 
   &:disabled {

@@ -93,6 +93,15 @@
                 IFasCheck(v-if='user.isFollowed')
                 IFasPlus(v-else)
                 | {{ user.isFollowed ? '已关注' : '关注' }}
+              button.sidebar-feature-button(
+                :aria-label='featuredAuthor ? `将 ${user.name} 移出精选作者` : `将 ${user.name} 设为精选作者`',
+                :class='{ featured: featuredAuthor }',
+                :disabled='loadingFeaturedAuthor'
+                @click='handleToggleFeaturedAuthor'
+                type='button'
+              )
+                IFasStar
+                | {{ featuredAuthor ? '已精选' : '精选' }}
               button.sidebar-block-button(
                 :class='{ blocked: authorBlocked }'
                 @click='handleToggleBlock'
@@ -104,6 +113,8 @@
       //- Right: Artworks
       .user-content
         UserArtworkOverview(
+          :feature-loading='loadingFeaturedAuthor',
+          :featured='featuredAuthor',
           :follow-loading='loadingUserFollow',
           :is-self='isSelfUserPage',
           :selected-tag='selectedArtworkTag',
@@ -113,9 +124,35 @@
           :user='user'
           @follow='handleUserFollow'
           @show-profile='showUserMore = true'
+          @toggle-featured='handleToggleFeaturedAuthor'
           @update:selected-tag='selectedArtworkTag = $event'
           v-if='isAuthorWorksTab'
         )
+        details.author-featured(
+          :key='`featured-${user.userId}`'
+          v-if='showFeaturedWorks'
+        )
+          summary.author-featured-heading
+            .author-featured-title
+              span.eyebrow FEATURED
+              h2 精选
+            .author-featured-meta
+              span.author-featured-count {{ featuredWorkCount }} 件
+              span.author-featured-toggle(aria-hidden='true')
+          .author-featured-body
+            .author-featured-group(v-if='featuredArtworks.length')
+              h3 插画 / 漫画作品
+              ArtworkList.author-featured-artworks(
+                :list='featuredArtworks'
+                controlled
+                filter-disabled
+              )
+            .author-featured-group(v-if='featuredNovels.length')
+              h3 小说作品
+              NovelList.author-featured-novels(
+                :list='featuredNovels'
+                filter-disabled
+              )
         FnbTabs(:tabs='tabsList' v-model='tab')
           template(#panel-illusts)
             ArtworkListByUserTag(
@@ -324,19 +361,31 @@ import IFasHome from '~icons/fa-solid/home'
 import IFasMapMarkerAlt from '~icons/fa-solid/map-marker-alt'
 import IFasParking from '~icons/fa-solid/parking'
 import IFasPlus from '~icons/fa-solid/plus'
+import IFasStar from '~icons/fa-solid/star'
 import IFasVenusMars from '~icons/fa-solid/venus-mars'
 import { useUserStore } from '~/stores/session'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
 import { useUserArtworksStore } from '~/stores/user-artworks'
 import { useArtworkStore } from '~/stores/artwork'
 import { useUserProfileStore } from '~/stores/user-profile'
-import type { ArtworkInfo, User, UserArtworkTag, UserListItem } from '~/types'
+import type {
+  ArtworkInfo,
+  User,
+  UserArtworkTag,
+  UserFeaturedArtwork,
+  UserFeaturedNovel,
+  UserListItem,
+} from '~/types'
 import {
   BOOKMARK_PAGE_SIZE,
+  bookmarkBelongsToVisibility,
   bookmarkPageOffset,
+  getActiveBookmarkRefreshPage,
   isArtworkGridTab,
+  isBookmarkTab,
 } from '~/utils/refineModernArtwork'
 import { setTitle } from '~/utils/setTitle'
+import { toFeaturedAuthorSnapshot } from '~/utils/featuredAuthors'
 import {
   bookmarkListCacheKey,
   mergeBookmarkTags,
@@ -344,6 +393,13 @@ import {
   type BookmarkTagGroups,
 } from '~/utils/bookmarkTags'
 import { paginateWorks } from '~/utils/bookmarkArtworkTags'
+import {
+  bookmarkViewStorageKey,
+  createBookmarkViewState,
+  parseBookmarkViewState,
+  serializeBookmarkViewState,
+  type BookmarkViewState,
+} from '~/utils/bookmarkViewNavigation'
 import type { BookmarkArtworkTagIndex } from '~/composables/useBookmarkArtworkTags'
 import { effect } from 'vue'
 
@@ -359,6 +415,9 @@ const dialog = useDialog()
 const { containerStyle: artworkLayoutContainerStyle } =
   useArtworkLayoutSettings()
 const isSelfUserPage = computed(() => user.value?.userId === userStore.userId)
+const featuredAuthor = computed(() =>
+  localPersistenceStore.isFeaturedAuthor(user.value?.userId)
+)
 
 const { isBlocked, blockAuthor, unblockAuthor, filterBlocked } =
   useAuthorBlocklist()
@@ -431,6 +490,7 @@ let publicBookmarkRequestId = 0
 let hiddenBookmarkRequestId = 0
 const publicBookmarkGridRef = ref<HTMLElement | null>(null)
 const hiddenBookmarkGridRef = ref<HTMLElement | null>(null)
+let initializingUserView = false
 
 // Artwork-tag statistics: built from the bookmark pages themselves, scoped to
 // the currently selected bookmark tag, and paged locally once a filter is on.
@@ -538,6 +598,23 @@ const isArtworkGridView = computed(() =>
 const isAuthorWorksTab = computed(
   () => tab.value === UserTabs.illusts || tab.value === UserTabs.mangas
 )
+const featuredArtworks = computed(() =>
+  (user.value?.featuredWorks ?? []).filter(
+    (work): work is UserFeaturedArtwork => work.type === 'illust'
+  )
+)
+const featuredNovels = computed(() =>
+  (user.value?.featuredWorks ?? []).filter(
+    (work): work is UserFeaturedNovel => work.type === 'novel'
+  )
+)
+const featuredWorkCount = computed(() => user.value?.featuredWorks?.length ?? 0)
+const showFeaturedWorks = computed(
+  () =>
+    tab.value === UserTabs.illusts &&
+    !selectedArtworkTag.value &&
+    featuredWorkCount.value > 0
+)
 
 const emptyPublicBookmarksText = computed(() =>
   publicArtworkTags.active.value
@@ -627,7 +704,79 @@ async function loadRelatedAuthors(id: string): Promise<void> {
   }
 }
 
+function consumeBookmarkViewState(
+  userId: string,
+  requestedTab?: UserTabs
+): BookmarkViewState | null {
+  if (!import.meta.client || !requestedTab) return null
+  if (!isBookmarkTab(requestedTab)) return null
+
+  const key = bookmarkViewStorageKey(userId, requestedTab)
+  try {
+    const state = parseBookmarkViewState(
+      sessionStorage.getItem(key),
+      userId,
+      requestedTab
+    )
+    sessionStorage.removeItem(key)
+    return state
+  } catch {
+    return null
+  }
+}
+
+function persistBookmarkViewState(): void {
+  if (!import.meta.client || !user.value || !isBookmarkTab(tab.value || '')) {
+    return
+  }
+
+  const hidden = tab.value === UserTabs.hidden_bookmarks
+  const state = createBookmarkViewState({
+    userId: user.value.userId,
+    tab: hidden ? 'hidden_bookmarks' : 'public_bookmarks',
+    page: getActiveBookmarkRefreshPage(
+      publicBookmarkPage.value,
+      hiddenBookmarkPage.value,
+      hidden
+    ),
+    tag: hidden
+      ? selectedHiddenBookmarkTag.value
+      : selectedPublicBookmarkTag.value,
+    scrollTop: window.scrollY,
+    savedAt: Date.now(),
+  })
+
+  try {
+    sessionStorage.setItem(
+      bookmarkViewStorageKey(state.userId, state.tab),
+      serializeBookmarkViewState(state)
+    )
+  } catch {
+    // Navigation still works when browser storage is unavailable.
+  }
+}
+
+async function restoreBookmarkViewScroll(
+  state: BookmarkViewState | null
+): Promise<void> {
+  if (!import.meta.client || !state) return
+  await nextTick()
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (user.value?.userId !== state.userId || tab.value !== state.tab) {
+        return
+      }
+      window.scrollTo({ top: state.scrollTop, behavior: 'auto' })
+    })
+  })
+}
+
 async function init(id: string | number, initTab?: UserTabs): Promise<void> {
+  const userId = String(id)
+  const requestedTab = initTab || UserTabs.illusts
+  const restoredBookmarkView = consumeBookmarkViewState(userId, initTab)
+  initializingUserView = true
+
   // reset states
   user.value = undefined
   tab.value = undefined
@@ -658,11 +807,21 @@ async function init(id: string | number, initTab?: UserTabs): Promise<void> {
 
   try {
     loadingUser.value = true
-    user.value = await userProfileStore.fetchUser('' + id)
+    user.value = await userProfileStore.fetchUser(userId)
     void localPersistenceStore.recordAuthorVisit(id).catch(() => {})
-    tab.value = initTab || UserTabs.illusts
-    void loadUserArtworkTags(String(id))
-    void loadRelatedAuthors(String(id))
+    void localPersistenceStore.ensureFeaturedAuthors([userId]).catch(() => {})
+    if (requestedTab === UserTabs.public_bookmarks) {
+      selectedPublicBookmarkTag.value = restoredBookmarkView?.tag ?? ''
+      publicBookmarkPage.value = restoredBookmarkView?.page ?? 1
+      await getBookmarks(false, publicBookmarkPage.value)
+    } else if (requestedTab === UserTabs.hidden_bookmarks) {
+      selectedHiddenBookmarkTag.value = restoredBookmarkView?.tag ?? ''
+      hiddenBookmarkPage.value = restoredBookmarkView?.page ?? 1
+      await getBookmarks(true, hiddenBookmarkPage.value)
+    }
+    tab.value = requestedTab
+    void loadUserArtworkTags(userId)
+    void loadRelatedAuthors(userId)
     if (isSelfUserPage.value) void loadBookmarkTags()
   } catch (err) {
     if (err instanceof Error) {
@@ -671,7 +830,9 @@ async function init(id: string | number, initTab?: UserTabs): Promise<void> {
       error.value = '未知错误'
     }
   } finally {
+    initializingUserView = false
     loadingUser.value = false
+    await restoreBookmarkViewScroll(restoredBookmarkView)
   }
 }
 
@@ -720,6 +881,30 @@ async function handleUserFollow() {
     toast.error(target.isFollowed ? '取消关注失败，请重试' : '关注失败，请重试')
   } finally {
     loadingUserFollow.value = false
+  }
+}
+
+const loadingFeaturedAuthor = ref(false)
+async function handleToggleFeaturedAuthor() {
+  const target = user.value
+  if (!target || isSelfUserPage.value || loadingFeaturedAuthor.value) return
+  const removing = featuredAuthor.value
+  loadingFeaturedAuthor.value = true
+  try {
+    if (removing) {
+      await localPersistenceStore.unfeatureAuthor(target.userId)
+    } else {
+      await localPersistenceStore.featureAuthor(
+        toFeaturedAuthorSnapshot(target)
+      )
+    }
+    toast.success(removing ? '已移出精选作者' : '已加入精选作者')
+  } catch {
+    toast.error(
+      removing ? '移出精选作者失败，请重试' : '设为精选作者失败，请重试'
+    )
+  } finally {
+    loadingFeaturedAuthor.value = false
   }
 }
 
@@ -779,6 +964,10 @@ async function getBookmarks(hidden = false, page = 1): Promise<void> {
 
 async function changePublicBookmarkPage(page: number): Promise<void> {
   selectedBookmarkIds.value = []
+  publicBookmarkGridRef.value?.scrollIntoView({
+    behavior: 'auto',
+    block: 'start',
+  })
   // With an artwork-tag filter on, the list is already in memory: page locally
   // instead of asking Pixiv for an offset that no longer matches the filter.
   if (publicArtworkTags.active.value) {
@@ -786,23 +975,19 @@ async function changePublicBookmarkPage(page: number): Promise<void> {
   } else {
     await getBookmarks(false, page)
   }
-  publicBookmarkGridRef.value?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'start',
-  })
 }
 
 async function changeHiddenBookmarkPage(page: number): Promise<void> {
   selectedBookmarkIds.value = []
+  hiddenBookmarkGridRef.value?.scrollIntoView({
+    behavior: 'auto',
+    block: 'start',
+  })
   if (hiddenArtworkTags.active.value) {
     hiddenArtworkTagPage.value = Math.max(1, page)
   } else {
     await getBookmarks(true, page)
   }
-  hiddenBookmarkGridRef.value?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'start',
-  })
 }
 
 watch(tab, (newTab, oldTab) => {
@@ -818,12 +1003,13 @@ watch(tab, (newTab, oldTab) => {
   const url = new URL(location.href)
   url.searchParams.set('tab', newTab)
   history.replaceState(history.state, '', '' + url)
+  if (initializingUserView) return
 
   if (newTab === UserTabs.public_bookmarks && isPublicBookmarkEmpty) {
-    getBookmarks(false, 1)
+    getBookmarks(false, publicBookmarkPage.value)
   }
   if (newTab === UserTabs.hidden_bookmarks && isHiddenBookmarkEmpty) {
-    getBookmarks(true, 1)
+    getBookmarks(true, hiddenBookmarkPage.value)
   }
 })
 
@@ -875,11 +1061,33 @@ function toggleAllPageBookmarks() {
     : activeBookmarkList.value.map((item) => item.id)
 }
 
+function removeBookmarkFromCurrentView(artworkId: string): void {
+  const hidden = tab.value === UserTabs.hidden_bookmarks
+  const list = hidden ? hiddenBookmarks : publicBookmarks
+  const total = hidden ? totalHiddenBookmarks : totalPublicBookmarks
+  const nextList = list.value.filter((item) => item.id !== artworkId)
+
+  if (nextList.length !== list.value.length) {
+    list.value = nextList
+    total.value = Math.max(0, total.value - 1)
+  }
+
+  const artworkTags = hidden ? hiddenArtworkTags : publicArtworkTags
+  artworkTags.removeWork(artworkId)
+  selectedBookmarkIds.value = selectedBookmarkIds.value.filter(
+    (id) => id !== artworkId
+  )
+}
+
 async function refreshActiveBookmarkPage() {
   publicBookmarkCache.clear()
   hiddenBookmarkCache.clear()
   const hidden = tab.value === UserTabs.hidden_bookmarks
-  const page = hidden ? hiddenBookmarkPage.value : publicBookmarkPage.value
+  const page = getActiveBookmarkRefreshPage(
+    publicBookmarkPage.value,
+    hiddenBookmarkPage.value,
+    hidden
+  )
   await Promise.all([loadBookmarkTags(), getBookmarks(hidden, page)])
   const list = hidden ? hiddenBookmarks.value : publicBookmarks.value
   if (!list.length && page > 1) await getBookmarks(hidden, page - 1)
@@ -947,15 +1155,23 @@ async function handleBatchVisibility(privateBookmarks: boolean) {
   }
 }
 
-const { revision: bookmarkRevision } = useBookmarkEditor()
+const { revision: bookmarkRevision, target: bookmarkEditorTarget } =
+  useBookmarkEditor()
 watch(bookmarkRevision, () => {
   if (!isSelfUserPage.value) return
-  publicBookmarkCache.clear()
-  hiddenBookmarkCache.clear()
-  void loadBookmarkTags()
-  refreshArtworkTagIndexes()
-  if (tab.value === UserTabs.public_bookmarks) void getBookmarks(false, 1)
-  if (tab.value === UserTabs.hidden_bookmarks) void getBookmarks(true, 1)
+  const hidden = tab.value === UserTabs.hidden_bookmarks
+  const currentTarget = bookmarkEditorTarget.value
+  const artworkId = String(currentTarget?.illustId || currentTarget?.id || '')
+
+  if (
+    artworkId &&
+    isBookmarkTab(tab.value || '') &&
+    !bookmarkBelongsToVisibility(currentTarget?.bookmarkData, hidden)
+  ) {
+    removeBookmarkFromCurrentView(artworkId)
+  }
+
+  if (isBookmarkTab(tab.value || '')) void refreshActiveBookmarkPage()
 })
 
 onBeforeRouteUpdate((to) => {
@@ -963,6 +1179,10 @@ onBeforeRouteUpdate((to) => {
     return
   }
   init(to.params.id as string, to.query.tab as UserTabs)
+})
+
+onBeforeRouteLeave(() => {
+  persistBookmarkViewState()
 })
 
 effect(() => setTitle(user.value?.name, 'Users'))
@@ -1187,8 +1407,42 @@ onMounted(async () => {
 
   .sidebar-buttons {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     gap: 0.5rem;
+  }
+}
+
+.sidebar-feature-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 14px;
+  color: var(--pf-muted);
+  background: transparent;
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 720;
+
+  svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  &.featured {
+    color: #f3a221;
+    background: color-mix(in srgb, #f3a221 10%, transparent);
+    border-color: color-mix(in srgb, #f3a221 48%, var(--pf-line));
+  }
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.64;
   }
 }
 
@@ -1250,6 +1504,98 @@ onMounted(async () => {
     background: var(--pf-muted);
     border-color: var(--pf-muted);
   }
+}
+
+.author-featured {
+  margin-bottom: 24px;
+  overflow: hidden;
+  color: var(--pf-text);
+  background: color-mix(in srgb, var(--pf-surface) 96%, transparent);
+  border: 1px solid var(--pf-line);
+  border-radius: 18px;
+  box-shadow: var(--pf-card-shadow);
+}
+
+.author-featured-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 22px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pf-pink);
+    outline-offset: -3px;
+  }
+}
+
+.author-featured-title {
+  display: grid;
+  gap: 2px;
+
+  .eyebrow {
+    color: var(--pf-pink);
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 1.18rem;
+  }
+}
+
+.author-featured-count {
+  color: var(--pf-muted);
+  font-size: 0.75rem;
+}
+
+.author-featured-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.author-featured-toggle {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--pf-muted);
+  border-bottom: 2px solid var(--pf-muted);
+  transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+
+.author-featured[open] .author-featured-toggle {
+  transform: rotate(-135deg);
+}
+
+.author-featured-body {
+  padding: 0 22px 24px;
+  border-top: 1px solid var(--pf-line);
+}
+
+.author-featured-group {
+  margin-top: 18px;
+
+  h3 {
+    margin: 0;
+    color: var(--pf-muted);
+    font-size: 0.78rem;
+    font-weight: 680;
+  }
+}
+
+:deep(.author-featured-artworks.artworks-list),
+:deep(.author-featured-novels.novel-list) {
+  margin-top: 12px;
 }
 
 .related-authors {

@@ -28,9 +28,10 @@
         FollowUserCard(
           :key='user.userId',
           :user='user'
+          @featured-change='handleFeaturedChange'
           v-for='user in activeList'
         )
-      .empty-state(v-if='!activeLoading && !activeList.length') 暂无关注用户
+      .empty-state(v-if='!activeLoading && !activeList.length') {{ emptyText }}
 
     FnbPagination.following-user-pagination(
       :item-count='activeTotal',
@@ -58,9 +59,10 @@ onBeforeRouteUpdate((to, from) => {
 
 const route = useRoute()
 const router = useRouter()
-const targetUserId = ref(route.params.id)
+const targetUserId = ref(String(route.params.id))
 
-const tab = ref<string>('public')
+type FollowingTab = 'public' | 'hidden' | 'featured'
+const tab = ref<FollowingTab>('public')
 const PAGE_SIZE = 24
 const page = computed(() => {
   const value = Number(route.query.p)
@@ -69,42 +71,88 @@ const page = computed(() => {
 
 const userStore = useUserStore()
 const followingStore = useFollowingStore()
+const localPersistenceStore = useLocalPersistenceStore()
 const isSelfPage = computed(() => userStore.userId === targetUserId.value)
-const activeList = computed(() =>
-  tab.value === 'hidden' ? followingStore.hiddenList : followingStore.publicList
-)
-const activeTotal = computed(() =>
-  tab.value === 'hidden'
+const activeList = computed(() => {
+  if (tab.value === 'featured') return followingStore.featuredList
+  return tab.value === 'hidden'
+    ? followingStore.hiddenList
+    : followingStore.publicList
+})
+const activeTotal = computed(() => {
+  if (tab.value === 'featured') return followingStore.totalFeatured
+  return tab.value === 'hidden'
     ? followingStore.totalHidden
     : followingStore.totalPublic
-)
-const activeLoading = computed(() =>
-  tab.value === 'hidden'
+})
+const activeLoading = computed(() => {
+  if (tab.value === 'featured') return followingStore.isLoadingFeatured
+  return tab.value === 'hidden'
     ? followingStore.isLoadingHidden
     : followingStore.isLoadingPublic
+})
+const emptyText = computed(() =>
+  tab.value === 'featured'
+    ? '还没有精选作者，可在关注列表或作者主页点击“设为精选”。'
+    : '暂无关注用户'
 )
 
 const tabsList = computed(() => {
-  const list = [{ key: 'public', label: '公开关注' }]
+  const list: Array<{ key: FollowingTab; label: string }> = [
+    { key: 'public', label: '公开关注' },
+  ]
   if (isSelfPage.value) {
     list.push({ key: 'hidden', label: '私密关注' })
+    list.push({ key: 'featured', label: '精选作者' })
   }
   return list
 })
 
 function resetAndFetch(userId: string) {
   targetUserId.value = userId
-  tab.value =
-    route.query.rest === 'hide' && isSelfPage.value ? 'hidden' : 'public'
+  tab.value = resolveTab()
   followingStore.resetFollowing()
-  followingStore.fetchFollowingList(userId, tab.value === 'hidden', page.value)
+  void fetchActiveList()
 }
 
-function changeTab(value: string) {
+function resolveTab(): FollowingTab {
+  if (!isSelfPage.value) return 'public'
+  if (route.query.tab === 'featured') return 'featured'
+  if (route.query.rest === 'hide') return 'hidden'
+  return 'public'
+}
+
+async function fetchActiveList(): Promise<void> {
+  if (tab.value === 'featured') {
+    await followingStore.fetchFeaturedAuthors(page.value)
+    localPersistenceStore.rememberFeaturedAuthors(
+      activeList.value.map((user) => user.userId)
+    )
+  } else {
+    await followingStore.fetchFollowingList(
+      targetUserId.value,
+      tab.value === 'hidden',
+      page.value
+    )
+    void localPersistenceStore
+      .ensureFeaturedAuthors(activeList.value.map((user) => user.userId))
+      .catch(() => {})
+  }
+}
+
+function changeTab(value: FollowingTab) {
   const query = { ...route.query }
   delete query.p
-  if (value === 'hidden') query.rest = 'hide'
-  else delete query.rest
+  if (value === 'hidden') {
+    query.rest = 'hide'
+    delete query.tab
+  } else if (value === 'featured') {
+    query.tab = 'featured'
+    delete query.rest
+  } else {
+    delete query.rest
+    delete query.tab
+  }
   router.push({ query })
 }
 
@@ -115,17 +163,21 @@ function changePage(value: number) {
   router.push({ query })
 }
 
+function handleFeaturedChange(featured: boolean) {
+  if (tab.value !== 'featured' || featured) return
+  if (activeList.value.length === 1 && page.value > 1) {
+    changePage(page.value - 1)
+  } else {
+    void followingStore.fetchFeaturedAuthors(page.value)
+  }
+}
+
 watch(
-  () => [route.query.p, route.query.rest],
+  () => [route.query.p, route.query.rest, route.query.tab],
   () => {
-    tab.value =
-      route.query.rest === 'hide' && isSelfPage.value ? 'hidden' : 'public'
-    void followingStore.fetchFollowingList(
-      String(targetUserId.value),
-      tab.value === 'hidden',
-      page.value
-    )
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    tab.value = resolveTab()
+    void fetchActiveList()
+    window.scrollTo({ top: 0, behavior: 'auto' })
   }
 )
 </script>

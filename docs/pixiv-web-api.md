@@ -730,7 +730,8 @@ Get full user profile.
 
 ### 7.2 GET `/ajax/user/{userId}/profile/top`
 
-Get user's featured/pinned works.
+Get the preview works rendered on the user's profile top page. These are not the
+creator-selected pickup items.
 
 **Response** `body`:
 
@@ -744,16 +745,32 @@ Get user's featured/pinned works.
 
 ### 7.3 GET `/ajax/user/{userId}/profile/all`
 
-Get IDs of all user's works (for client-side pagination).
+Get profile metadata, IDs of all the user's works (for client-side pagination),
+and the creator-selected pickup items.
 
 **Response** `body`:
 
 ```jsonc
 {
   "illusts": { "12345": null, "12346": null, ... },  // keys = artwork IDs
-  "manga":   { "67890": null, ... }
+  "manga":   { "67890": null, ... },
+  "pickup": [
+    {
+      "id": "12345",
+      "type": "illust",
+      "title": "...",
+      "url": "...",
+      "contentUrl": "https://www.pixiv.net/artworks/12345",
+      "deletable": true,
+      "draggable": true
+    }
+  ] // creator-selected profile items in display order; Pixiv limits this to 3
 }
 ```
+
+`pickup` can also contain non-artwork item types such as a series or external
+content, so consumers should branch on each item's `type` instead of treating it
+as another page of ordinary works.
 
 ### 7.4 GET `/ajax/user/{userId}/profile/illusts`
 
@@ -1379,8 +1396,8 @@ Novel ranking item from `/ajax/ranking/novel`. Uses **snake_case** field names (
 | 6.1   | GET    | `/ranking.php`                           | Partial (R18 req.)  | Artwork ranking              |
 | 6.2   | GET    | `/ajax/ranking/novel`                    | Partial (R18 req.)  | Novel ranking                |
 | 7.1   | GET    | `/ajax/user/{userId}?full=1`             | Optional            | User profile                 |
-| 7.2   | GET    | `/ajax/user/{userId}/profile/top`        | Optional            | User featured works          |
-| 7.3   | GET    | `/ajax/user/{userId}/profile/all`        | Optional            | All user work IDs            |
+| 7.2   | GET    | `/ajax/user/{userId}/profile/top`        | Optional            | User profile preview works   |
+| 7.3   | GET    | `/ajax/user/{userId}/profile/all`        | Optional            | Work IDs & pickup items      |
 | 7.4   | GET    | `/ajax/user/{userId}/profile/illusts`    | Optional            | User works by IDs            |
 | 8.1   | GET    | `/ajax/user/{userId}/following`          | Required            | User following list          |
 | 8.2   | GET    | `/ajax/follow_latest/illust`             | Required            | Feed from followed users     |

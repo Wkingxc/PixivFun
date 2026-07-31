@@ -358,6 +358,7 @@ async function makeSearch(): Promise<void> {
 // ── Watchers ──
 
 watch(() => route.query, makeSearch, { deep: true })
+watch(page, () => window.scrollTo({ top: 0, behavior: 'auto' }))
 
 effect(() =>
   keyword.value

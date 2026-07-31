@@ -1,10 +1,13 @@
 import { defineStore } from 'pinia'
 import type { ArtworkInfo, UserArtworkTag } from '~/types'
-import { userArtworkTagPageOffset } from '~/utils/refineModernArtwork'
+import {
+  AUTHOR_ARTWORK_PAGE_SIZE,
+  userArtworkTagPageOffset,
+} from '~/utils/refineModernArtwork'
 
 export const useUserArtworksStore = defineStore('user-artworks', () => {
   const pixivClient = usePixivClient()
-  const pageSize = 24
+  const pageSize = AUTHOR_ARTWORK_PAGE_SIZE
   const tagCache = ref(new Map<string, UserArtworkTag[]>())
 
   const state = ref<
@@ -65,6 +68,16 @@ export const useUserArtworksStore = defineStore('user-artworks', () => {
     return s.cachedPages[page]
   }
 
+  async function fetchWorksByIds(
+    userId: string,
+    ids: string[],
+    workCategory: 'illust' | 'manga'
+  ): Promise<ArtworkInfo[]> {
+    if (!ids.length) return []
+    const works = await pixivClient.getUserIllusts(userId, ids, workCategory)
+    return ids.flatMap((id) => (works[id] ? [works[id]] : []))
+  }
+
   async function fetchTags(userId: string): Promise<UserArtworkTag[]> {
     const cached = tagCache.value.get(userId)
     if (cached) return cached
@@ -97,6 +110,7 @@ export const useUserArtworksStore = defineStore('user-artworks', () => {
     fetchAllIds,
     getIdsByPage,
     fetchPage,
+    fetchWorksByIds,
     fetchTags,
     fetchTagPage,
     reset,
