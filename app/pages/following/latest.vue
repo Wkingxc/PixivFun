@@ -5,9 +5,20 @@
     header.following-header
       .heading-copy
         span.eyebrow FOLLOWING
-        h1 已关注用户的作品
-      span.page-summary(v-if='followingStore.latestIllusts.length')
-        | 第 {{ currentPage }} 页 · {{ followingStore.latestIllusts.length }} 件
+        h1 关注更新
+      span.page-summary(
+        v-if='!pageLoading && followingStore.latestIllusts.length'
+      )
+        | 第 {{ currentPage }} 页 · {{ activeIllusts.length }} 件
+
+    nav.following-tabs(aria-label='关注更新分组')
+      button(
+        :class='{ active: activeTab === item.key }',
+        :key='item.key'
+        @click='changeTab(item.key)'
+        type='button'
+        v-for='item in tabs'
+      ) {{ item.label }}
 
     .following-loading(
       v-if='followingStore.latestLoading && followingStore.latestIllusts.length'
@@ -15,14 +26,12 @@
       span 正在加载第 {{ currentPage }} 页…
 
     ArtworkList(
-      :list='followingStore.latestIllusts',
-      :loading='followingStore.latestLoading && !followingStore.latestIllusts.length ? followingStore.latestPageSize : false'
+      :list='displayedIllusts',
+      :loading='pageLoading && !displayedIllusts.length ? followingStore.latestPageSize : false'
       controlled
     )
 
-    .following-empty(
-      v-if='!followingStore.latestLoading && !followingStore.latestIllusts.length'
-    ) 暂时没有关注用户的新作品
+    .following-empty(v-if='!pageLoading && !activeIllusts.length') {{ emptyText }}
 
     FnbPagination.following-pagination(
       :item-count='followingStore.latestItemCount',
@@ -40,30 +49,83 @@ definePageMeta({
 })
 import { useUserStore } from '~/stores/session'
 import { useFollowingStore } from '~/stores/following'
+import { useLocalPersistenceStore } from '~/stores/local-persistence'
 import ArtworkMarkerControl from '~/components/Artwork/ArtworkMarkerControl.vue'
+import { partitionFollowingUpdates } from '~/utils/followingLatest'
+
+type FollowingUpdateTab = 'featured' | 'regular'
 
 onMounted(() => {
-  setTitle('New Artworks from Following Users')
+  setTitle('关注更新')
   followingStore.resetLatest()
-  handleFetch(currentPage.value)
+  void handleFetch(currentPage.value)
 })
 
 const userStore = useUserStore()
 const followingStore = useFollowingStore()
+const localPersistenceStore = useLocalPersistenceStore()
 const { containerStyle: artworkLayoutContainerStyle } =
   useArtworkLayoutSettings()
 const route = useRoute()
 const router = useRouter()
+const tabs: Array<{ key: FollowingUpdateTab; label: string }> = [
+  { key: 'featured', label: '精选作者更新' },
+  { key: 'regular', label: '普通作者更新' },
+]
+const groupingLoading = ref(true)
 const currentPage = computed(() => {
   const page = Number(route.query.p)
   return Number.isInteger(page) && page > 0 ? page : 1
 })
+const activeTab = computed<FollowingUpdateTab>(() =>
+  route.query.tab === 'regular' ? 'regular' : 'featured'
+)
+const latestGroups = computed(() =>
+  partitionFollowingUpdates(
+    followingStore.latestIllusts,
+    localPersistenceStore.featuredAuthorIds
+  )
+)
+const activeIllusts = computed(() => latestGroups.value[activeTab.value])
+const pageLoading = computed(
+  () => followingStore.latestLoading || groupingLoading.value
+)
+const displayedIllusts = computed(() =>
+  groupingLoading.value ? [] : activeIllusts.value
+)
+const emptyText = computed(() =>
+  activeTab.value === 'featured'
+    ? '当前页没有精选作者的新作品'
+    : '当前页没有普通作者的新作品'
+)
+
+let groupingRequestId = 0
 
 async function handleFetch(page: number) {
   if (!userStore.isLoggedIn) {
     return router.push(`/login?back=${encodeURIComponent(route.fullPath)}`)
   }
-  await followingStore.fetchLatest(page)
+  const requestId = ++groupingRequestId
+  groupingLoading.value = true
+  try {
+    await followingStore.fetchLatest(page)
+    if (requestId !== groupingRequestId) return
+    await localPersistenceStore.ensureFeaturedAuthors(
+      followingStore.latestIllusts.map((artwork) => artwork.userId)
+    )
+  } finally {
+    if (requestId === groupingRequestId) groupingLoading.value = false
+  }
+}
+
+function changeTab(tab: FollowingUpdateTab) {
+  if (tab === activeTab.value) return
+  const query = { ...route.query }
+  delete query.p
+  if (tab === 'featured') delete query.tab
+  else query.tab = tab
+  void router.push({ query })
+  window.scrollTo({ top: 0, behavior: 'auto' })
 }
 
 function changePage(page: number) {
@@ -98,6 +160,35 @@ watch(currentPage, (page) => {
   justify-content: space-between;
   gap: 24px;
   margin-bottom: 14px;
+}
+
+.following-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--pf-line);
+
+  button {
+    padding: 10px 18px 9px;
+    color: var(--pf-muted);
+    background: transparent;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 680;
+
+    &:hover:not(.active) {
+      color: var(--pf-text);
+      background: var(--pf-soft-pink);
+    }
+
+    &.active {
+      color: var(--pf-pink);
+      border-color: var(--pf-pink);
+    }
+  }
 }
 
 .heading-copy {
