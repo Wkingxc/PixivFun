@@ -49,7 +49,7 @@ export class PixivApiBase {
 
     this.http = axios.create({
       baseURL: options.baseURL,
-      timeout: options.timeout ?? 15 * 1000,
+      timeout: options.timeout ?? 35 * 1000,
       headers: {
         'Content-Type': 'application/json',
       },

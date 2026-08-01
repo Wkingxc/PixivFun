@@ -3,6 +3,10 @@ import colors from 'picocolors'
 import { createPixivRequestHeaders } from './pixiv-headers'
 import { getPixivSession } from './pixiv-session'
 import { resolveUpstreamProxyUrl } from './system-proxy'
+import {
+  createProxyDispatcherPool,
+  fetchWithTransientRetry,
+} from './upstream-fetch'
 
 export const PROD = process.env.NODE_ENV === 'production'
 export const DEV = !PROD
@@ -20,19 +24,50 @@ export const PXIMG_BASEURL_S = (() => {
 
 // --- Proxy-aware fetch ---
 
+export interface ProxyAwareFetchPolicy {
+  retries?: number
+  timeoutMs?: number
+}
+
+const proxyDispatcherPool = createProxyDispatcherPool(async (url) => {
+  const { ProxyAgent } = await import('undici')
+  return new ProxyAgent(url)
+})
+
 export async function proxyAwareFetch(
-  url: string,
-  init?: RequestInit
+  input: string | URL,
+  init: RequestInit = {},
+  policy: ProxyAwareFetchPolicy = {}
 ): Promise<Response> {
   const proxyUrl = await resolveUpstreamProxyUrl()
-  if (proxyUrl) {
-    const { fetch: undiciFetch, ProxyAgent } = await import('undici')
-    return undiciFetch(url, {
-      ...init,
-      dispatcher: new ProxyAgent(proxyUrl),
-    } as any) as unknown as Response
+  const method = (init.method ?? 'GET').toUpperCase()
+
+  if (!proxyUrl) {
+    void proxyDispatcherPool.clear().catch(() => {})
   }
-  return globalThis.fetch(url, init)
+
+  return fetchWithTransientRetry(
+    method,
+    async (signal) => {
+      if (proxyUrl) {
+        const [{ fetch: undiciFetch }, dispatcher] = await Promise.all([
+          import('undici'),
+          proxyDispatcherPool.get(proxyUrl),
+        ])
+        return undiciFetch(input, {
+          ...init,
+          signal,
+          dispatcher,
+        } as any) as unknown as Response
+      }
+      return globalThis.fetch(input, { ...init, signal })
+    },
+    {
+      retries: policy.retries,
+      signal: init.signal,
+      timeoutMs: policy.timeoutMs,
+    }
+  )
 }
 
 // --- Pixiv API client ---
@@ -47,7 +82,7 @@ interface PixivFetchOptions {
 
 export function buildPixivHeaders(
   event: H3Event,
-  method = event.method
+  method: string = event.method
 ): Record<string, string> {
   const session = getPixivSession(event)
   return createPixivRequestHeaders(
@@ -101,12 +136,18 @@ export async function pixivFetch(
     )
   }
 
-  const response = await proxyAwareFetch(url.toString(), {
-    method,
-    headers,
-    body,
-    signal: AbortSignal.timeout(9000),
-  })
+  const response = await proxyAwareFetch(
+    url.toString(),
+    {
+      method,
+      headers,
+      body,
+    },
+    {
+      retries: 1,
+      timeoutMs: 15_000,
+    }
+  )
 
   const contentType = response.headers.get('content-type') ?? ''
   const data = contentType.includes('application/json')

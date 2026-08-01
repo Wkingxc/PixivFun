@@ -51,6 +51,8 @@ export default defineEventHandler(async (event) => {
     method: event.method,
     headers,
     responseHeaders: PROXY_RESPONSE_HEADERS,
+    retries: 1,
+    timeoutMs: 30_000,
     devLabel: 'pximg',
   })
 })

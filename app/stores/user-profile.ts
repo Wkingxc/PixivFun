@@ -3,6 +3,7 @@ import type { ArtworkInfo, User } from '~/types'
 import { sortArtList } from '~/utils'
 import { BOOKMARK_PAGE_SIZE } from '~/utils/refineModernArtwork'
 import { normalizeUserFeaturedWorks } from '~/utils/userFeaturedWorks'
+import { loadUserProfileSources } from '~/utils/userProfileLoader'
 
 export const useUserProfileStore = defineStore('user-profile', () => {
   const pixivClient = usePixivClient()
@@ -16,17 +17,14 @@ export const useUserProfileStore = defineStore('user-profile', () => {
     const cached = userCache.value.get(id)
     if (cached) return cached
 
-    const [userData, profileData, profileAllData] = await Promise.all([
-      pixivClient.getUser(id),
-      pixivClient.getUserProfileTop(id),
-      pixivClient.getUserProfileAll(id),
-    ])
+    const { userData, profileData, profileAllData } =
+      await loadUserProfileSources(pixivClient, id)
     const userValue: User = {
       ...userData,
       illusts: sortArtList(profileData.illusts),
       manga: sortArtList(profileData.manga),
       novels: sortArtList(profileData.novels),
-      featuredWorks: normalizeUserFeaturedWorks(profileAllData.pickup, {
+      featuredWorks: normalizeUserFeaturedWorks(profileAllData?.pickup, {
         userId: userData.userId,
         userName: userData.name,
         profileImageUrl: userData.imageBig || userData.image,

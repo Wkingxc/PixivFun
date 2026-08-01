@@ -44,7 +44,8 @@ export default defineEventHandler(async (event) => {
     headers,
     body,
     responseHeaders: PROXY_RESPONSE_HEADERS,
-    signal: AbortSignal.timeout(9000),
+    retries: 1,
+    timeoutMs: 15_000,
     devLabel: 'ajax',
   })
 })

@@ -1,6 +1,7 @@
 import type { H3Event } from 'h3'
 import colors from 'picocolors'
 import { DEV, proxyAwareFetch } from '~~/server/utils/pixiv'
+import { formatUpstreamError } from '~~/server/utils/upstream-fetch'
 
 export interface ProxyPassOptions {
   url: string
@@ -8,7 +9,9 @@ export interface ProxyPassOptions {
   headers: Record<string, string>
   body?: BodyInit | null
   responseHeaders: string[]
+  retries?: number
   signal?: AbortSignal
+  timeoutMs?: number
   devLabel?: string
 }
 
@@ -37,21 +40,23 @@ export async function proxyPass(
 ): Promise<Response> {
   let upstream: Response
   try {
-    upstream = await proxyAwareFetch(opts.url, {
-      method: opts.method,
-      headers: opts.headers,
-      body: opts.body ?? undefined,
-      signal: opts.signal,
-    })
-  } catch (err: any) {
-    console.error(
-      `[proxyPass] upstream fetch failed: ${opts.url}`,
-      err?.message ?? err
+    upstream = await proxyAwareFetch(
+      opts.url,
+      {
+        method: opts.method,
+        headers: opts.headers,
+        body: opts.body ?? undefined,
+        signal: opts.signal,
+      },
+      { retries: opts.retries, timeoutMs: opts.timeoutMs }
     )
+  } catch (err: any) {
+    const detail = formatUpstreamError(err)
+    console.error(`[proxyPass] upstream fetch failed: ${opts.url}`, detail)
     throw createError({
       statusCode: 502,
       statusMessage: 'Bad Gateway',
-      data: String(err?.message ?? err),
+      data: detail,
     })
   }
 
