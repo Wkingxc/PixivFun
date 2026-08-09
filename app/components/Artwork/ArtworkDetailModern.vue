@@ -78,7 +78,7 @@ section.artwork-modern(
             )
               ITablerDots(aria-hidden='true')
 
-        .description.pre(v-html='illust.description' v-if='illust.description')
+        .description.pre(v-html='artworkDescription' v-if='artworkDescription')
         p.description.no-desc(v-else) 作者未填写简介
 
         .tag-list
@@ -227,6 +227,7 @@ import DeferLoad from '~/components/DeferLoad.vue'
 import PixivLikeIcon from '~/components/icons/PixivLikeIcon.vue'
 import PixivShareIcon from '~/components/icons/PixivShareIcon.vue'
 import type { Artwork, ArtworkGallery, ArtworkInfo, User } from '~/types'
+import { unwrapPixivJumpLinks } from '~/utils/pixivJumpLink'
 import { getOriginalImageViewerUrl } from '~/utils/pximg'
 import { getVisibleArtworkPages } from '~/utils/refineModernArtwork'
 import {
@@ -294,6 +295,9 @@ const visiblePages = computed(() =>
 )
 const formattedDate = computed(() =>
   new Date(props.illust.createDate).toLocaleString()
+)
+const artworkDescription = computed(() =>
+  unwrapPixivJumpLinks(props.illust.description)
 )
 const UgoiraViewer = defineAsyncComponent(
   () => import('~/components/UgoiraViewer.vue')
