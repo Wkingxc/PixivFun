@@ -12,6 +12,10 @@ export interface BlockedAuthor {
 }
 
 export interface LocalPreferences {
+  networkProxy: {
+    enabled: boolean
+    url: string
+  }
   appearance: {
     theme: 'auto' | 'light' | 'dark'
   }
@@ -72,6 +76,10 @@ export type LocalPreferencesPatch = {
 }
 
 export const DEFAULT_LOCAL_PREFERENCES: LocalPreferences = {
+  networkProxy: {
+    enabled: false,
+    url: '',
+  },
   appearance: {
     theme: 'auto',
   },
@@ -132,6 +140,10 @@ const validators: {
     ) => LocalPreferences[Namespace][Key]
   }
 } = {
+  networkProxy: {
+    enabled: booleanValue('networkProxy.enabled'),
+    url: proxyUrlValue('networkProxy.url'),
+  },
   appearance: {
     theme: enumValue('appearance.theme', ['auto', 'light', 'dark']),
   },
@@ -227,6 +239,41 @@ function booleanValue(path: string): (value: unknown) => boolean {
   return (value) => {
     if (typeof value === 'boolean') return value
     throw new TypeError(`${path} must be a boolean`)
+  }
+}
+
+export function normalizeProxyUrl(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)
+    ? trimmed
+    : `http://${trimmed}`
+  try {
+    const url = new URL(candidate)
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) {
+      throw new TypeError('proxy URL must use HTTP or HTTPS')
+    }
+    return url.toString().replace(/\/$/, '')
+  } catch (error) {
+    if (error instanceof TypeError && error.message.includes('must use')) {
+      throw error
+    }
+    throw new TypeError('proxy URL is invalid')
+  }
+}
+
+function proxyUrlValue(path: string): (value: unknown) => string {
+  return (value) => {
+    if (typeof value !== 'string') {
+      throw new TypeError(`${path} must be a string`)
+    }
+    try {
+      return normalizeProxyUrl(value)
+    } catch (error) {
+      throw new TypeError(
+        `${path} ${error instanceof Error ? error.message : 'is invalid'}`
+      )
+    }
   }
 }
 
@@ -401,6 +448,7 @@ export function cloneLocalPreferences(
   preferences: LocalPreferences
 ): LocalPreferences {
   return {
+    networkProxy: { ...preferences.networkProxy },
     appearance: { ...preferences.appearance },
     discovery: { ...preferences.discovery },
     artworkReader: { ...preferences.artworkReader },

@@ -454,6 +454,28 @@ test('设置校验保留合法值并拒绝未知键和越界透明度', () => {
   )
 })
 
+test('网络代理默认关闭并规范化用户手动填写的 HTTP 地址', () => {
+  assert.deepEqual(DEFAULT_LOCAL_PREFERENCES.networkProxy, {
+    enabled: false,
+    url: '',
+  })
+  assert.deepEqual(
+    normalizeLocalPreferencesPatch({
+      networkProxy: { enabled: true, url: ' 127.0.0.1:7890 ' },
+    }),
+    {
+      networkProxy: { enabled: true, url: 'http://127.0.0.1:7890' },
+    }
+  )
+  assert.throws(
+    () =>
+      normalizeLocalPreferencesPatch({
+        networkProxy: { enabled: true, url: 'socks5://127.0.0.1:7890' },
+      }),
+    /networkProxy.url/
+  )
+})
+
 test('屏蔽作者列表校验:去重、拒绝非法条目', () => {
   assert.deepEqual(
     normalizeLocalPreferencesPatch({

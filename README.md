@@ -83,13 +83,7 @@ pnpm dev
 
 ### 网络代理
 
-macOS 会自动读取系统 HTTP/HTTPS 代理。其他系统或需要显式覆盖时，将 `.env.sample` 复制为 `.env`：
-
-```env
-PIXIVFUN_PROXY="http://127.0.0.1:7890"
-```
-
-同时兼容 `HTTPS_PROXY` 和 `HTTP_PROXY`。修改环境变量后需要重新启动服务。
+应用默认不使用代理，也不会读取系统或环境变量中的代理配置。如有需要，请在侧边栏的“网络代理”中手动填写 HTTP/HTTPS 代理地址并启用，保存后立即生效。
 
 ## 构建 Windows 正式版
 

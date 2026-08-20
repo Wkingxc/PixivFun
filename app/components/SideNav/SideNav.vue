@@ -35,6 +35,12 @@ aside.global-side-nav(
             GoogleDriveSync
 
       .group
+        .title 网络代理
+        ul
+          li
+            ProxySettings
+
+      .group
         .title 悬浮按钮开关
         ul
           li(v-if='pageSettingsAvailable')
@@ -83,6 +89,7 @@ aside.global-side-nav(
 <script lang="ts" setup>
 import SideNavListLink from './SideNavListLink.vue'
 import GoogleDriveSync from './GoogleDriveSync.vue'
+import ProxySettings from './ProxySettings.vue'
 import SearchBox from '../SearchBox.vue'
 import {
   IconAdjustmentsHorizontal as ITablerAdjustments,
