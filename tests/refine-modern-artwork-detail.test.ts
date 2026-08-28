@@ -42,6 +42,11 @@ import {
   getViewerStepIndex,
   shouldOpenArtworkReaderFromKey,
 } from '../app/utils/artworkWaterfallReader.ts'
+import {
+  clampArtworkReaderFloatingPosition,
+  parseArtworkReaderFloatingPosition,
+  serializeArtworkReaderFloatingPosition,
+} from '../app/utils/artworkReaderFloatingPosition.ts'
 
 test('单独打开原图时进入可声明独立 favicon 的查看页', () => {
   assert.equal(
@@ -258,6 +263,26 @@ test('作品页仅在非交互区域按下 Enter 时进入阅读模式', () => {
     }),
     false
   )
+})
+
+test('阅读按钮位置可持久化并在窗口范围内恢复', () => {
+  const stored = serializeArtworkReaderFloatingPosition({
+    left: 516.4,
+    top: 284.7,
+  })
+  assert.deepEqual(parseArtworkReaderFloatingPosition(stored), {
+    left: 516,
+    top: 285,
+  })
+  assert.deepEqual(
+    clampArtworkReaderFloatingPosition(
+      { left: 980, top: -20 },
+      { width: 1000, height: 700 },
+      { width: 90, height: 44 }
+    ),
+    { left: 902, top: 8 }
+  )
+  assert.equal(parseArtworkReaderFloatingPosition('{"left":"x"}'), null)
 })
 
 test('行对齐阅读模式按列数分行并保留横竖图原始顺序', () => {

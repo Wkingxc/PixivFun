@@ -21,7 +21,7 @@ Teleport(to='body')
             :class='{ complete: loadedOriginalCount === pages.length }'
             v-if='preloadOriginals'
           ) 原图预载 {{ loadedOriginalCount }} / {{ pages.length }}
-          span.reader-heading__hint Esc 或点击顶栏空白处退出 · 点击左下角花朵调整
+          span.reader-heading__hint Esc 或点击顶栏空白处退出 · 拖动花朵可调整位置
           .reader-heading__actions
             button.reader-heading__action(
               @click='scrollReaderToTop'
@@ -178,8 +178,11 @@ Teleport(to='body')
         ITablerChevronRight(v-else)
 
   .reader-floating(
+    :class='{ "is-dragging": readerFloatingDragging, "reader-floating--toolbox-above": readerToolboxAbove, "reader-floating--toolbox-align-left": readerToolboxAlignLeft }',
+    :style='readerFloatingStyle'
     @pointerenter='cancelMenuCollapse'
     @pointerleave='scheduleMenuCollapse'
+    ref='readerFloatingRef'
     v-if='!viewerOpen'
   )
     Transition(name='reader-menu')
@@ -302,8 +305,9 @@ Teleport(to='body')
       :aria-expanded='active ? menuOpen : undefined',
       :aria-label='active ? "打开阅读工具" : "进入瀑布阅读"',
       :class='{ active }',
-      :title='active ? "阅读工具" : "进入瀑布阅读"'
-      @click='handleTrigger'
+      :title='active ? "阅读工具（可拖动）" : "进入瀑布阅读（可拖动）"'
+      @click='handleFloatingTrigger'
+      @pointerdown='startFloatingDrag'
       type='button'
     )
       INotoCherryBlossom(aria-hidden='true')
@@ -312,6 +316,13 @@ Teleport(to='body')
 
 <script lang="ts" setup>
 import type { ArtworkGallery } from '~/types'
+import {
+  ARTWORK_READER_FLOATING_POSITION_KEY,
+  clampArtworkReaderFloatingPosition,
+  parseArtworkReaderFloatingPosition,
+  serializeArtworkReaderFloatingPosition,
+  type ArtworkReaderFloatingPosition,
+} from '~/utils/artworkReaderFloatingPosition'
 import {
   clampReaderColumns,
   clampReaderWidth,
@@ -371,6 +382,7 @@ const doublePageMode = ref(false)
 type ReaderLayoutMode = 'masonry' | 'aligned'
 const layoutMode = ref<ReaderLayoutMode>('masonry')
 const readerViewportWidth = ref(1200)
+const readerViewportHeight = ref(800)
 const downloading = ref(false)
 const localPersistenceStore = useLocalPersistenceStore()
 const settingsReady = ref(false)
@@ -387,6 +399,9 @@ const loadedOriginalCount = originals.loadedCount
 const currentPageIndex = ref(0)
 const viewerIndex = ref(0)
 const readerRef = ref<HTMLElement | null>(null)
+const readerFloatingRef = ref<HTMLElement | null>(null)
+const readerFloatingPosition = ref<ArtworkReaderFloatingPosition | null>(null)
+const readerFloatingDragging = ref(false)
 const lightboxRef = ref<HTMLElement | null>(null)
 const waterfallRef = ref<{ renderer?: () => void } | null>(null)
 const viewerImageBounds = reactive({ left: 88, right: 1112 })
@@ -402,6 +417,11 @@ let menuCollapseTimer = 0
 let columnLayoutTimer = 0
 let downloadRun = 0
 let viewerStepGeneration = 0
+let floatingDragStartX = 0
+let floatingDragStartY = 0
+let floatingDragOriginLeft = 0
+let floatingDragOriginTop = 0
+let suppressFloatingTrigger = false
 
 const qualityOptions: { label: string; value: ReaderImageQuality }[] = [
   { label: '小图', value: 'small' },
@@ -480,6 +500,29 @@ const viewerCanGoNext = computed(
 const readerShellStyle = computed(() => ({
   '--reader-width': `${readerWidth.value}px`,
 }))
+const { contentWidth: artworkContentWidth, sidebarWidth: artworkSidebarWidth } =
+  useArtworkDirectoryTuning()
+const readerFloatingStyle = computed(() => ({
+  '--reader-artwork-content-width': `${artworkContentWidth.value}px`,
+  '--reader-artwork-sidebar-width': `${artworkSidebarWidth.value}px`,
+  ...(readerFloatingPosition.value
+    ? {
+        left: `${readerFloatingPosition.value.left}px`,
+        top: `${readerFloatingPosition.value.top}px`,
+        right: 'auto',
+        bottom: 'auto',
+      }
+    : {}),
+}))
+const readerToolboxAbove = computed(
+  () =>
+    !!readerFloatingPosition.value &&
+    readerFloatingPosition.value.top > readerViewportHeight.value / 2
+)
+const readerToolboxAlignLeft = computed(
+  () =>
+    !!readerFloatingPosition.value && readerFloatingPosition.value.left < 300
+)
 const downloadLabel = computed(() => {
   if (!downloading.value) return '下载作品'
   if (downloadCompletedCount.value < props.pages.length) {
@@ -503,6 +546,78 @@ function handleTrigger() {
     return
   }
   menuOpen.value = !menuOpen.value
+}
+
+function clampFloatingPosition(
+  position: ArtworkReaderFloatingPosition
+): ArtworkReaderFloatingPosition {
+  const floating = readerFloatingRef.value
+  if (!floating) return position
+
+  return clampArtworkReaderFloatingPosition(
+    position,
+    { width: window.innerWidth, height: window.innerHeight },
+    { width: floating.offsetWidth, height: floating.offsetHeight }
+  )
+}
+
+function persistFloatingPosition() {
+  if (!readerFloatingPosition.value) return
+  try {
+    localStorage.setItem(
+      ARTWORK_READER_FLOATING_POSITION_KEY,
+      serializeArtworkReaderFloatingPosition(readerFloatingPosition.value)
+    )
+  } catch {
+    // Dragging remains usable when browser storage is unavailable.
+  }
+}
+
+function moveFloatingDrag(event: PointerEvent) {
+  const deltaX = event.clientX - floatingDragStartX
+  const deltaY = event.clientY - floatingDragStartY
+  if (!readerFloatingDragging.value && Math.hypot(deltaX, deltaY) < 4) return
+
+  readerFloatingDragging.value = true
+  menuOpen.value = false
+  readerFloatingPosition.value = clampFloatingPosition({
+    left: floatingDragOriginLeft + deltaX,
+    top: floatingDragOriginTop + deltaY,
+  })
+  event.preventDefault()
+}
+
+function stopFloatingDrag() {
+  window.removeEventListener('pointermove', moveFloatingDrag)
+  window.removeEventListener('pointerup', stopFloatingDrag)
+  window.removeEventListener('pointercancel', stopFloatingDrag)
+  if (!readerFloatingDragging.value) return
+
+  readerFloatingDragging.value = false
+  suppressFloatingTrigger = true
+  persistFloatingPosition()
+}
+
+function startFloatingDrag(event: PointerEvent) {
+  if (event.button !== 0 || !readerFloatingRef.value) return
+
+  const rect = readerFloatingRef.value.getBoundingClientRect()
+  floatingDragStartX = event.clientX
+  floatingDragStartY = event.clientY
+  floatingDragOriginLeft = rect.left
+  floatingDragOriginTop = rect.top
+  window.addEventListener('pointermove', moveFloatingDrag, { passive: false })
+  window.addEventListener('pointerup', stopFloatingDrag)
+  window.addEventListener('pointercancel', stopFloatingDrag)
+}
+
+function handleFloatingTrigger(event: MouseEvent) {
+  if (suppressFloatingTrigger) {
+    suppressFloatingTrigger = false
+    event.preventDefault()
+    return
+  }
+  handleTrigger()
 }
 
 async function openReader() {
@@ -668,6 +783,13 @@ function adjustColumns(step: number) {
 
 function syncReaderViewport() {
   readerViewportWidth.value = window.innerWidth
+  readerViewportHeight.value = window.innerHeight
+  if (readerFloatingPosition.value) {
+    readerFloatingPosition.value = clampFloatingPosition(
+      readerFloatingPosition.value
+    )
+    persistFloatingPosition()
+  }
   if (viewerOpen.value) updateViewerNavBounds()
 }
 
@@ -956,6 +1078,13 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 onMounted(async () => {
+  try {
+    readerFloatingPosition.value = parseArtworkReaderFloatingPosition(
+      localStorage.getItem(ARTWORK_READER_FLOATING_POSITION_KEY)
+    )
+  } catch {
+    readerFloatingPosition.value = null
+  }
   window.addEventListener('keydown', handleKeydown)
   window.addEventListener('resize', syncReaderViewport)
   syncReaderViewport()
@@ -1045,6 +1174,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  stopFloatingDrag()
   cancelMenuCollapse()
   if (columnLayoutTimer) window.clearTimeout(columnLayoutTimer)
   cancelDownload()
@@ -1511,9 +1641,23 @@ onBeforeUnmount(() => {
 
 .reader-floating {
   position: fixed;
-  bottom: 18px;
-  left: 18px;
+  top: 82px;
+  left: min(
+    calc(100vw - 96px),
+    calc(
+      max(24px, (100vw - 1440px) / 2) +
+        min(
+          var(--reader-artwork-content-width),
+          calc(100vw - var(--reader-artwork-sidebar-width) - 96px)
+        ) +
+        28px + var(--reader-artwork-sidebar-width) + 16px
+    )
+  );
   z-index: 1250;
+
+  &.is-dragging .reader-trigger {
+    cursor: grabbing;
+  }
 }
 
 .reader-trigger {
@@ -1527,10 +1671,12 @@ onBeforeUnmount(() => {
   border: 1px solid var(--pf-line);
   border-radius: 999px;
   box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
-  cursor: pointer;
+  cursor: grab;
   font: inherit;
   font-size: 0.78rem;
   font-weight: 750;
+  touch-action: none;
+  user-select: none;
 
   svg {
     width: 19px;
@@ -1557,8 +1703,8 @@ onBeforeUnmount(() => {
 
 .reader-toolbox {
   position: absolute;
-  bottom: calc(100% + 64px);
-  left: 0;
+  top: calc(100% + 12px);
+  right: 0;
   width: min(300px, calc(100vw - 36px));
   padding: 14px;
   color: var(--pf-text);
@@ -1567,6 +1713,16 @@ onBeforeUnmount(() => {
   border-radius: 16px;
   box-shadow: 0 16px 50px rgb(0 0 0 / 24%);
   backdrop-filter: blur(16px);
+}
+
+.reader-floating--toolbox-above .reader-toolbox {
+  top: auto;
+  bottom: calc(100% + 12px);
+}
+
+.reader-floating--toolbox-align-left .reader-toolbox {
+  right: auto;
+  left: 0;
 }
 
 .reader-toolbox__heading {
@@ -1809,6 +1965,11 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 760px) {
+  .reader-floating {
+    right: 12px;
+    left: auto;
+  }
+
   .reader-heading {
     padding: 10px 16px;
   }

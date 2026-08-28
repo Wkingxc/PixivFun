@@ -89,7 +89,7 @@ import {
   getArtworkCardImageUrl,
   type ArtworkCardImageQuality,
 } from '~/utils/artworkLayout'
-import { isOpenInNewViewGesture } from '~/utils/linkGestures'
+import { shouldRecordArtworkVisitGesture } from '~/utils/linkGestures'
 
 import { useArtworkStore } from '~/stores/artwork'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
@@ -138,12 +138,12 @@ const cardImageUrl = computed(() => {
 const loadingBookmark = ref(false)
 let suppressSelectionClick = false
 
-// Opening in a new tab keeps this list mounted, so the destination page never
-// refreshes our visited set — mark it here so the overlay lands immediately.
+// Record on pointer-down so both same-tab and new-tab navigation update the
+// marker immediately; the artwork page repeats this as a route-level fallback.
 function handleOpenGesture(event: MouseEvent) {
   const current = item.value
   if (!current || props.markerDisabled || current.type === 'novel') return
-  if (!isOpenInNewViewGesture(event)) return
+  if (!shouldRecordArtworkVisitGesture(event)) return
   void localPersistence.recordArtworkVisit(current.id).catch(() => {})
 }
 

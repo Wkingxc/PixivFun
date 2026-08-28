@@ -8,6 +8,7 @@ import {
 } from '~~/shared/local-preferences'
 import type { UserListItem } from '~/types'
 import { toFeaturedAuthorSnapshot } from '~/utils/featuredAuthors'
+import { normalizePixivId } from '~~/shared/pixiv-resource'
 
 interface PreferencesResponse {
   preferences: LocalPreferences
@@ -24,6 +25,7 @@ export const useLocalPersistenceStore = defineStore('local-persistence', () => {
   const checkedAuthorIds = new Set<string>()
   const featuredAuthorIds = reactive(new Set<string>())
   const checkedFeaturedAuthorIds = new Set<string>()
+  const artworkVisitWrites = new Map<string, Promise<void>>()
   const featuredAuthorRevisions = new Map<string, number>()
   const hiddenArtworkAuthorId = ref('')
   const hiddenAuthorArtworkIds = reactive(new Set<string>())
@@ -212,10 +214,37 @@ export const useLocalPersistenceStore = defineStore('local-persistence', () => {
   }
 
   async function recordArtworkVisit(id: string | number): Promise<void> {
-    const artworkId = String(id)
+    const artworkId = normalizePixivId(id)
+    if (!artworkId) throw new Error('Invalid artwork ID')
+
+    const pending = artworkVisitWrites.get(artworkId)
+    if (pending) {
+      visitedArtworkIds.add(artworkId)
+      return pending
+    }
+    if (checkedArtworkIds.has(artworkId) && visitedArtworkIds.has(artworkId)) {
+      return
+    }
+
+    const wasChecked = checkedArtworkIds.has(artworkId)
+    const wasVisited = visitedArtworkIds.has(artworkId)
     checkedArtworkIds.add(artworkId)
     visitedArtworkIds.add(artworkId)
-    await $fetch(`/api/local/artworks/${artworkId}/visit`, { method: 'POST' })
+    const write = $fetch(`/api/local/artworks/${artworkId}/visit`, {
+      method: 'POST',
+    }).then(() => undefined)
+    artworkVisitWrites.set(artworkId, write)
+    try {
+      await write
+    } catch (error) {
+      if (!wasChecked) checkedArtworkIds.delete(artworkId)
+      if (!wasVisited) visitedArtworkIds.delete(artworkId)
+      throw error
+    } finally {
+      if (artworkVisitWrites.get(artworkId) === write) {
+        artworkVisitWrites.delete(artworkId)
+      }
+    }
   }
 
   async function recordAuthorVisit(id: string | number): Promise<void> {

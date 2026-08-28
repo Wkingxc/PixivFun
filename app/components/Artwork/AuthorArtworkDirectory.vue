@@ -79,7 +79,10 @@ section.author-artwork-directory
               :src='artwork.url'
               lazyload
             )
-            ArtworkViewedOverlay(:artwork-id='artwork.id')
+            ArtworkViewedOverlay(
+              :artwork-id='artwork.id',
+              :disabled='artwork.id === currentArtworkId'
+            )
             span.directory-ugoira(
               aria-label='动图'
               title='动图'
@@ -120,7 +123,7 @@ import {
   artworkDirectoryScrollKey,
   serializeArtworkDirectoryScroll,
 } from '~/utils/artworkDirectoryNavigation'
-import { isOpenInNewViewGesture } from '~/utils/linkGestures'
+import { shouldRecordArtworkVisitGesture } from '~/utils/linkGestures'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
 import { filterArtworksByPageCount } from '~/utils/artworkLayout'
 
@@ -324,6 +327,31 @@ async function initializeDirectory(): Promise<void> {
   }
 }
 
+async function syncCurrentArtwork(): Promise<void> {
+  if (!entries.value.length) return
+
+  const currentIndex = entries.value.findIndex(
+    (entry) => entry.id === props.currentArtworkId
+  )
+  currentArtworkPosition.value = currentIndex >= 0 ? currentIndex + 1 : null
+  if (!currentArtworkPosition.value) return
+
+  const targetPage = getAuthorArtworkPositionPage(
+    currentArtworkPosition.value,
+    pageSize
+  )
+  if (mode.value === 'scroll') {
+    await loadPage(targetPage)
+    scrollPage.value = Math.max(scrollPage.value, targetPage)
+    return
+  }
+
+  quickPageTarget.value = targetPage
+  if (targetPage !== currentPage.value) {
+    await changePage(targetPage)
+  }
+}
+
 async function changePage(
   page: number,
   expectedQuickTarget?: number
@@ -362,9 +390,9 @@ function artworkRoute(id: string) {
 function handleArtworkPointerDown(event: MouseEvent, artworkId: string): void {
   rememberArtworkScroll(event, artworkId)
 
-  // Opening in a new tab leaves this page mounted, so the destination never
-  // gets to refresh our copy of the visited set — mark it here instead.
-  if (isOpenInNewViewGesture(event)) {
+  // Mark both ordinary and new-view navigation immediately. The destination
+  // page records again as a route-level fallback, and the store deduplicates it.
+  if (shouldRecordArtworkVisitGesture(event)) {
     void localPersistence.recordArtworkVisit(artworkId).catch(() => {})
   }
 }
@@ -519,9 +547,10 @@ async function handleWheel(event: WheelEvent): Promise<void> {
   scheduleQuickPageCommit()
 }
 
-watch(() => [props.userId, props.currentArtworkId], initializeDirectory, {
+watch(() => props.userId, initializeDirectory, {
   immediate: true,
 })
+watch(() => props.currentArtworkId, syncCurrentArtwork)
 
 onBeforeUnmount(() => {
   if (wheelTimer) clearTimeout(wheelTimer)
@@ -731,6 +760,15 @@ onBeforeUnmount(() => {
     height: 100%;
     object-fit: cover;
   }
+}
+
+.directory-card.is-current .directory-cover::after {
+  position: absolute;
+  background: color-mix(in srgb, var(--modern-pink) 24%, transparent);
+  content: '';
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
 }
 
 .directory-page-count {

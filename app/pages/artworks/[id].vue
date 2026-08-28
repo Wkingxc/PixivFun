@@ -23,6 +23,7 @@
 
   ArtworkDetailModern(
     :bookmark-loading='bookmarkLoading',
+    :current-artwork-id='currentArtworkId',
     :has-more-recommendations='!!artworkStore.recommendNextIds.length',
     :illust='illust',
     :like-loading='likeLoading',
@@ -55,6 +56,7 @@
 definePageMeta({
   name: 'artworks',
   alias: ['/illust/:id', '/i/:id'],
+  key: false,
 })
 import ArtworkDetailModern from '~/components/Artwork/ArtworkDetailModern.vue'
 import ArtworkWaterfallReader from '~/components/Artwork/ArtworkWaterfallReader.vue'
@@ -90,6 +92,8 @@ const userProfileStore = useUserProfileStore()
 const { style: directoryTuningStyle } = useArtworkDirectoryTuning()
 
 const isUgoira = computed(() => illust.value?.illustType === 2)
+const currentArtworkId = computed(() => String(route.params.id))
+let artworkRequestId = 0
 
 function consumeDirectoryScroll(artworkId: string): number | null {
   if (!import.meta.client) return null
@@ -120,24 +124,25 @@ async function restoreDirectoryScroll(
 }
 
 async function init(id: string): Promise<void> {
+  const requestId = ++artworkRequestId
   const directoryScrollTop = consumeDirectoryScroll(id)
-  loading.value = true
+  const hasVisibleArtwork = !!illust.value
+  if (!hasVisibleArtwork) loading.value = true
   error.value = ''
-
-  // Reset states
-  illust.value = undefined
-  pages.value = []
-  user.value = undefined
-  artworkStore.clearRecommendations()
 
   const cachedArtwork = artworkStore.getCachedArtwork(id)
   const cachedPages = artworkStore.getCachedPages(id)
   if (cachedArtwork && cachedPages) {
+    if (requestId !== artworkRequestId) return
+    const previousUserId = illust.value?.userId
     illust.value = cachedArtwork
     pages.value = cachedPages
+    if (previousUserId !== cachedArtwork.userId) user.value = undefined
+    artworkStore.clearRecommendations()
     loading.value = false
-    void localPersistenceStore.recordArtworkVisit(id).catch(() => {})
     await restoreDirectoryScroll(id, directoryScrollTop)
+    if (!user.value) void handleUserInit(cachedArtwork.userId)
+    void handleRecommendInit(id)
     return
   }
 
@@ -146,10 +151,17 @@ async function init(id: string): Promise<void> {
       artworkStore.fetchArtwork(id),
       artworkStore.fetchArtworkPages(id),
     ])
+    if (requestId !== artworkRequestId) return
+
+    const previousUserId = illust.value?.userId
     illust.value = artworkData
     pages.value = pagesData
-    void localPersistenceStore.recordArtworkVisit(id).catch(() => {})
+    if (previousUserId !== artworkData.userId) user.value = undefined
+    artworkStore.clearRecommendations()
+    if (!user.value) void handleUserInit(artworkData.userId)
+    void handleRecommendInit(id)
   } catch (err) {
+    if (requestId !== artworkRequestId) return
     console.warn('illust fetch error', `#${id}`, err)
     if (err instanceof Error) {
       error.value = err.message
@@ -157,8 +169,10 @@ async function init(id: string): Promise<void> {
       error.value = '未知错误'
     }
   } finally {
-    loading.value = false
-    await restoreDirectoryScroll(id, directoryScrollTop)
+    if (requestId === artworkRequestId) {
+      loading.value = false
+      await restoreDirectoryScroll(id, directoryScrollTop)
+    }
   }
 }
 
@@ -274,31 +288,28 @@ async function handleLike(): Promise<void> {
   }
 }
 
+function trackArtworkVisit(id: string): void {
+  void localPersistenceStore.recordArtworkVisit(id).catch((error) => {
+    console.warn('artwork visit record failed', `#${id}`, error)
+  })
+}
+
 onBeforeRouteUpdate(async (to) => {
   if (to.name !== 'artworks') {
     return
   }
-  init(to.params.id as string)
+  const id = String(to.params.id)
+  trackArtworkVisit(id)
+  init(id)
 })
 
 effect(() => setTitle(illust.value?.illustTitle, 'Artworks'))
 
 onMounted(() => {
-  init(route.params.id as string)
+  const id = String(route.params.id)
+  trackArtworkVisit(id)
+  init(id)
 })
-
-watch(
-  loading,
-  (isLoading) => {
-    if (!isLoading && illust.value) {
-      if (!user.value) void handleUserInit(illust.value.userId)
-      if (!artworkStore.recommendations.length) {
-        void handleRecommendInit(illust.value.illustId)
-      }
-    }
-  },
-  { immediate: true }
-)
 </script>
 
 <style scoped lang="scss">

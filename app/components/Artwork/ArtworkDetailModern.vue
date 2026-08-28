@@ -10,7 +10,7 @@ section.artwork-modern(
     main.modern-content
       .media-panel
         .ugoira-stage(v-if='isUgoira')
-          UgoiraViewer(:illust='illust')
+          UgoiraViewer(:illust='illust', :key='illust.illustId')
         template(v-else)
           a.modern-image-link(
             :href='getOriginalImageViewerUrl(page.urls.original)',
@@ -130,7 +130,7 @@ section.artwork-modern(
     aside.modern-sidebar
       section.sidebar-card.sidebar-directory-shell
         AuthorArtworkDirectory(
-          :current-artwork-id='illust.illustId',
+          :current-artwork-id='currentArtworkId',
           :user-id='illust.userId'
         )
 
@@ -243,6 +243,7 @@ import {
 
 const props = defineProps<{
   illust: Artwork
+  currentArtworkId: string
   pages: ArtworkGallery[]
   user?: User
   recommendations: ArtworkInfo[]

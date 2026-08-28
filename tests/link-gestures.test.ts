@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isOpenInNewViewGesture } from '../app/utils/linkGestures.ts'
+import {
+  isOpenInNewViewGesture,
+  shouldRecordArtworkVisitGesture,
+} from '../app/utils/linkGestures.ts'
 
 function mouseEvent(init: {
   button: number
@@ -44,6 +47,23 @@ test('普通左键、alt 左键和右键不算新标签页打开', () => {
   assert.equal(isOpenInNewViewGesture(mouseEvent({ button: 2 })), false)
   assert.equal(
     isOpenInNewViewGesture(mouseEvent({ button: 2, ctrlKey: true })),
+    false
+  )
+})
+
+test('作品访问记录覆盖普通左键和所有新视图打开手势', () => {
+  assert.equal(shouldRecordArtworkVisitGesture(mouseEvent({ button: 0 })), true)
+  assert.equal(shouldRecordArtworkVisitGesture(mouseEvent({ button: 1 })), true)
+  assert.equal(
+    shouldRecordArtworkVisitGesture(mouseEvent({ button: 0, ctrlKey: true })),
+    true
+  )
+  assert.equal(
+    shouldRecordArtworkVisitGesture(mouseEvent({ button: 0, altKey: true })),
+    false
+  )
+  assert.equal(
+    shouldRecordArtworkVisitGesture(mouseEvent({ button: 2 })),
     false
   )
 })

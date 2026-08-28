@@ -13,3 +13,8 @@ export function isOpenInNewViewGesture(event: MouseEvent): boolean {
     event.button === 0 && (event.ctrlKey || event.metaKey || event.shiftKey)
   )
 }
+
+/** True for every pointer gesture that can navigate to an artwork. */
+export function shouldRecordArtworkVisitGesture(event: MouseEvent): boolean {
+  return (event.button === 0 && !event.altKey) || isOpenInNewViewGesture(event)
+}
