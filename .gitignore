@@ -120,6 +120,7 @@ dev-test
 
 .design-qa/
 openspec/
+.claude/
 
 # Generated desktop release inputs and artifacts
 desktop/generated/
