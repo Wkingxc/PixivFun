@@ -47,6 +47,16 @@ import {
   parseArtworkReaderFloatingPosition,
   serializeArtworkReaderFloatingPosition,
 } from '../app/utils/artworkReaderFloatingPosition.ts'
+import {
+  ARTWORK_DIRECTORY_SCROLL_BATCH_PAGES,
+  chunkArtworkDirectoryEntries,
+  getArtworkDirectoryBatchEndPage,
+  getArtworkDirectoryBatchStartPage,
+  getArtworkDirectoryPageScrollTop,
+  getArtworkDirectoryPointerRatio,
+  getArtworkDirectoryScrollPage,
+  normalizeArtworkDirectoryMode,
+} from '../app/utils/artworkDirectoryBrowse.ts'
 
 test('单独打开原图时进入可声明独立 favicon 的查看页', () => {
   assert.equal(
@@ -189,6 +199,57 @@ test('快速翻页模式可在页面切换完成前累计连续滚轮输入', ()
   target = getWheelPageTarget(target, 8, -120)
   target = getWheelPageTarget(target, 8, -120)
   assert.equal(target, 4)
+})
+
+test('作者作品目录记忆三种合法模式并回退非法存储值', () => {
+  assert.equal(normalizeArtworkDirectoryMode('scroll'), 'scroll')
+  assert.equal(normalizeArtworkDirectoryMode('page'), 'page')
+  assert.equal(normalizeArtworkDirectoryMode('quick-page'), 'quick-page')
+  assert.equal(normalizeArtworkDirectoryMode('unknown'), 'page')
+  assert.equal(normalizeArtworkDirectoryMode(null), 'page')
+})
+
+test('滚动目录按完整高度实时换算大概页数并支持反向定位', () => {
+  assert.equal(getArtworkDirectoryScrollPage(0, 10_000, 1_000, 20), 1)
+  assert.equal(getArtworkDirectoryScrollPage(4_500, 10_000, 1_000, 20), 11)
+  assert.equal(getArtworkDirectoryScrollPage(9_000, 10_000, 1_000, 20), 20)
+  assert.equal(getArtworkDirectoryScrollPage(500, 1_000, 1_000, 20), 1)
+
+  assert.equal(getArtworkDirectoryPageScrollTop(1, 20, 10_000, 1_000), 0)
+  assert.equal(getArtworkDirectoryPageScrollTop(20, 20, 10_000, 1_000), 9_000)
+  assert.equal(
+    Math.round(getArtworkDirectoryPageScrollTop(11, 20, 10_000, 1_000)),
+    4_737
+  )
+})
+
+test('自定义目录滑块按固定胶囊中心实时换算轨道位置', () => {
+  assert.equal(getArtworkDirectoryPointerRatio(124, 100, 500, 48), 0)
+  assert.equal(getArtworkDirectoryPointerRatio(576, 100, 500, 48), 1)
+  assert.equal(getArtworkDirectoryPointerRatio(350, 100, 500, 48), 0.5)
+  assert.equal(getArtworkDirectoryPointerRatio(362, 100, 500, 48, 12), 0.5)
+})
+
+test('页数过滤元数据按固定批量切分，避免一次请求过大', () => {
+  const entries = Array.from({ length: 101 }, (_, index) => index + 1)
+  const chunks = chunkArtworkDirectoryEntries(entries, 48)
+  assert.deepEqual(
+    chunks.map((chunk) => chunk.length),
+    [48, 48, 5]
+  )
+  assert.deepEqual(chunkArtworkDirectoryEntries([1, 2], 0), [[1], [2]])
+})
+
+test('滚动目录固定按五十页分批并夹紧最后一批', () => {
+  assert.equal(ARTWORK_DIRECTORY_SCROLL_BATCH_PAGES, 50)
+  assert.equal(getArtworkDirectoryBatchStartPage(1, 126), 1)
+  assert.equal(getArtworkDirectoryBatchStartPage(50, 126), 1)
+  assert.equal(getArtworkDirectoryBatchStartPage(51, 126), 51)
+  assert.equal(getArtworkDirectoryBatchStartPage(126, 126), 101)
+  assert.equal(getArtworkDirectoryBatchStartPage(999, 126), 101)
+  assert.equal(getArtworkDirectoryBatchEndPage(1, 126), 50)
+  assert.equal(getArtworkDirectoryBatchEndPage(51, 126), 100)
+  assert.equal(getArtworkDirectoryBatchEndPage(101, 126), 126)
 })
 
 test('新版多图作品默认只展示首图，展开后显示全部图片', () => {
