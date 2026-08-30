@@ -38,6 +38,7 @@ import {
   getArtworkPageFilename,
   getReaderAlignedRows,
   getReaderImageSource,
+  getViewerBrowsePreloadIndices,
   getViewerSpreadIndices,
   getViewerStepIndex,
   shouldOpenArtworkReaderFromKey,
@@ -408,6 +409,16 @@ test('原图查看器的双页模式固定配对并以跨页为单位翻页', ()
   assert.equal(getViewerStepIndex(5, 4, -1, true), 2)
   assert.equal(getViewerStepIndex(5, 4, 1, true), 4)
   assert.equal(getViewerStepIndex(5, 2, 1, false), 3)
+})
+
+test('浏览预载始终只计算当前页之前三张和之后五张', () => {
+  assert.deepEqual(
+    getViewerBrowsePreloadIndices(12, 5),
+    [6, 4, 7, 3, 8, 2, 9, 10]
+  )
+  assert.deepEqual(getViewerBrowsePreloadIndices(12, 0), [1, 2, 3, 4, 5])
+  assert.deepEqual(getViewerBrowsePreloadIndices(12, 11), [10, 9, 8])
+  assert.deepEqual(getViewerBrowsePreloadIndices(0, 0), [])
 })
 
 test('收藏标签判定只覆盖公开与私密收藏', () => {

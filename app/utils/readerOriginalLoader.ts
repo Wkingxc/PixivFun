@@ -46,17 +46,33 @@ export interface ConcurrencyGate {
    * puts the caller at the head of the queue, so the page the viewer is
    * actually showing never waits behind the whole background sweep.
    */
-  acquire(priority?: boolean): Promise<() => void>
+  acquire(priority?: boolean, token?: object): Promise<() => void>
+  /** Moves an existing queued caller ahead of normal background work. */
+  promote(token: object): boolean
 }
 
 export function createConcurrencyGate(limit: number): ConcurrencyGate {
   let currentLimit = clampReaderThreads(limit)
   let active = 0
-  const waiting: (() => void)[] = []
+  const waiting: Array<{
+    priority: boolean
+    start: () => void
+    token?: object
+  }> = []
+
+  function enqueue(entry: (typeof waiting)[number]): void {
+    if (!entry.priority) {
+      waiting.push(entry)
+      return
+    }
+    const firstNormal = waiting.findIndex((item) => !item.priority)
+    if (firstNormal === -1) waiting.push(entry)
+    else waiting.splice(firstNormal, 0, entry)
+  }
 
   function drain(): void {
     while (active < currentLimit && waiting.length) {
-      waiting.shift()!()
+      waiting.shift()!.start()
     }
   }
 
@@ -76,7 +92,7 @@ export function createConcurrencyGate(limit: number): ConcurrencyGate {
       currentLimit = clamped
       drain()
     },
-    acquire(priority = false) {
+    acquire(priority = false, token?: object) {
       return new Promise<() => void>((resolve) => {
         let released = false
         const start = () => {
@@ -88,12 +104,21 @@ export function createConcurrencyGate(limit: number): ConcurrencyGate {
             drain()
           })
         }
-        // Queue even when a slot looks free, so a burst of callers keeps its
-        // arrival order instead of the last one jumping ahead.
-        if (priority) waiting.unshift(start)
-        else waiting.push(start)
+        // Queue even when a slot looks free, so bursts preserve arrival order
+        // within both the viewer-priority and background groups.
+        enqueue({ priority, start, token })
         drain()
       })
+    },
+    promote(token: object) {
+      const index = waiting.findIndex((entry) => entry.token === token)
+      if (index < 0) return false
+      const entry = waiting[index]!
+      if (entry.priority) return true
+      waiting.splice(index, 1)
+      entry.priority = true
+      enqueue(entry)
+      return true
     },
   }
 }

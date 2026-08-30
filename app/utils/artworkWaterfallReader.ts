@@ -145,6 +145,42 @@ export function getViewerStepIndex(
   return current
 }
 
+export const VIEWER_BROWSE_PRELOAD_BEFORE = 3
+export const VIEWER_BROWSE_PRELOAD_AFTER = 5
+
+/**
+ * Nearby pages to prepare when full original preloading is disabled. The
+ * nearest forward page is queued first, then the nearest previous page, so
+ * both navigation directions stay responsive without starting a full sweep.
+ */
+export function getViewerBrowsePreloadIndices(
+  pageCount: number,
+  currentIndex: number,
+  before = VIEWER_BROWSE_PRELOAD_BEFORE,
+  after = VIEWER_BROWSE_PRELOAD_AFTER
+): number[] {
+  if (pageCount <= 0) return []
+  const current = Math.min(
+    pageCount - 1,
+    Math.max(0, Math.trunc(currentIndex) || 0)
+  )
+  const previousCount = Math.max(0, Math.trunc(before) || 0)
+  const nextCount = Math.max(0, Math.trunc(after) || 0)
+  const indices: number[] = []
+
+  for (
+    let distance = 1;
+    distance <= Math.max(previousCount, nextCount);
+    distance++
+  ) {
+    const next = current + distance
+    if (distance <= nextCount && next < pageCount) indices.push(next)
+    const previous = current - distance
+    if (distance <= previousCount && previous >= 0) indices.push(previous)
+  }
+  return indices
+}
+
 export function getOriginalImageExtension(url: string): string {
   const pathname = url.split(/[?#]/, 1)[0] || ''
   const extension = pathname.match(/\.([a-z0-9]{2,5})$/i)?.[1]?.toLowerCase()

@@ -18,6 +18,7 @@ interface InflightTask {
   /** `false` while the task is still waiting for a gate permit. */
   started: boolean
   promise: Promise<Blob | null>
+  token: object
 }
 
 export interface ReaderOriginals {
@@ -100,7 +101,7 @@ export function useReaderOriginals(options: {
     generation: number,
     task: InflightTask
   ): Promise<Blob | null> {
-    const release = await gate.acquire(priority)
+    const release = await gate.acquire(priority, task.token)
     const signal = controller.signal
     try {
       // Only work queued before the last stop() is dropped; anything already
@@ -130,7 +131,10 @@ export function useReaderOriginals(options: {
     const cached = blobs.get(index)
     if (cached) return Promise.resolve(cached)
     const running = inflight.get(index)
-    if (running) return running.promise
+    if (running) {
+      if (priority && !running.started) gate.promote(running.token)
+      return running.promise
+    }
 
     const page = options.pages()[index]
     if (!page) return Promise.resolve(null)
@@ -138,6 +142,7 @@ export function useReaderOriginals(options: {
     const task: InflightTask = {
       started: false,
       promise: Promise.resolve(null),
+      token: {},
     }
     task.promise = load(
       index,

@@ -153,9 +153,12 @@ Teleport(to='body')
       )
         ITablerX(aria-hidden='true')
       .reader-lightbox__stage(
-        :class='{ "reader-lightbox__stage--spread": viewerEntries.length > 1 }'
+        :aria-busy='viewerLoading',
+        :class='{ "reader-lightbox__stage--spread": viewerEntries.length > 1, "is-loading": viewerLoading }'
         @click.stop
       )
+        span.reader-lightbox__loading(aria-live='polite' v-if='viewerLoading')
+          | 原图加载中…
         .reader-lightbox__page(
           :key='entry.page.urls.original'
           v-for='entry in viewerEntries'
@@ -266,7 +269,8 @@ Teleport(to='body')
             type='button'
           )
             span {{ preloadOriginals ? '开启' : '关闭' }}
-            small {{ loadedOriginalCount }}/{{ pages.length }}
+            small(v-if='preloadOriginals') 全量 {{ loadedOriginalCount }}/{{ pages.length }} · 浏览前3后5
+            small(v-else) 浏览前3后5
 
         .reader-toolbox__group
           span 并发线程
@@ -332,6 +336,7 @@ import {
   getOriginalImageExtension,
   getReaderAlignedRows,
   getReaderImageSource,
+  getViewerBrowsePreloadIndices,
   getViewerSpreadIndices,
   getViewerStepIndex,
   READER_WIDTH_LIMITS,
@@ -410,13 +415,16 @@ const viewerPointer = reactive<{
   x: number
   y: number
 }>({ direction: null, x: 0, y: 0 })
-const viewerTransitioning = ref(false)
+const viewerLoading = ref(false)
+const viewerPreparedIndices = new Set<number>()
+const viewerImagePreparations = new Map<number, Promise<void>>()
 let previousBodyOverflow = ''
 let scrollFrame = 0
 let menuCollapseTimer = 0
 let columnLayoutTimer = 0
 let downloadRun = 0
 let viewerStepGeneration = 0
+let viewerPreparationGeneration = 0
 let floatingDragStartX = 0
 let floatingDragStartY = 0
 let floatingDragOriginLeft = 0
@@ -639,7 +647,9 @@ function closeReader() {
   cancelMenuCollapse()
   cancelDownload()
   viewerStepGeneration++
-  viewerTransitioning.value = false
+  viewerPreparationGeneration++
+  viewerImagePreparations.clear()
+  viewerLoading.value = false
   clearViewerPointer()
   active.value = false
   menuOpen.value = false
@@ -651,20 +661,26 @@ async function openViewer(index: number) {
   viewerIndex.value = index
   viewerOpen.value = true
   menuOpen.value = false
+  syncViewerLoading()
+  for (const pageIndex of viewerPageIndices.value) {
+    void prepareViewerImage(pageIndex, true)
+  }
+  preloadViewerBrowsing(index)
   await nextTick()
   updateViewerNavBounds()
-  if (preloadOriginals.value) originals.preload(index)
 }
 
 function closeViewer() {
   viewerStepGeneration++
-  viewerTransitioning.value = false
+  viewerPreparationGeneration++
+  viewerImagePreparations.clear()
+  viewerLoading.value = false
+  if (!preloadOriginals.value) originals.stop()
   clearViewerPointer()
   viewerOpen.value = false
 }
 
-async function stepViewer(step: number) {
-  if (viewerTransitioning.value) return
+function stepViewer(step: number) {
   const nextIndex = getViewerStepIndex(
     props.pages.length,
     viewerIndex.value,
@@ -673,52 +689,96 @@ async function stepViewer(step: number) {
   )
   if (nextIndex === viewerIndex.value) return
   const generation = ++viewerStepGeneration
-  const targetIndices = getViewerSpreadIndices(
-    props.pages.length,
-    nextIndex,
-    doublePageMode.value
-  )
-  viewerTransitioning.value = true
-  await Promise.all(targetIndices.map(prepareViewerImage))
-  if (
-    generation !== viewerStepGeneration ||
-    !viewerOpen.value ||
-    !active.value
-  ) {
-    return
-  }
   viewerIndex.value = nextIndex
-  await nextTick()
-  updateViewerNavBounds()
-  updateViewerPointerDirection()
-  viewerTransitioning.value = false
-  if (preloadOriginals.value) originals.preload(viewerIndex.value)
+  syncViewerLoading()
+  for (const pageIndex of viewerPageIndices.value) {
+    void prepareViewerImage(pageIndex, true)
+  }
+  preloadViewerBrowsing(nextIndex)
+  void nextTick().then(() => {
+    if (
+      generation !== viewerStepGeneration ||
+      !viewerOpen.value ||
+      !active.value
+    ) {
+      return
+    }
+    updateViewerNavBounds()
+    updateViewerPointerDirection()
+  })
 }
 
-async function prepareViewerImage(index: number): Promise<void> {
+function syncViewerLoading(): void {
+  viewerLoading.value =
+    viewerOpen.value &&
+    viewerPageIndices.value.some((index) => !viewerPreparedIndices.has(index))
+}
+
+function preloadViewerBrowsing(index: number): void {
+  for (const nearbyIndex of getViewerBrowsePreloadIndices(
+    props.pages.length,
+    index
+  )) {
+    // Browser-nearby pages stay ahead of the optional full sweep. `ensure`
+    // promotes an existing queued request instead of downloading it twice.
+    void prepareViewerImage(nearbyIndex, true)
+  }
+}
+
+function prepareViewerImage(index: number, priority = false): Promise<void> {
+  if (viewerPreparedIndices.has(index)) return Promise.resolve()
+  const existing = viewerImagePreparations.get(index)
+  if (existing) return existing
   const page = props.pages[index]
-  if (!page) return
+  if (!page) return Promise.resolve()
+  const generation = viewerPreparationGeneration
 
-  // Pull the bytes through the shared loader first — with priority, so the page
-  // being flipped to jumps ahead of the background sweep — then let the browser
-  // decode them straight out of its cache.
-  await originals.ensure(index, true).catch(() => {})
+  const preparation = (async () => {
+    // The shared loader limits network concurrency. Once its fetch completes,
+    // decode the same URL so a later viewer flip can paint immediately from the
+    // browser cache instead of blocking the navigation event.
+    const blob = await originals.ensure(index, priority).catch(() => null)
+    if (!blob || generation !== viewerPreparationGeneration) return
 
-  return new Promise((resolve) => {
-    const image = new Image()
-    const finish = () => {
-      image.onload = null
-      image.onerror = null
-      void image
-        .decode()
-        .catch(() => {})
-        .finally(resolve)
+    const prepared = await new Promise<boolean>((resolve) => {
+      const image = new Image()
+      let settled = false
+      const finish = (loaded: boolean) => {
+        if (settled) return
+        settled = true
+        image.onload = null
+        image.onerror = null
+        if (!loaded) {
+          resolve(false)
+          return
+        }
+        void image
+          .decode()
+          .catch(() => {})
+          .finally(() => resolve(true))
+      }
+      image.decoding = 'async'
+      image.onload = () => finish(true)
+      image.onerror = () => finish(false)
+      image.src = page.urls.original
+      if (image.complete) finish(image.naturalWidth > 0)
+    })
+
+    if (!prepared || generation !== viewerPreparationGeneration) return
+    viewerPreparedIndices.add(index)
+    originals.markLoaded(index)
+    if (viewerOpen.value && viewerPageIndices.value.includes(index)) {
+      syncViewerLoading()
     }
-    image.onload = finish
-    image.onerror = resolve
-    image.src = page.urls.original
-    if (image.complete) finish()
+  })()
+
+  viewerImagePreparations.set(index, preparation)
+  void preparation.finally(() => {
+    if (viewerImagePreparations.get(index) === preparation) {
+      viewerImagePreparations.delete(index)
+    }
   })
+  return preparation
 }
 
 function getGridFallback(page: ArtworkGallery): string {
@@ -728,7 +788,9 @@ function getGridFallback(page: ArtworkGallery): string {
 }
 
 async function handleViewerImageLoad(index: number) {
+  viewerPreparedIndices.add(index)
   originals.markLoaded(index)
+  if (viewerPageIndices.value.includes(index)) syncViewerLoading()
   await nextTick()
   updateViewerNavBounds()
 }
@@ -1145,10 +1207,21 @@ watch(
       .catch(() => {})
     if (!previous || nextPreload === previous[2] || !active.value) return
     if (nextPreload) {
-      originals.preload(currentPageIndex.value)
-    } else if (!downloading.value) {
-      // Stopping the sweep would also drop the queued download requests.
-      originals.stop()
+      // Full original preloading is always a separate sweep from page one.
+      originals.preload(0)
+    } else {
+      viewerPreparationGeneration++
+      viewerImagePreparations.clear()
+      if (!downloading.value) {
+        // Stopping the sweep would also drop queued download requests.
+        originals.stop()
+      }
+      if (viewerOpen.value) {
+        for (const pageIndex of viewerPageIndices.value) {
+          void prepareViewerImage(pageIndex, true)
+        }
+        preloadViewerBrowsing(viewerIndex.value)
+      }
     }
   }
 )
@@ -1161,6 +1234,11 @@ watch(layoutMode, async (nextMode) => {
 
 watch([viewerOpen, viewerPageIndices], async ([open]) => {
   if (!open) return
+  syncViewerLoading()
+  for (const pageIndex of viewerPageIndices.value) {
+    void prepareViewerImage(pageIndex, true)
+  }
+  preloadViewerBrowsing(viewerIndex.value)
   await nextTick()
   updateViewerNavBounds()
 })
@@ -1169,6 +1247,10 @@ watch(
   () => props.illustId,
   () => {
     if (active.value) closeReader()
+    viewerPreparationGeneration++
+    viewerImagePreparations.clear()
+    viewerPreparedIndices.clear()
+    viewerLoading.value = false
     originals.reset()
   }
 )
@@ -1178,6 +1260,9 @@ onBeforeUnmount(() => {
   cancelMenuCollapse()
   if (columnLayoutTimer) window.clearTimeout(columnLayoutTimer)
   cancelDownload()
+  viewerPreparationGeneration++
+  viewerImagePreparations.clear()
+  viewerPreparedIndices.clear()
   originals.reset()
   window.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('resize', syncReaderViewport)
@@ -1459,6 +1544,7 @@ onBeforeUnmount(() => {
 }
 
 .reader-lightbox__stage {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   box-sizing: border-box;
@@ -1470,6 +1556,24 @@ onBeforeUnmount(() => {
   overflow: hidden;
   pointer-events: none;
   place-items: center;
+}
+
+.reader-lightbox__loading {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  padding: 9px 14px;
+  color: rgb(255 255 255 / 90%);
+  background: rgb(25 27 34 / 78%);
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 999px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 28%);
+  font-size: 0.78rem;
+  font-weight: 750;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  backdrop-filter: blur(10px);
 }
 
 .reader-lightbox__page {

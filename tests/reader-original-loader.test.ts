@@ -90,6 +90,29 @@ test('优先任务插到等待队列最前面', async () => {
   assert.deepEqual(order, ['priority', 'normal-1', 'normal-2'])
 })
 
+test('浏览预载会把已排队任务提升到普通后台任务之前', async () => {
+  const gate = createConcurrencyGate(1)
+  const order: string[] = []
+  const releaseFirst = await gate.acquire()
+  const browseToken = {}
+
+  const background = gate.acquire().then((release) => {
+    order.push('background')
+    release()
+  })
+  const browse = gate.acquire(false, browseToken).then((release) => {
+    order.push('browse')
+    release()
+  })
+
+  assert.equal(gate.promote(browseToken), true)
+  assert.equal(gate.pendingCount, 2)
+  releaseFirst()
+  await Promise.all([background, browse])
+
+  assert.deepEqual(order, ['browse', 'background'])
+})
+
 test('调高闸门上限会立刻放行排队中的任务', async () => {
   const gate = createConcurrencyGate(1)
   const releases: (() => void)[] = []
@@ -142,7 +165,7 @@ test('预载未完成时下载会复用进行中的请求并按线程数完成�
 
     originals.preload(0)
     const downloaded = await Promise.all(
-      pages.map((_, index) => originals.ensure(index))
+      pages.map((_, index) => originals.ensure(index, index === 4))
     )
 
     assert.equal(
