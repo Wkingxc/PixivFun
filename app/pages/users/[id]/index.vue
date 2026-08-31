@@ -188,9 +188,14 @@
               v-model='selectedPublicBookmarkTag'
             )
             BookmarkArtworkTagPanel(
+              :author-count='publicBookmarkAuthorGroups.length',
+              :author-sort='publicBookmarkAuthorSort',
+              :view-mode='publicBookmarkViewMode'
               @expand='publicArtworkTags.scan()'
               @refresh='publicArtworkTags.scan(true)'
+              @update:author-sort='updatePublicBookmarkAuthorSort'
               @update:selected-tags='publicArtworkTags.setSelectedTags($event)'
+              @update:view-mode='updatePublicBookmarkViewMode'
               v-bind='publicArtworkTagProps'
               v-if='publicBookmarks.length || publicArtworkTags.scanned.value'
             )
@@ -200,23 +205,26 @@
               :available-tags='batchAvailableBookmarkTags',
               :loading='bookmarkBatchLoading',
               :selected-count='selectedBookmarks.length',
-              :total-count='displayPublicBookmarks.length'
+              :total-count='publicBookmarkVisibleWorks.length'
               @add-tags='handleBatchAddTags'
               @cancel='cancelBookmarkBatch'
               @set-visibility='handleBatchVisibility'
               @start='startBookmarkBatch'
               @toggle-all='toggleAllPageBookmarks'
-              v-if='isSelfUserPage && displayPublicBookmarks.length'
+              v-if='isSelfUserPage && publicBookmarkDisplayCount'
             )
             ArtworkList(
               :list='[]',
               :loading='8',
               :marker-disabled='isSelfUserPage'
               controlled
-              v-if='!publicBookmarks?.length && loadingPublicBookmarks'
+              v-if='publicBookmarkDisplayLoading'
             )
-            .fnb-empty(v-else-if='!displayPublicBookmarks.length') {{ emptyPublicBookmarksText }}
-            .user-bookmarks.bookmark-grid(ref='publicBookmarkGridRef' v-else)
+            .fnb-empty(v-else-if='!publicBookmarkDisplayCount') {{ emptyPublicBookmarksText }}
+            .user-bookmarks.bookmark-grid(
+              ref='publicBookmarkGridRef'
+              v-else-if='publicBookmarkViewMode === "artwork-tags"'
+            )
               ArtworkList(
                 :list='displayPublicBookmarks',
                 :marker-disabled='isSelfUserPage',
@@ -232,6 +240,53 @@
                 :page-size='BOOKMARK_PAGE_SIZE'
                 @update:page='changePublicBookmarkPage'
               )
+            .user-bookmarks.bookmark-author-groups(
+              ref='publicBookmarkGridRef'
+              v-else
+            )
+              section.bookmark-author-group(
+                :key='group.authorId || group.authorName'
+                v-for='group in displayPublicBookmarkAuthorGroups'
+              )
+                header.bookmark-author-divider
+                  span.bookmark-author-anchor(aria-hidden='true')
+                  RouterLink.bookmark-author-avatar-link(
+                    :to='`/users/${group.authorId}`'
+                    v-if='group.authorId && group.profileImageUrl'
+                  )
+                    img.bookmark-author-avatar(
+                      :alt='group.authorName',
+                      :src='group.profileImageUrl'
+                    )
+                  span.bookmark-author-avatar.bookmark-author-avatar--empty(
+                    v-else
+                  )
+                    IFasUser(aria-hidden='true')
+                  .bookmark-author-identity
+                    RouterLink.bookmark-author-name(
+                      :to='`/users/${group.authorId}`'
+                      v-if='group.authorId'
+                    ) {{ group.authorName }}
+                    strong.bookmark-author-name(v-else) {{ group.authorName }}
+                    span(v-if='group.authorId') ID {{ group.authorId }}
+                  span.bookmark-author-line(aria-hidden='true')
+                  span.bookmark-author-count {{ group.works.length }} 件
+                ArtworkList(
+                  :list='group.works',
+                  :marker-disabled='isSelfUserPage',
+                  :selectable='bookmarkBatchMode',
+                  :selected-ids='selectedBookmarkIds'
+                  @toggle-selection='toggleBookmarkSelection'
+                  controlled
+                  filter-disabled
+                )
+              FnbPagination.bookmark-pagination(
+                :item-count='publicBookmarkAuthorGroups.length',
+                :page='publicBookmarkAuthorPage',
+                :page-size='BOOKMARK_AUTHOR_GROUP_PAGE_SIZE'
+                @update:page='changePublicBookmarkAuthorPage'
+                v-if='publicBookmarkAuthorGroups.length > BOOKMARK_AUTHOR_GROUP_PAGE_SIZE'
+              )
           template(#panel-hidden_bookmarks v-if='isSelfUserPage')
             BookmarkTagFilter(
               :items='bookmarkTags.private',
@@ -239,9 +294,14 @@
               v-model='selectedHiddenBookmarkTag'
             )
             BookmarkArtworkTagPanel(
+              :author-count='hiddenBookmarkAuthorGroups.length',
+              :author-sort='hiddenBookmarkAuthorSort',
+              :view-mode='hiddenBookmarkViewMode'
               @expand='hiddenArtworkTags.scan()'
               @refresh='hiddenArtworkTags.scan(true)'
+              @update:author-sort='updateHiddenBookmarkAuthorSort'
               @update:selected-tags='hiddenArtworkTags.setSelectedTags($event)'
+              @update:view-mode='updateHiddenBookmarkViewMode'
               v-bind='hiddenArtworkTagProps'
               v-if='hiddenBookmarks.length || hiddenArtworkTags.scanned.value'
             )
@@ -251,23 +311,26 @@
               :available-tags='batchAvailableBookmarkTags',
               :loading='bookmarkBatchLoading',
               :selected-count='selectedBookmarks.length',
-              :total-count='displayHiddenBookmarks.length'
+              :total-count='hiddenBookmarkVisibleWorks.length'
               @add-tags='handleBatchAddTags'
               @cancel='cancelBookmarkBatch'
               @set-visibility='handleBatchVisibility'
               @start='startBookmarkBatch'
               @toggle-all='toggleAllPageBookmarks'
-              v-if='displayHiddenBookmarks.length'
+              v-if='hiddenBookmarkDisplayCount'
             )
             ArtworkList(
               :list='[]',
               :loading='8'
               controlled
               marker-disabled
-              v-if='!hiddenBookmarks?.length && loadingHiddenBookmarks'
+              v-if='hiddenBookmarkDisplayLoading'
             )
-            .fnb-empty(v-else-if='!displayHiddenBookmarks.length') {{ emptyHiddenBookmarksText }}
-            .user-bookmarks.bookmark-grid(ref='hiddenBookmarkGridRef' v-else)
+            .fnb-empty(v-else-if='!hiddenBookmarkDisplayCount') {{ emptyHiddenBookmarksText }}
+            .user-bookmarks.bookmark-grid(
+              ref='hiddenBookmarkGridRef'
+              v-else-if='hiddenBookmarkViewMode === "artwork-tags"'
+            )
               ArtworkList(
                 :list='displayHiddenBookmarks',
                 :selectable='bookmarkBatchMode',
@@ -282,6 +345,53 @@
                 :page='displayHiddenBookmarkPage',
                 :page-size='BOOKMARK_PAGE_SIZE'
                 @update:page='changeHiddenBookmarkPage'
+              )
+            .user-bookmarks.bookmark-author-groups(
+              ref='hiddenBookmarkGridRef'
+              v-else
+            )
+              section.bookmark-author-group(
+                :key='group.authorId || group.authorName'
+                v-for='group in displayHiddenBookmarkAuthorGroups'
+              )
+                header.bookmark-author-divider
+                  span.bookmark-author-anchor(aria-hidden='true')
+                  RouterLink.bookmark-author-avatar-link(
+                    :to='`/users/${group.authorId}`'
+                    v-if='group.authorId && group.profileImageUrl'
+                  )
+                    img.bookmark-author-avatar(
+                      :alt='group.authorName',
+                      :src='group.profileImageUrl'
+                    )
+                  span.bookmark-author-avatar.bookmark-author-avatar--empty(
+                    v-else
+                  )
+                    IFasUser(aria-hidden='true')
+                  .bookmark-author-identity
+                    RouterLink.bookmark-author-name(
+                      :to='`/users/${group.authorId}`'
+                      v-if='group.authorId'
+                    ) {{ group.authorName }}
+                    strong.bookmark-author-name(v-else) {{ group.authorName }}
+                    span(v-if='group.authorId') ID {{ group.authorId }}
+                  span.bookmark-author-line(aria-hidden='true')
+                  span.bookmark-author-count {{ group.works.length }} 件
+                ArtworkList(
+                  :list='group.works',
+                  :selectable='bookmarkBatchMode',
+                  :selected-ids='selectedBookmarkIds'
+                  @toggle-selection='toggleBookmarkSelection'
+                  controlled
+                  filter-disabled
+                  marker-disabled
+                )
+              FnbPagination.bookmark-pagination(
+                :item-count='hiddenBookmarkAuthorGroups.length',
+                :page='hiddenBookmarkAuthorPage',
+                :page-size='BOOKMARK_AUTHOR_GROUP_PAGE_SIZE'
+                @update:page='changeHiddenBookmarkAuthorPage'
+                v-if='hiddenBookmarkAuthorGroups.length > BOOKMARK_AUTHOR_GROUP_PAGE_SIZE'
               )
 
     //- Related authors (silently hidden on failure / empty result)
@@ -362,6 +472,7 @@ import IFasMapMarkerAlt from '~icons/fa-solid/map-marker-alt'
 import IFasParking from '~icons/fa-solid/parking'
 import IFasPlus from '~icons/fa-solid/plus'
 import IFasStar from '~icons/fa-solid/star'
+import IFasUser from '~icons/fa-solid/user'
 import IFasVenusMars from '~icons/fa-solid/venus-mars'
 import { useUserStore } from '~/stores/session'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
@@ -393,6 +504,12 @@ import {
   type BookmarkTagGroups,
 } from '~/utils/bookmarkTags'
 import { paginateWorks } from '~/utils/bookmarkArtworkTags'
+import {
+  groupBookmarkWorksByAuthor,
+  paginateBookmarkAuthorGroups,
+  type BookmarkAuthorSort,
+  type BookmarkCollectionViewMode,
+} from '~/utils/bookmarkAuthorGroups'
 import {
   bookmarkViewStorageKey,
   createBookmarkViewState,
@@ -514,6 +631,13 @@ const hiddenArtworkTags = useBookmarkArtworkTags((offset) =>
 )
 const publicArtworkTagPage = ref(1)
 const hiddenArtworkTagPage = ref(1)
+const BOOKMARK_AUTHOR_GROUP_PAGE_SIZE = 6
+const publicBookmarkViewMode = ref<BookmarkCollectionViewMode>('artwork-tags')
+const hiddenBookmarkViewMode = ref<BookmarkCollectionViewMode>('artwork-tags')
+const publicBookmarkAuthorSort = ref<BookmarkAuthorSort>('count')
+const hiddenBookmarkAuthorSort = ref<BookmarkAuthorSort>('count')
+const publicBookmarkAuthorPage = ref(1)
+const hiddenBookmarkAuthorPage = ref(1)
 
 function artworkTagPanelProps(index: BookmarkArtworkTagIndex) {
   return computed(() => ({
@@ -569,6 +693,65 @@ const displayHiddenBookmarkPage = computed(() =>
     : hiddenBookmarkPage.value
 )
 
+const publicBookmarkAuthorGroups = computed(() =>
+  groupBookmarkWorksByAuthor(
+    publicArtworkTags.filteredWorks.value,
+    publicBookmarkAuthorSort.value
+  )
+)
+const hiddenBookmarkAuthorGroups = computed(() =>
+  groupBookmarkWorksByAuthor(
+    hiddenArtworkTags.filteredWorks.value,
+    hiddenBookmarkAuthorSort.value
+  )
+)
+const displayPublicBookmarkAuthorGroups = computed(() =>
+  paginateBookmarkAuthorGroups(
+    publicBookmarkAuthorGroups.value,
+    publicBookmarkAuthorPage.value,
+    BOOKMARK_AUTHOR_GROUP_PAGE_SIZE
+  )
+)
+const displayHiddenBookmarkAuthorGroups = computed(() =>
+  paginateBookmarkAuthorGroups(
+    hiddenBookmarkAuthorGroups.value,
+    hiddenBookmarkAuthorPage.value,
+    BOOKMARK_AUTHOR_GROUP_PAGE_SIZE
+  )
+)
+const publicBookmarkVisibleWorks = computed(() =>
+  publicBookmarkViewMode.value === 'authors'
+    ? displayPublicBookmarkAuthorGroups.value.flatMap((group) => group.works)
+    : displayPublicBookmarks.value
+)
+const hiddenBookmarkVisibleWorks = computed(() =>
+  hiddenBookmarkViewMode.value === 'authors'
+    ? displayHiddenBookmarkAuthorGroups.value.flatMap((group) => group.works)
+    : displayHiddenBookmarks.value
+)
+const publicBookmarkDisplayLoading = computed(
+  () =>
+    (!publicBookmarks.value.length && loadingPublicBookmarks.value) ||
+    (publicBookmarkViewMode.value === 'authors' &&
+      publicArtworkTags.scanning.value)
+)
+const hiddenBookmarkDisplayLoading = computed(
+  () =>
+    (!hiddenBookmarks.value.length && loadingHiddenBookmarks.value) ||
+    (hiddenBookmarkViewMode.value === 'authors' &&
+      hiddenArtworkTags.scanning.value)
+)
+const publicBookmarkDisplayCount = computed(() =>
+  publicBookmarkViewMode.value === 'authors'
+    ? publicBookmarkAuthorGroups.value.length
+    : displayPublicBookmarks.value.length
+)
+const hiddenBookmarkDisplayCount = computed(() =>
+  hiddenBookmarkViewMode.value === 'authors'
+    ? hiddenBookmarkAuthorGroups.value.length
+    : displayHiddenBookmarks.value.length
+)
+
 enum UserTabs {
   illusts = 'illusts',
   mangas = 'mangas',
@@ -617,25 +800,35 @@ const showFeaturedWorks = computed(
 )
 
 const emptyPublicBookmarksText = computed(() =>
-  publicArtworkTags.active.value
-    ? '没有同时包含所选作品标签的公开收藏'
-    : selectedPublicBookmarkTag.value
-      ? '这个标签下还没有公开收藏'
-      : isSelfUserPage.value
-        ? '收藏夹是空的 Σ(⊙▽⊙"a'
-        : user.value?.name + '没有公开的收藏 (❁´◡`❁)'
+  publicBookmarkViewMode.value === 'authors'
+    ? publicArtworkTags.error.value ||
+      (publicArtworkTags.active.value
+        ? '没有作者符合所选作品标签'
+        : '没有可按作者聚合的公开收藏')
+    : publicArtworkTags.active.value
+      ? '没有同时包含所选作品标签的公开收藏'
+      : selectedPublicBookmarkTag.value
+        ? '这个标签下还没有公开收藏'
+        : isSelfUserPage.value
+          ? '收藏夹是空的 Σ(⊙▽⊙"a'
+          : user.value?.name + '没有公开的收藏 (❁´◡`❁)'
 )
 const emptyHiddenBookmarksText = computed(() =>
-  hiddenArtworkTags.active.value
-    ? '没有同时包含所选作品标签的私密收藏'
-    : selectedHiddenBookmarkTag.value
-      ? '这个标签下还没有私密收藏'
-      : '没有隐藏的小秘密 இ௰இ'
+  hiddenBookmarkViewMode.value === 'authors'
+    ? hiddenArtworkTags.error.value ||
+      (hiddenArtworkTags.active.value
+        ? '没有作者符合所选作品标签'
+        : '没有可按作者聚合的私密收藏')
+    : hiddenArtworkTags.active.value
+      ? '没有同时包含所选作品标签的私密收藏'
+      : selectedHiddenBookmarkTag.value
+        ? '这个标签下还没有私密收藏'
+        : '没有隐藏的小秘密 இ௰இ'
 )
 const activeBookmarkList = computed(() =>
   tab.value === UserTabs.hidden_bookmarks
-    ? displayHiddenBookmarks.value
-    : displayPublicBookmarks.value
+    ? hiddenBookmarkVisibleWorks.value
+    : publicBookmarkVisibleWorks.value
 )
 const selectedBookmarks = computed(() => {
   const selected = new Set(selectedBookmarkIds.value)
@@ -797,6 +990,12 @@ async function init(id: string | number, initTab?: UserTabs): Promise<void> {
   hiddenArtworkTags.reset()
   publicArtworkTagPage.value = 1
   hiddenArtworkTagPage.value = 1
+  publicBookmarkViewMode.value = 'artwork-tags'
+  hiddenBookmarkViewMode.value = 'artwork-tags'
+  publicBookmarkAuthorSort.value = 'count'
+  hiddenBookmarkAuthorSort.value = 'count'
+  publicBookmarkAuthorPage.value = 1
+  hiddenBookmarkAuthorPage.value = 1
   publicBookmarkRequestId += 1
   hiddenBookmarkRequestId += 1
   userArtworkTags.value = []
@@ -990,6 +1189,50 @@ async function changeHiddenBookmarkPage(page: number): Promise<void> {
   }
 }
 
+function updatePublicBookmarkViewMode(mode: BookmarkCollectionViewMode) {
+  publicBookmarkViewMode.value = mode
+  publicBookmarkAuthorPage.value = 1
+  selectedBookmarkIds.value = []
+  if (mode === 'authors') void publicArtworkTags.scan()
+}
+
+function updateHiddenBookmarkViewMode(mode: BookmarkCollectionViewMode) {
+  hiddenBookmarkViewMode.value = mode
+  hiddenBookmarkAuthorPage.value = 1
+  selectedBookmarkIds.value = []
+  if (mode === 'authors') void hiddenArtworkTags.scan()
+}
+
+function updatePublicBookmarkAuthorSort(sort: BookmarkAuthorSort) {
+  publicBookmarkAuthorSort.value = sort
+  publicBookmarkAuthorPage.value = 1
+  selectedBookmarkIds.value = []
+}
+
+function updateHiddenBookmarkAuthorSort(sort: BookmarkAuthorSort) {
+  hiddenBookmarkAuthorSort.value = sort
+  hiddenBookmarkAuthorPage.value = 1
+  selectedBookmarkIds.value = []
+}
+
+function changePublicBookmarkAuthorPage(page: number) {
+  publicBookmarkAuthorPage.value = Math.max(1, page)
+  selectedBookmarkIds.value = []
+  publicBookmarkGridRef.value?.scrollIntoView({
+    behavior: 'auto',
+    block: 'start',
+  })
+}
+
+function changeHiddenBookmarkAuthorPage(page: number) {
+  hiddenBookmarkAuthorPage.value = Math.max(1, page)
+  selectedBookmarkIds.value = []
+  hiddenBookmarkGridRef.value?.scrollIntoView({
+    behavior: 'auto',
+    block: 'start',
+  })
+}
+
 watch(tab, (newTab, oldTab) => {
   if (!newTab) return
   if (oldTab && oldTab !== newTab) {
@@ -1019,6 +1262,9 @@ watch(selectedPublicBookmarkTag, () => {
   // The index only covers one bookmark tag at a time.
   publicArtworkTags.reset()
   if (tab.value === UserTabs.public_bookmarks) void getBookmarks(false, 1)
+  if (publicBookmarkViewMode.value === 'authors') {
+    void publicArtworkTags.scan()
+  }
 })
 
 watch(selectedHiddenBookmarkTag, () => {
@@ -1026,16 +1272,21 @@ watch(selectedHiddenBookmarkTag, () => {
   hiddenBookmarkPage.value = 1
   hiddenArtworkTags.reset()
   if (tab.value === UserTabs.hidden_bookmarks) void getBookmarks(true, 1)
+  if (hiddenBookmarkViewMode.value === 'authors') {
+    void hiddenArtworkTags.scan()
+  }
 })
 
 watch(publicArtworkTags.selectedTags, () => {
   selectedBookmarkIds.value = []
   publicArtworkTagPage.value = 1
+  publicBookmarkAuthorPage.value = 1
 })
 
 watch(hiddenArtworkTags.selectedTags, () => {
   selectedBookmarkIds.value = []
   hiddenArtworkTagPage.value = 1
+  hiddenBookmarkAuthorPage.value = 1
 })
 
 function startBookmarkBatch() {
@@ -1267,7 +1518,8 @@ onMounted(async () => {
   }
 }
 
-.bookmark-grid {
+.bookmark-grid,
+.bookmark-author-groups {
   scroll-margin-top: 100px;
 
   :deep(.artworks-list) {
@@ -1300,6 +1552,118 @@ onMounted(async () => {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 1rem;
     }
+  }
+}
+
+.bookmark-author-groups {
+  display: grid;
+  gap: 34px;
+}
+
+.bookmark-author-group {
+  min-width: 0;
+}
+
+.bookmark-author-divider {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 16px;
+}
+
+.bookmark-author-anchor {
+  width: 4px;
+  height: 28px;
+  flex: 0 0 auto;
+  background: var(--pf-pink);
+  border-radius: 999px;
+}
+
+.bookmark-author-avatar-link {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.bookmark-author-avatar {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  object-fit: cover;
+  color: var(--pf-muted);
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-line);
+  border-radius: 50%;
+
+  &--empty svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.bookmark-author-identity {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+
+  > span {
+    overflow: hidden;
+    max-width: 150px;
+    color: var(--pf-muted);
+    font-size: 0.7rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.bookmark-author-name {
+  overflow: hidden;
+  max-width: 230px;
+  color: var(--pf-text);
+  font-size: 0.9rem;
+  font-weight: 780;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--pf-pink);
+  }
+}
+
+.bookmark-author-line {
+  height: 1px;
+  flex: 1 1 auto;
+  background: var(--pf-line);
+}
+
+.bookmark-author-count {
+  flex: 0 0 auto;
+  color: var(--pf-muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .bookmark-author-groups {
+    gap: 28px;
+  }
+
+  .bookmark-author-divider {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .bookmark-author-identity > span {
+    display: none;
+  }
+
+  .bookmark-author-name {
+    max-width: 140px;
   }
 }
 
