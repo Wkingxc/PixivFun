@@ -26,10 +26,25 @@
       span 正在加载第 {{ currentPage }} 页…
 
     ArtworkList(
-      :list='displayedIllusts',
-      :loading='pageLoading && !displayedIllusts.length ? followingStore.latestPageSize : false'
+      :list='[]',
+      :loading='followingStore.latestPageSize'
       controlled
+      v-if='pageLoading && !activeIllusts.length'
     )
+
+    .following-date-groups(v-else)
+      section.following-date-group(
+        :key='group.dateKey || "unknown"'
+        v-for='group in displayedGroups'
+      )
+        header.following-date-divider
+          span.following-date-anchor(aria-hidden='true')
+          time.following-date-label(:datetime='group.dateKey || undefined') {{ group.dateLabel }}
+          span.following-date-weekday(v-if='group.weekdayLabel') {{ group.weekdayLabel }}
+          span.following-date-today(v-if='group.isToday') 今天
+          span.following-date-line(aria-hidden='true')
+          span.following-date-count {{ group.works.length }} 件
+        ArtworkList(:list='group.works' controlled)
 
     .following-empty(v-if='!pageLoading && !activeIllusts.length') {{ emptyText }}
 
@@ -51,7 +66,10 @@ import { useUserStore } from '~/stores/session'
 import { useFollowingStore } from '~/stores/following'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
 import ArtworkMarkerControl from '~/components/Artwork/ArtworkMarkerControl.vue'
-import { partitionFollowingUpdates } from '~/utils/followingLatest'
+import {
+  groupFollowingUpdatesByDate,
+  partitionFollowingUpdates,
+} from '~/utils/followingLatest'
 
 type FollowingUpdateTab = 'featured' | 'regular'
 
@@ -90,8 +108,8 @@ const activeIllusts = computed(() => latestGroups.value[activeTab.value])
 const pageLoading = computed(
   () => followingStore.latestLoading || groupingLoading.value
 )
-const displayedIllusts = computed(() =>
-  groupingLoading.value ? [] : activeIllusts.value
+const displayedGroups = computed(() =>
+  groupingLoading.value ? [] : groupFollowingUpdatesByDate(activeIllusts.value)
 )
 const emptyText = computed(() =>
   activeTab.value === 'featured'
@@ -229,6 +247,64 @@ h1 {
   text-align: center;
 }
 
+.following-date-groups {
+  display: grid;
+  gap: 34px;
+}
+
+.following-date-group {
+  min-width: 0;
+}
+
+.following-date-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 30px;
+  margin-bottom: 16px;
+}
+
+.following-date-anchor {
+  width: 4px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--pf-pink);
+  flex: 0 0 auto;
+}
+
+.following-date-label {
+  color: var(--pf-text);
+  font-size: 1.12rem;
+  font-weight: 780;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.following-date-weekday,
+.following-date-count {
+  color: var(--pf-muted);
+  font-size: 0.82rem;
+  font-weight: 620;
+  white-space: nowrap;
+}
+
+.following-date-today {
+  padding: 3px 11px;
+  color: var(--pf-pink);
+  border: 1px solid var(--pf-pink);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 720;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.following-date-line {
+  height: 1px;
+  background: var(--pf-line);
+  flex: 1 1 auto;
+}
+
 .following-pagination {
   margin: 32px auto 8px;
 }
@@ -237,6 +313,10 @@ h1 {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 16px 14px;
+  margin-top: 0;
+}
+
+.following-date-group :deep(.artworks-list) {
   margin-top: 0;
 }
 
@@ -271,6 +351,23 @@ h1 {
     align-items: flex-start;
     flex-direction: column;
     gap: 6px;
+  }
+
+  .following-date-groups {
+    gap: 28px;
+  }
+
+  .following-date-divider {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .following-date-label {
+    font-size: 1rem;
+  }
+
+  .following-date-today {
+    padding-inline: 8px;
   }
 
   :deep(.artworks-list) {
