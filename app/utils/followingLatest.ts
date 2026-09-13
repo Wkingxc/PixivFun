@@ -3,6 +3,12 @@ export interface FollowingUpdateGroups<T> {
   regular: T[]
 }
 
+export function filterFollowingUpdatesByAuthors<
+  T extends { userId: string | number },
+>(works: readonly T[], authorIds: ReadonlySet<string>): T[] {
+  return works.filter((work) => authorIds.has(String(work.userId)))
+}
+
 export interface FollowingUpdateDateGroup<T> {
   dateKey: string
   dateLabel: string

@@ -40,6 +40,11 @@ section.user-artwork-overview
       )
         IFasStar
         | {{ featured ? '已精选' : '设为精选' }}
+      AuthorCategoryButton(
+        :author-id='user.userId',
+        :author-name='user.name'
+        v-if='!isSelf'
+      )
       span.follow-loading(v-if='followLoading') 处理中
       span.self-badge(v-else-if='isSelf') 这是你自己
 

@@ -6,28 +6,46 @@
       .heading-copy
         span.eyebrow FOLLOWING
         h1 关注更新
-      span.page-summary(
-        v-if='!pageLoading && followingStore.latestIllusts.length'
-      )
+      span.page-summary(v-if='!pageLoading && !loadError')
         | 第 {{ currentPage }} 页 · {{ activeIllusts.length }} 件
 
     nav.following-tabs(aria-label='关注更新分组')
       button(
+        :aria-current='activeTab === item.key ? "page" : undefined',
         :class='{ active: activeTab === item.key }',
-        :key='item.key'
+        :key='item.key',
+        :title='item.label'
         @click='changeTab(item.key)'
         type='button'
         v-for='item in tabs'
       ) {{ item.label }}
+      button.manage-categories(
+        @click='categoryEditorOpen = true'
+        type='button'
+      ) + 管理分类
 
-    .following-loading(
-      v-if='followingStore.latestLoading && followingStore.latestIllusts.length'
+    AuthorCategoryEditor(
+      @close='categoryEditorOpen = false'
+      v-if='categoryEditorOpen'
     )
-      span 正在加载第 {{ currentPage }} 页…
+
+    .following-error(role='alert' v-if='loadError')
+      span {{ loadError }}
+      FnbButton(@click='handleFetch(currentPage)' size='sm') 重试
+
+    .following-error(
+      role='status'
+      v-if='!pageLoading && !loadError && failedAuthorIds.length'
+    )
+      span(:title='failedAuthorIds.join(", ")') 有 {{ failedAuthorIds.length }} 位作者的作品暂时无法读取，当前显示已加载的作品
+      FnbButton(@click='handleFetch(currentPage)' size='sm') 重试
+
+    .following-loading(role='status' v-if='pageLoading')
+      span {{ loadingNote }}
 
     ArtworkList(
       :list='[]',
-      :loading='followingStore.latestPageSize'
+      :loading='pageSize'
       controlled
       v-if='pageLoading && !activeIllusts.length'
     )
@@ -46,14 +64,16 @@
           span.following-date-count {{ group.works.length }} 件
         ArtworkList(:list='group.works' controlled)
 
-    .following-empty(v-if='!pageLoading && !activeIllusts.length') {{ emptyText }}
+    .following-empty(
+      v-if='!pageLoading && !loadError && !activeIllusts.length'
+    ) {{ emptyText }}
 
     FnbPagination.following-pagination(
-      :item-count='followingStore.latestItemCount',
+      :item-count='itemCount',
       :page='currentPage',
-      :page-size='followingStore.latestPageSize'
+      :page-size='pageSize'
       @update:page='changePage'
-      v-if='followingStore.latestIllusts.length'
+      v-if='!pageLoading && !loadError && itemCount > 0'
     )
 </template>
 
@@ -65,13 +85,19 @@ definePageMeta({
 import { useUserStore } from '~/stores/session'
 import { useFollowingStore } from '~/stores/following'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
+import { useAuthorCategoriesStore } from '~/stores/author-categories'
 import ArtworkMarkerControl from '~/components/Artwork/ArtworkMarkerControl.vue'
+import type { ArtworkInfo } from '~/types'
+import {
+  createAuthorCategoryFeed,
+  AUTHOR_CATEGORY_PAGE_SIZE,
+} from '~/utils/authorCategoryFeed'
 import {
   groupFollowingUpdatesByDate,
   partitionFollowingUpdates,
 } from '~/utils/followingLatest'
 
-type FollowingUpdateTab = 'featured' | 'regular'
+type FollowingUpdateTab = 'featured' | 'regular' | `category:${string}`
 
 onMounted(() => {
   setTitle('关注更新')
@@ -82,55 +108,133 @@ onMounted(() => {
 const userStore = useUserStore()
 const followingStore = useFollowingStore()
 const localPersistenceStore = useLocalPersistenceStore()
+const categoryStore = useAuthorCategoriesStore()
+const pixivClient = usePixivClient()
+const categoryFeed = createAuthorCategoryFeed<ArtworkInfo>({
+  getUserProfileAll: (authorId) =>
+    $fetch(`/api/local/author-categories/directory/${authorId}`),
+  getUserIllusts: (authorId, ids, category) =>
+    pixivClient.getUserIllusts(authorId, ids, category),
+})
+const activeIllusts = ref<ArtworkInfo[]>([])
+const itemCount = ref(0)
+const pageSize = AUTHOR_CATEGORY_PAGE_SIZE
+const tabPages = new Map<FollowingUpdateTab, number>()
+const loadingNote = ref('正在读取分类作者…')
+const categoryEditorOpen = ref(false)
+const loadError = ref('')
+const failedAuthorIds = ref<string[]>([])
 const { containerStyle: artworkLayoutContainerStyle } =
   useArtworkLayoutSettings()
 const route = useRoute()
 const router = useRouter()
-const tabs: Array<{ key: FollowingUpdateTab; label: string }> = [
+const tabs = computed<Array<{ key: FollowingUpdateTab; label: string }>>(() => [
   { key: 'featured', label: '精选作者更新' },
   { key: 'regular', label: '普通作者更新' },
-]
+  ...categoryStore.categories.map((category) => ({
+    key: `category:${category.id}` as const,
+    label: category.name,
+  })),
+])
 const groupingLoading = ref(true)
 const currentPage = computed(() => {
   const page = Number(route.query.p)
   return Number.isInteger(page) && page > 0 ? page : 1
 })
-const activeTab = computed<FollowingUpdateTab>(() =>
-  route.query.tab === 'regular' ? 'regular' : 'featured'
+const activeTab = computed<FollowingUpdateTab>(
+  () =>
+    tabs.value.find((item) => item.key === route.query.tab)?.key ?? 'featured'
 )
-const latestGroups = computed(() =>
-  partitionFollowingUpdates(
-    followingStore.latestIllusts,
-    localPersistenceStore.featuredAuthorIds
+const activeCategory = computed(() =>
+  categoryStore.categories.find(
+    (category) => `category:${category.id}` === activeTab.value
   )
 )
-const activeIllusts = computed(() => latestGroups.value[activeTab.value])
-const pageLoading = computed(
-  () => followingStore.latestLoading || groupingLoading.value
+const categoryMembership = computed(
+  () => activeCategory.value?.authorIds.slice().sort().join(',') ?? ''
 )
+const pageLoading = computed(() => groupingLoading.value)
 const displayedGroups = computed(() =>
-  groupingLoading.value ? [] : groupFollowingUpdatesByDate(activeIllusts.value)
+  groupingLoading.value || loadError.value
+    ? []
+    : groupFollowingUpdatesByDate(activeIllusts.value)
 )
-const emptyText = computed(() =>
-  activeTab.value === 'featured'
+const emptyText = computed(() => {
+  if (activeCategory.value) {
+    return activeCategory.value.authorIds.length
+      ? `“${activeCategory.value.name}”的作者暂无可查看的插画或漫画作品`
+      : '这个分类还没有作者，可在关注列表或作者主页点击“分类”添加'
+  }
+  return activeTab.value === 'featured'
     ? '当前页没有精选作者的新作品'
     : '当前页没有普通作者的新作品'
-)
+})
 
 let groupingRequestId = 0
+let categoryRequest: AbortController | undefined
 
 async function handleFetch(page: number) {
   if (!userStore.isLoggedIn) {
     return router.push(`/login?back=${encodeURIComponent(route.fullPath)}`)
   }
   const requestId = ++groupingRequestId
+  categoryRequest?.abort()
+  const controller = new AbortController()
+  categoryRequest = controller
   groupingLoading.value = true
+  loadError.value = ''
+  failedAuthorIds.value = []
+  loadingNote.value = '正在读取分类作者…'
+  activeIllusts.value = []
   try {
-    await followingStore.fetchLatest(page)
+    await categoryStore.init()
     if (requestId !== groupingRequestId) return
-    await localPersistenceStore.ensureFeaturedAuthors(
-      followingStore.latestIllusts.map((artwork) => artwork.userId)
+    if (!activeCategory.value) {
+      loadingNote.value = `正在加载第 ${page} 页关注动态…`
+      await followingStore.fetchLatest(page)
+      if (requestId !== groupingRequestId) return
+      await localPersistenceStore.ensureFeaturedAuthors(
+        followingStore.latestIllusts.map((work) => work.userId)
+      )
+      if (requestId !== groupingRequestId) return
+      const groups = partitionFollowingUpdates(
+        followingStore.latestIllusts,
+        localPersistenceStore.featuredAuthorIds
+      )
+      activeIllusts.value =
+        activeTab.value === 'regular' ? groups.regular : groups.featured
+      itemCount.value = followingStore.latestItemCount
+      return
+    }
+    const ids = activeCategory.value.authorIds
+    const result = await categoryFeed.load(
+      ids,
+      page,
+      controller.signal,
+      (loaded, total) => {
+        if (requestId === groupingRequestId)
+          loadingNote.value =
+            loaded < total
+              ? `正在汇总作者作品（${loaded}/${total}）…`
+              : `正在加载第 ${page} 页作品…`
+      }
     )
+    if (requestId !== groupingRequestId) return
+    activeIllusts.value = result.works
+    itemCount.value = result.total
+    failedAuthorIds.value = result.failedAuthorIds
+    tabPages.set(activeTab.value, result.page)
+    if (result.page !== currentPage.value) {
+      const query = { ...route.query }
+      if (result.page === 1) delete query.p
+      else query.p = String(result.page)
+      await router.replace({ query })
+    }
+  } catch {
+    if (requestId === groupingRequestId)
+      loadError.value = activeCategory.value
+        ? '加载分类作者的作品失败，请重试'
+        : '加载关注更新失败，请重试'
   } finally {
     if (requestId === groupingRequestId) groupingLoading.value = false
   }
@@ -139,7 +243,10 @@ async function handleFetch(page: number) {
 function changeTab(tab: FollowingUpdateTab) {
   if (tab === activeTab.value) return
   const query = { ...route.query }
-  delete query.p
+  tabPages.set(activeTab.value, currentPage.value)
+  const page = tab.startsWith('category:') ? (tabPages.get(tab) ?? 1) : 1
+  if (page === 1) delete query.p
+  else query.p = String(page)
   if (tab === 'featured') delete query.tab
   else query.tab = tab
   void router.push({ query })
@@ -153,10 +260,33 @@ function changePage(page: number) {
   router.push({ query })
 }
 
-watch(currentPage, (page) => {
-  void handleFetch(page)
+watch([currentPage, activeTab, categoryMembership], () => {
+  if (!categoryStore.initialized) return
+  void handleFetch(currentPage.value)
   window.scrollTo({ top: 0, behavior: 'auto' })
 })
+
+onBeforeUnmount(() => {
+  groupingRequestId += 1
+  categoryRequest?.abort()
+})
+
+watch(
+  () => categoryStore.categories.map((category) => category.id),
+  () => {
+    if (!categoryStore.initialized || typeof route.query.tab !== 'string')
+      return
+    if (
+      route.query.tab.startsWith('category:') &&
+      !tabs.value.some((item) => item.key === route.query.tab)
+    ) {
+      const query = { ...route.query }
+      delete query.tab
+      delete query.p
+      void router.replace({ query })
+    }
+  }
+)
 </script>
 
 <style scoped lang="scss">
@@ -182,11 +312,17 @@ watch(currentPage, (page) => {
 
 .following-tabs {
   display: flex;
+  overflow-x: auto;
   gap: 4px;
   margin-bottom: 20px;
   border-bottom: 1px solid var(--pf-line);
 
   button {
+    flex: none;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     padding: 10px 18px 9px;
     color: var(--pf-muted);
     background: transparent;
@@ -207,6 +343,15 @@ watch(currentPage, (page) => {
       border-color: var(--pf-pink);
     }
   }
+}
+
+.following-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--pf-pink);
 }
 
 .heading-copy {

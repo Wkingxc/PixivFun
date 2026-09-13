@@ -14,6 +14,10 @@ import {
   type PixivFunDataDocument,
 } from '../../shared/pixivfun-data.ts'
 import { normalizePixivId } from '../../shared/pixiv-resource.ts'
+import {
+  normalizeAuthorCategoryName,
+  type AuthorCategory,
+} from '../../shared/author-categories.ts'
 
 export const DEFAULT_PROFILE_ID = 'local-default'
 
@@ -46,10 +50,31 @@ interface NormalizedMarkerBackup {
   authors: MarkerRecord[]
 }
 
-const SCHEMA_VERSION = 5
+const SCHEMA_VERSION = 6
 const MAX_IMPORT_RECORDS = 200_000
 const MAX_BATCH_IDS = 500
 const MAX_FEATURED_AUTHOR_SNAPSHOT_BYTES = 512 * 1024
+
+const AUTHOR_CATEGORIES_SCHEMA = `
+  CREATE TABLE author_categories (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    id TEXT NOT NULL,
+    name TEXT NOT NULL COLLATE NOCASE,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (profile_id, id),
+    UNIQUE (profile_id, name)
+  );
+  CREATE TABLE author_category_members (
+    profile_id TEXT NOT NULL,
+    category_id TEXT NOT NULL,
+    author_id TEXT NOT NULL,
+    PRIMARY KEY (profile_id, category_id, author_id),
+    FOREIGN KEY (profile_id, category_id)
+      REFERENCES author_categories(profile_id, id) ON DELETE CASCADE
+  );
+  CREATE INDEX author_category_members_author_idx
+    ON author_category_members(profile_id, author_id);
+`
 
 const INITIAL_SCHEMA = `
   CREATE TABLE profiles (
@@ -141,6 +166,7 @@ const INITIAL_SCHEMA = `
   );
 
   CREATE INDEX cache_entries_expiry_idx ON cache_entries(expires_at);
+  ${AUTHOR_CATEGORIES_SCHEMA}
 `
 
 export class LocalPersistenceRepository {
@@ -284,6 +310,17 @@ export class LocalPersistenceRepository {
             'INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)'
           )
           .run(5, Date.now())
+      })
+    }
+
+    if (row.version >= 1 && row.version < 6) {
+      this.transaction(() => {
+        this.database.exec(AUTHOR_CATEGORIES_SCHEMA)
+        this.database
+          .prepare(
+            'INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)'
+          )
+          .run(6, Date.now())
       })
     }
 
@@ -451,6 +488,112 @@ export class LocalPersistenceRepository {
       for (const row of rows) visited.add(row.author_id)
     }
     return normalized.filter((id) => visited.has(id))
+  }
+
+  getAuthorCategories(): AuthorCategory[] {
+    const categories = this.database
+      .prepare(
+        `SELECT id, name FROM author_categories WHERE profile_id = ?
+       ORDER BY created_at, rowid`
+      )
+      .all(this.profileId) as Array<{ id: string; name: string }>
+    const members = this.database
+      .prepare(
+        `SELECT category_id, author_id FROM author_category_members
+       WHERE profile_id = ? ORDER BY author_id`
+      )
+      .all(this.profileId) as Array<{ category_id: string; author_id: string }>
+    const grouped = new Map<string, string[]>()
+    for (const member of members) {
+      const ids = grouped.get(member.category_id) ?? []
+      ids.push(member.author_id)
+      grouped.set(member.category_id, ids)
+    }
+    return categories.map((category) => ({
+      ...category,
+      authorIds: grouped.get(category.id) ?? [],
+    }))
+  }
+
+  private requireAuthorCategory(id: unknown): string {
+    if (
+      typeof id !== 'string' ||
+      !this.database
+        .prepare(
+          'SELECT 1 FROM author_categories WHERE profile_id = ? AND id = ?'
+        )
+        .get(this.profileId, id)
+    ) {
+      throw new RangeError('分类不存在，请刷新后重试')
+    }
+    return id
+  }
+
+  private categoryName(value: unknown, exceptId = ''): string {
+    const name = normalizeAuthorCategoryName(value)
+    if (
+      this.database
+        .prepare(
+          'SELECT 1 FROM author_categories WHERE profile_id = ? AND name = ? AND id != ?'
+        )
+        .get(this.profileId, name, exceptId)
+    ) {
+      throw new RangeError('已存在同名分类')
+    }
+    return name
+  }
+
+  createAuthorCategory(nameValue: unknown): string {
+    const name = this.categoryName(nameValue)
+    const id = randomUUID()
+    this.database
+      .prepare(
+        'INSERT INTO author_categories(profile_id, id, name, created_at) VALUES (?, ?, ?, ?)'
+      )
+      .run(this.profileId, id, name, Date.now())
+    return id
+  }
+
+  renameAuthorCategory(idValue: unknown, nameValue: unknown): void {
+    const id = this.requireAuthorCategory(idValue)
+    const name = this.categoryName(nameValue, id)
+    this.database
+      .prepare(
+        'UPDATE author_categories SET name = ? WHERE profile_id = ? AND id = ?'
+      )
+      .run(name, this.profileId, id)
+  }
+
+  deleteAuthorCategory(idValue: unknown): void {
+    const id = this.requireAuthorCategory(idValue)
+    this.database
+      .prepare('DELETE FROM author_categories WHERE profile_id = ? AND id = ?')
+      .run(this.profileId, id)
+  }
+
+  setAuthorCategories(authorIdValue: unknown, categoryIdsValue: unknown): void {
+    const authorId = normalizePixivId(authorIdValue)
+    if (!authorId) throw new TypeError('作者 ID 无效')
+    if (!Array.isArray(categoryIdsValue) || categoryIdsValue.length > 500) {
+      throw new TypeError('分类列表无效')
+    }
+    this.transaction(() => {
+      // Validate the entire selection before replacing any existing memberships.
+      const ids = [
+        ...new Set(
+          categoryIdsValue.map((id) => this.requireAuthorCategory(id))
+        ),
+      ]
+      this.database
+        .prepare(
+          'DELETE FROM author_category_members WHERE profile_id = ? AND author_id = ?'
+        )
+        .run(this.profileId, authorId)
+      const insert = this.database.prepare(
+        'INSERT INTO author_category_members(profile_id, category_id, author_id) VALUES (?, ?, ?)'
+      )
+      for (const id of ids) insert.run(this.profileId, id, authorId)
+    })
   }
 
   getFeaturedAuthorIds(ids: unknown[]): string[] {

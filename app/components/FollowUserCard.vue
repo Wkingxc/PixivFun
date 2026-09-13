@@ -28,6 +28,10 @@
           )
             IFasStar
             | {{ loadingFeatured ? '处理中' : isFeatured ? '已精选' : '设为精选' }}
+          AuthorCategoryButton(
+            :author-id='user.userId',
+            :author-name='user.userName'
+          )
     .user-artworks
       ArtworkList(:list='user.illusts' filter-disabled inline)
 

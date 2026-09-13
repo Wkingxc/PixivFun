@@ -102,6 +102,10 @@
               )
                 IFasStar
                 | {{ featuredAuthor ? '已精选' : '精选' }}
+              AuthorCategoryButton(
+                :author-id='user.userId',
+                :author-name='user.name'
+              )
               button.sidebar-block-button(
                 :class='{ blocked: authorBlocked }'
                 @click='handleToggleBlock'

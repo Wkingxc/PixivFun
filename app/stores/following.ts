@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
 import type { ArtworkInfo, UserListItem } from '~/types'
 
 export const useFollowingStore = defineStore('following', () => {
@@ -100,9 +101,10 @@ export const useFollowingStore = defineStore('following', () => {
   })
 
   async function fetchLatest(page = latestPage.value): Promise<void> {
-    if (latestLoading.value) return
+    const requestId = ++latestRequestId
     const cached = latestPageCache.get(page)
     if (cached) {
+      latestLoading.value = false
       latestPage.value = page
       latestIllusts.value = cached
       latestHasNextPage.value =
@@ -110,7 +112,6 @@ export const useFollowingStore = defineStore('following', () => {
       return
     }
 
-    const requestId = ++latestRequestId
     latestLoading.value = true
     try {
       const data = await usePixivClient().getFollowLatest({
