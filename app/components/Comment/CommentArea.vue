@@ -10,13 +10,14 @@
     comment(
       :author-id='authorId',
       :comment='item',
+      :key='item.id',
       :type='type'
       v-for='item in comments'
     )
     .show-more.comment-more
       FnbButton(
         :loading='loading'
-        @click='async () => await init(id)'
+        @click='init(true)'
         size='sm'
         v-if='comments.length && hasNext'
       )
@@ -36,6 +37,9 @@ const novelStore = useNovelStore()
 const loading = ref(false)
 const comments = ref<Comments[]>([])
 const hasNext = ref(false)
+const isVisible = ref(false)
+let initialized = false
+let requestVersion = 0
 
 const props = defineProps<{
   id: string
@@ -45,31 +49,35 @@ const props = defineProps<{
   authorId?: string
 }>()
 
-async function init(id: string | number): Promise<void> {
-  if (loading.value || props.disabled) return
+async function init(loadMore = false): Promise<void> {
+  if (loading.value || props.disabled || (initialized && !loadMore)) return
   if (!props.count) {
     hasNext.value = false
     comments.value = []
     loading.value = false
+    initialized = true
     return
   }
 
+  const version = requestVersion
   try {
     loading.value = true
     const fetchComments =
       props.type === 'novel'
         ? novelStore.fetchComments
         : artworkStore.fetchComments
-    const data = await fetchComments(`${id}`, {
+    const data = await fetchComments(props.id, {
       limit: comments.value.length ? 30 : 3,
       offset: comments.value.length,
     })
+    if (version !== requestVersion) return
     hasNext.value = data.hasNext
     comments.value = comments.value.concat(data.comments)
+    initialized = true
   } catch (err) {
-    console.warn('Comments fetch error', err)
+    if (version === requestVersion) console.warn('Comments fetch error', err)
   } finally {
-    loading.value = false
+    if (version === requestVersion) loading.value = false
   }
 }
 
@@ -80,16 +88,26 @@ function pushComment(data: Comments) {
 
 const commentsArea = ref<HTMLDivElement | null>(null)
 
-const ob = useIntersectionObserver(
-  commentsArea,
-  async ([{ isIntersecting }]) => {
-    if (isIntersecting) {
-      await nextTick()
-      init(props.id)
-      ob.stop()
-    }
+watch(
+  () => [props.id, props.type, props.disabled, props.count],
+  () => {
+    requestVersion++
+    comments.value = []
+    hasNext.value = false
+    loading.value = false
+    initialized = false
+    if (isVisible.value) void init()
   }
 )
+
+useIntersectionObserver(commentsArea, ([entry]) => {
+  isVisible.value = entry?.isIntersecting ?? false
+  if (isVisible.value) void init()
+})
+
+onScopeDispose(() => {
+  requestVersion++
+})
 </script>
 
 <style scoped lang="scss">
