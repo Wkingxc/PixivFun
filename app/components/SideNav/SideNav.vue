@@ -25,14 +25,8 @@ aside.global-side-nav(
         ul
           SideNavListLink(link='/blocklist' text='屏蔽作者管理')
             ITablerUserOff.link-icon
-          SideNavListLink(
-            @activate='closeSideNav'
-            download-link='/api/local/export'
-            text='导出访问记录'
-          )
+          SideNavListLink(link='/data' text='数据备份与恢复')
             ITablerDownload.link-icon
-          li
-            GoogleDriveSync
 
       .group
         .title 网络代理
@@ -88,7 +82,6 @@ aside.global-side-nav(
 
 <script lang="ts" setup>
 import SideNavListLink from './SideNavListLink.vue'
-import GoogleDriveSync from './GoogleDriveSync.vue'
 import ProxySettings from './ProxySettings.vue'
 import SearchBox from '../SearchBox.vue'
 import {

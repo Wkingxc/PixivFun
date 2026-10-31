@@ -12,15 +12,15 @@
       type='button'
     )
       ITablerCloudUpload(aria-hidden='true')
-      | {{ action === 'upload' ? '上传中…' : '上传' }}
+      | {{ action === 'upload' ? '上传中…' : '上传记录' }}
     button(
       :disabled='busy'
       @click='sync'
-      title='将云端缺少的访问记录更新到本地'
+      title='下载云端记录，合并本地缺少的作品与作者访问记录'
       type='button'
     )
       ITablerCloudDownload(aria-hidden='true')
-      | {{ action === 'sync' ? '同步中…' : '同步' }}
+      | {{ action === 'sync' ? '下载中…' : '下载合并' }}
     button.danger(
       :disabled='busy'
       @click='disconnect'
@@ -28,7 +28,7 @@
       type='button'
     )
       ITablerUnlink(aria-hidden='true')
-      span.sr-only 断开
+      | 断开连接
 
   button.connect(:disabled='busy' @click='connect' type='button' v-else)
     ITablerLink(aria-hidden='true')
@@ -44,11 +44,9 @@ import {
   IconUnlink as ITablerUnlink,
 } from '@tabler/icons-vue'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
-import { useSideNavStore } from '~/stores/session'
 
 type Action = 'status' | 'connect' | 'upload' | 'sync' | 'disconnect' | null
 
-const sideNavStore = useSideNavStore()
 const localPersistenceStore = useLocalPersistenceStore()
 const toast = useToast()
 const connected = ref(false)
@@ -187,16 +185,11 @@ function stopPolling() {
   statusPoll = undefined
 }
 
-watch(
-  () => sideNavStore.isOpened,
-  (opened) => {
-    if (!opened || action.value === 'connect') return
-    void refreshStatus().catch(() => {
-      action.value = null
-    })
-  },
-  { immediate: true }
-)
+onMounted(() => {
+  void refreshStatus().catch(() => {
+    toast.error('无法检查 Google Drive 连接状态，请刷新页面重试')
+  })
+})
 
 onBeforeUnmount(stopPolling)
 </script>
@@ -204,8 +197,9 @@ onBeforeUnmount(stopPolling)
 <style scoped lang="scss">
 .google-drive-sync {
   display: grid;
-  gap: 8px;
-  padding: 2px 10px;
+  gap: 12px;
+  margin-top: 18px;
+  justify-items: start;
 }
 
 .status {
@@ -214,7 +208,7 @@ onBeforeUnmount(stopPolling)
   gap: 10px;
   min-height: 32px;
   color: var(--pf-text);
-  font-size: 0.82rem;
+  font-size: 0.94rem;
   font-weight: 600;
 
   svg {
@@ -225,25 +219,25 @@ onBeforeUnmount(stopPolling)
 }
 
 .actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr 34px;
-  gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  min-height: 34px;
-  padding: 0 9px;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
   color: var(--pf-text);
   background: var(--pf-bg);
   border: 1px solid var(--pf-line);
   border-radius: 9px;
   cursor: pointer;
   font: inherit;
-  font-size: 0.76rem;
+  font-size: 0.9rem;
   font-weight: 650;
 
   &:hover:not(:disabled) {
@@ -262,24 +256,8 @@ button {
   }
 }
 
-.connect {
-  width: 100%;
-}
-
 .danger:hover:not(:disabled) {
   color: #d84a62;
   background: rgb(216 74 98 / 8%);
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 </style>

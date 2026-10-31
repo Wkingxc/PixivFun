@@ -15,6 +15,10 @@ import {
 } from '../../shared/pixivfun-data.ts'
 import { normalizePixivId } from '../../shared/pixiv-resource.ts'
 import {
+  parseLocalBackup,
+  type LocalBackup,
+} from '../../shared/local-backup.ts'
+import {
   normalizeAuthorCategoryName,
   type AuthorCategory,
 } from '../../shared/author-categories.ts'
@@ -976,6 +980,113 @@ export class LocalPersistenceRepository {
         artworks,
         authorVisits,
       }
+    })
+  }
+
+  exportLocalBackup(): LocalBackup {
+    const preferences: LocalPreferencesPatch = this.getPreferences()
+    delete preferences.networkProxy
+    const featured = this.database
+      .prepare(
+        'SELECT snapshot_json FROM featured_authors WHERE profile_id = ? ORDER BY added_at, rowid'
+      )
+      .all(this.profileId) as { snapshot_json: string }[]
+    const hidden = this.database
+      .prepare(
+        'SELECT author_id, artwork_id FROM author_artwork_exclusions WHERE profile_id = ? ORDER BY author_id, artwork_id'
+      )
+      .all(this.profileId) as { author_id: string; artwork_id: string }[]
+    return {
+      ...this.exportData(),
+      format: 'pixivfun-backup',
+      version: 1,
+      preferences,
+      browserPreferences: {},
+      categories: this.getAuthorCategories().map(({ name, authorIds }) => ({
+        name,
+        authorIds,
+      })),
+      featuredAuthors: featured.map((row) => JSON.parse(row.snapshot_json)),
+      hiddenArtworks: hidden.map((row) => ({
+        authorId: row.author_id,
+        artworkId: row.artwork_id,
+      })),
+    }
+  }
+
+  importLocalBackup(
+    input: unknown,
+    restorePreferences = false
+  ): PixivFunImportResult {
+    const backup = parseLocalBackup(input)
+    // Validate snapshots before any writes, including their size limit.
+    const featured = backup.featuredAuthors.map((value) => {
+      const authorId = requirePixivId(value.userId, 'author.userId')
+      const json = JSON.stringify(
+        normalizeFeaturedAuthorSnapshot(value, authorId)
+      )
+      if (Buffer.byteLength(json, 'utf8') > MAX_FEATURED_AUTHOR_SNAPSHOT_BYTES)
+        throw new RangeError('featured author snapshot is too large')
+      return { authorId, json }
+    })
+    return this.transaction(() => {
+      const insertArtwork = this.database.prepare(
+        'INSERT OR IGNORE INTO artwork_visits(profile_id, artwork_id) VALUES (?, ?)'
+      )
+      const insertAuthor = this.database.prepare(
+        'INSERT OR IGNORE INTO author_visits(profile_id, author_id) VALUES (?, ?)'
+      )
+      let artworks = 0
+      let authorVisits = 0
+      for (const id of backup.data.visitedArtworkIds)
+        artworks += Number(insertArtwork.run(this.profileId, id).changes)
+      for (const id of backup.data.visitedAuthorIds)
+        authorVisits += Number(insertAuthor.run(this.profileId, id).changes)
+      for (const category of backup.categories) {
+        const existing = this.database
+          .prepare(
+            'SELECT id FROM author_categories WHERE profile_id = ? AND name = ?'
+          )
+          .get(this.profileId, category.name) as { id: string } | undefined
+        const categoryId =
+          existing?.id ?? this.createAuthorCategory(category.name)
+        const insert = this.database.prepare(
+          'INSERT OR IGNORE INTO author_category_members(profile_id, category_id, author_id) VALUES (?, ?, ?)'
+        )
+        for (const authorId of category.authorIds)
+          insert.run(this.profileId, categoryId, authorId)
+      }
+      const insertFeatured = this.database.prepare(
+        'INSERT OR IGNORE INTO featured_authors(profile_id, author_id, snapshot_json, added_at) VALUES (?, ?, ?, ?)'
+      )
+      for (const entry of featured)
+        insertFeatured.run(
+          this.profileId,
+          entry.authorId,
+          entry.json,
+          Date.now()
+        )
+      const insertHidden = this.database.prepare(
+        'INSERT OR IGNORE INTO author_artwork_exclusions(profile_id, author_id, artwork_id, added_at) VALUES (?, ?, ?, ?)'
+      )
+      for (const entry of backup.hiddenArtworks)
+        insertHidden.run(
+          this.profileId,
+          entry.authorId,
+          entry.artworkId,
+          Date.now()
+        )
+      // Blocklists always merge; restoring appearance/reader preferences is optional.
+      const current = this.getPreferences().contentFilter.blockedAuthors
+      const incoming = backup.preferences?.contentFilter?.blockedAuthors ?? []
+      const merged = new Map(
+        [...incoming, ...current].map((entry) => [entry.id, entry])
+      )
+      this.writePreferences({
+        ...(restorePreferences ? backup.preferences : {}),
+        contentFilter: { blockedAuthors: [...merged.values()] },
+      })
+      return { artworks, authorVisits }
     })
   }
 
