@@ -117,6 +117,7 @@ test('备份页模板可编译；选择文件只预览，确认后才合并，�
   assert.equal(page.requests.length, 0)
   assert.equal(page.state.backup.value.data.visitedArtworkIds.length, 1)
   assert.equal(page.state.restorePreferences.value, false)
+  assert.equal(page.state.legacyBackup.value, true)
   await page.state.importBackup()
   assert.equal(page.requests[0].options.body.restorePreferences, false)
   assert.equal(page.state.completed.value, true)
@@ -153,6 +154,8 @@ test('导出仅收集白名单浏览器设置；导入可选择恢复布局', as
   assert.equal(JSON.stringify(exported).includes('private'), false)
   const imported = createPage()
   await imported.state.selectFile(fileEvent(JSON.stringify(backup)))
+  assert.equal(imported.state.restorePreferences.value, true)
+  assert.equal(imported.state.legacyBackup.value, false)
   imported.state.restorePreferences.value = true
   await imported.state.importBackup()
   assert.equal(imported.stored.get('pixivfun:marker-button-visible'), 'false')

@@ -8,15 +8,15 @@
     button(
       :disabled='busy'
       @click='upload'
-      title='合并本地和云端访问记录后上传'
+      title='合并记录和名单，上传本机标记与阅读偏好'
       type='button'
     )
       ITablerCloudUpload(aria-hidden='true')
-      | {{ action === 'upload' ? '上传中…' : '上传记录' }}
+      | {{ action === 'upload' ? '上传中…' : '上传数据' }}
     button(
       :disabled='busy'
       @click='sync'
-      title='下载云端记录，合并本地缺少的作品与作者访问记录'
+      title='合并云端记录和名单，并恢复标记与阅读偏好'
       type='button'
     )
       ITablerCloudDownload(aria-hidden='true')
@@ -33,6 +33,8 @@
   button.connect(:disabled='busy' @click='connect' type='button' v-else)
     ITablerLink(aria-hidden='true')
     | {{ action === 'connect' ? '等待授权…' : '连接 Google Drive' }}
+  p(role='status' v-if='syncMessage') {{ syncMessage }}
+  button(@click='reload' type='button' v-if='syncMessage') 刷新页面应用数据
 </template>
 
 <script lang="ts" setup>
@@ -44,12 +46,17 @@ import {
   IconUnlink as ITablerUnlink,
 } from '@tabler/icons-vue'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
+import type { summarizeLocalBackup } from '~~/shared/local-backup'
 
 type Action = 'status' | 'connect' | 'upload' | 'sync' | 'disconnect' | null
 
 const localPersistenceStore = useLocalPersistenceStore()
 const toast = useToast()
 const connected = ref(false)
+const syncMessage = ref('')
+function reload() {
+  window.location.reload()
+}
 const action = ref<Action>(null)
 const busy = computed(() => action.value !== null)
 const statusText = computed(() => {
@@ -131,7 +138,7 @@ async function upload() {
       authors: number
     }>('/api/cloud/google/upload', { method: 'POST' })
     toast.success(
-      `已上传 ${result.artworks} 个作品和 ${result.authors} 个作者记录`
+      `数据备份已上传（${result.artworks} 条作品访问、${result.authors} 条作者访问，含精选作者、分类及标记偏好）`
     )
   } catch {
     toast.error('Google Drive 上传失败')
@@ -147,6 +154,8 @@ async function sync() {
       found: boolean
       artworksAdded: number
       authorsAdded: number
+      summary?: ReturnType<typeof summarizeLocalBackup>
+      legacy?: boolean
     }>('/api/cloud/google/sync', { method: 'POST' })
     if (!result.found) {
       toast.info('云端还没有 PixivFun 数据，请先上传')
@@ -156,6 +165,9 @@ async function sync() {
       localPersistenceStore.refreshCheckedArtworkVisits(),
       localPersistenceStore.refreshCheckedAuthorVisits(),
     ])
+    syncMessage.value = result.legacy
+      ? '云端是旧版仅访问记录备份，不含精选作者、分类和标记样式。请在原电脑使用新版重新上传。'
+      : `数据已合并。精选作者 ${result.summary?.featuredAuthors ?? 0} 位、分类 ${result.summary?.categories ?? 0} 个，标记与阅读偏好已恢复。请刷新页面应用全部数据。`
     toast.success(
       `已新增 ${result.artworksAdded} 个作品和 ${result.authorsAdded} 个作者记录`
     )

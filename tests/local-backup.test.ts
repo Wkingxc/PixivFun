@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { DatabaseSync } from 'node:sqlite'
 import { LocalPersistenceRepository } from '../server/persistence/repository.ts'
-import { parseLocalBackup } from '../shared/local-backup.ts'
+import { parseLocalBackup, mergeLocalBackups } from '../shared/local-backup.ts'
 
 test('跨库备份恢复、合并同名分类、保留本机记录且重复导入幂等', () => {
   const directory = mkdtempSync(join(tmpdir(), 'pixivfun-backup-'))
@@ -149,4 +149,45 @@ test('旧版记录兼容、格式拒绝、浏览器偏好白名单与失败回�
     target.close()
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test('云端完整备份合并保留双方精选、同名分类成员及旧记录，并使用上传端标记偏好', () => {
+  const legacy = {
+    exportedAt: 1,
+    data: {
+      visitedArtworkIds: ['1'],
+      visitedAuthorIds: ['2'],
+      future: { preserve: true },
+    },
+  }
+  const remote = parseLocalBackup(legacy)
+  remote.categories = [{ name: 'Art', authorIds: ['2'] }]
+  remote.featuredAuthors = [{ userId: '2' }]
+  remote.hiddenArtworks = [{ authorId: '2', artworkId: '1' }]
+  remote.preferences = {
+    viewedMarker: { markAuthorName: false },
+    contentFilter: { blockedAuthors: [{ id: '8', name: '', addedAt: 1 }] },
+  }
+  const local = parseLocalBackup({
+    exportedAt: 2,
+    data: { visitedArtworkIds: ['3'], visitedAuthorIds: ['4'] },
+  })
+  local.categories = [{ name: 'art', authorIds: ['4'] }]
+  local.featuredAuthors = [{ userId: '4' }]
+  local.preferences = {
+    viewedMarker: { markAuthorName: true },
+    contentFilter: { blockedAuthors: [{ id: '9', name: '', addedAt: 1 }] },
+  }
+  const merged = mergeLocalBackups(local, remote)
+  assert.deepEqual(merged.data.visitedArtworkIds, ['1', '3'])
+  assert.deepEqual(merged.categories, [{ name: 'Art', authorIds: ['2', '4'] }])
+  assert.equal(merged.featuredAuthors.length, 2)
+  assert.deepEqual(merged.hiddenArtworks, remote.hiddenArtworks)
+  assert.equal(merged.preferences?.viewedMarker?.markAuthorName, true)
+  assert.equal(merged.preferences?.contentFilter?.blockedAuthors?.length, 2)
+  assert.deepEqual(merged.data.future, { preserve: true })
+  assert.deepEqual(
+    mergeLocalBackups(local, merged).categories,
+    merged.categories
+  )
 })

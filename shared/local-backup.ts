@@ -4,6 +4,7 @@ import {
 } from './local-preferences.ts'
 import {
   parsePixivFunData,
+  mergePixivFunData,
   type PixivFunDataDocument,
 } from './pixivfun-data.ts'
 import { normalizeAuthorCategoryName } from './author-categories.ts'
@@ -35,6 +36,84 @@ export interface LocalBackup extends PixivFunDataDocument {
   categories: { name: string; authorIds: string[] }[]
   featuredAuthors: Record<string, unknown>[]
   hiddenArtworks: { authorId: string; artworkId: string }[]
+}
+
+export function summarizeLocalBackup(backup: LocalBackup) {
+  return {
+    artworks: backup.data.visitedArtworkIds.length,
+    authors: backup.data.visitedAuthorIds.length,
+    featuredAuthors: backup.featuredAuthors.length,
+    categories: backup.categories.length,
+    categoryMembers: backup.categories.reduce(
+      (sum, category) => sum + category.authorIds.length,
+      0
+    ),
+    hiddenArtworks: backup.hiddenArtworks.length,
+    blockedAuthors:
+      backup.preferences?.contentFilter?.blockedAuthors?.length ?? 0,
+  }
+}
+
+export function mergeLocalBackups(
+  localInput: unknown,
+  remoteInput: unknown
+): LocalBackup {
+  const local = parseLocalBackup(localInput)
+  const remote = parseLocalBackup(remoteInput)
+  const categories = new Map<string, { name: string; authorIds: string[] }>()
+  for (const category of [...remote.categories, ...local.categories]) {
+    // Match SQLite's default ASCII-only NOCASE comparison.
+    const key = category.name.replace(/[A-Z]/g, (letter) =>
+      letter.toLowerCase()
+    )
+    const previous = categories.get(key)
+    categories.set(key, {
+      name: previous?.name ?? category.name,
+      authorIds: [
+        ...new Set([...(previous?.authorIds ?? []), ...category.authorIds]),
+      ],
+    })
+  }
+  const featured = new Map(
+    [...remote.featuredAuthors, ...local.featuredAuthors].map((author) => [
+      id(author.userId),
+      author,
+    ])
+  )
+  const hidden = new Map(
+    [...remote.hiddenArtworks, ...local.hiddenArtworks].map((entry) => [
+      `${entry.authorId}:${entry.artworkId}`,
+      entry,
+    ])
+  )
+  const preferences: LocalPreferencesPatch = {}
+  for (const source of [remote.preferences, local.preferences]) {
+    for (const [namespace, values] of Object.entries(source ?? {})) {
+      const key = namespace as keyof LocalPreferencesPatch
+      Object.assign((preferences[key] ??= {}), values)
+    }
+  }
+  const blocked = new Map(
+    [
+      ...(remote.preferences?.contentFilter?.blockedAuthors ?? []),
+      ...(local.preferences?.contentFilter?.blockedAuthors ?? []),
+    ].map((entry) => [entry.id, entry])
+  )
+  if (blocked.size)
+    preferences.contentFilter = { blockedAuthors: [...blocked.values()] }
+  return parseLocalBackup({
+    ...mergePixivFunData(local, remote),
+    format: 'pixivfun-backup',
+    version: 1,
+    ...(Object.keys(preferences).length ? { preferences } : {}),
+    categories: [...categories.values()],
+    featuredAuthors: [...featured.values()],
+    hiddenArtworks: [...hidden.values()],
+    browserPreferences: {
+      ...remote.browserPreferences,
+      ...local.browserPreferences,
+    },
+  })
 }
 
 function record(value: unknown): Record<string, unknown> {

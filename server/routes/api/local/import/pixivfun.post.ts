@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   try {
     return {
-      imported: useLocalPersistenceRepository().importData(body),
+      imported: useLocalPersistenceRepository().importLocalBackup(body, true),
     }
   } catch (error) {
     throw createError({

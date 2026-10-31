@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
+import { type PixivFunDataDocument } from '../../shared/pixivfun-data.ts'
 import {
-  mergePixivFunData,
-  parsePixivFunData,
-  type PixivFunDataDocument,
-} from '../../shared/pixivfun-data.ts'
+  mergeLocalBackups,
+  parseLocalBackup,
+  summarizeLocalBackup,
+} from '../../shared/local-backup.ts'
 import type { LocalPersistenceRepository } from '../persistence/repository.ts'
 import type { GoogleFetch } from './google-oauth.ts'
 
@@ -37,9 +38,9 @@ export class GoogleDriveSyncService {
   }> {
     const accessToken = await this.getAccessToken()
     const file = await this.findDataFile(accessToken)
-    const local = this.repository.exportData()
+    const local = this.repository.exportLocalBackup()
     const document = file
-      ? mergePixivFunData(
+      ? mergeLocalBackups(
           local,
           await this.downloadDataFile(file.id, accessToken)
         )
@@ -60,19 +61,23 @@ export class GoogleDriveSyncService {
     found: boolean
     artworksAdded: number
     authorsAdded: number
+    summary?: ReturnType<typeof summarizeLocalBackup>
+    legacy?: boolean
   }> {
     const accessToken = await this.getAccessToken()
     const file = await this.findDataFile(accessToken)
     if (!file) {
       return { found: false, artworksAdded: 0, authorsAdded: 0 }
     }
-    const imported = this.repository.importData(
-      await this.downloadDataFile(file.id, accessToken)
-    )
+    const document = await this.downloadDataFile(file.id, accessToken)
+    const legacy = !(document as { format?: string }).format
+    const imported = this.repository.importLocalBackup(document, true)
     return {
       found: true,
       artworksAdded: imported.artworks,
       authorsAdded: imported.authorVisits,
+      summary: summarizeLocalBackup(this.repository.exportLocalBackup()),
+      legacy,
     }
   }
 
@@ -114,7 +119,10 @@ export class GoogleDriveSyncService {
     if (Buffer.byteLength(body, 'utf8') > MAX_DOWNLOAD_BYTES) {
       throw new Error('Google Drive data file is too large')
     }
-    return parsePixivFunData(JSON.parse(body))
+    const source = JSON.parse(body)
+    // Preserve legacy detection for the UI while validating before importing.
+    parseLocalBackup(source)
+    return source
   }
 
   private async createDataFile(

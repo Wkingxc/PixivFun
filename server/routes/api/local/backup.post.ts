@@ -1,6 +1,6 @@
 import { useLocalPersistenceRepository } from '~~/server/persistence'
 import { assertSameOrigin } from '~~/server/utils/pixiv-session'
-import { MAX_BACKUP_BYTES } from '~~/shared/local-backup'
+import { MAX_BACKUP_BYTES, summarizeLocalBackup } from '~~/shared/local-backup'
 
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
@@ -18,11 +18,14 @@ export default defineEventHandler(async (event) => {
     const body = JSON.parse(raw)
     if (typeof body.restorePreferences !== 'boolean')
       throw new TypeError('恢复选项无效')
+    const repository = useLocalPersistenceRepository()
+    const imported = repository.importLocalBackup(
+      body.backup,
+      body.restorePreferences
+    )
     return {
-      imported: useLocalPersistenceRepository().importLocalBackup(
-        body.backup,
-        body.restorePreferences
-      ),
+      imported,
+      summary: summarizeLocalBackup(repository.exportLocalBackup()),
     }
   } catch (error) {
     throw createError({

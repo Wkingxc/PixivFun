@@ -6,10 +6,10 @@
     p.tip 不包含 Pixiv 登录凭据、Google Drive 授权、网络代理和图片缓存。新电脑需要重新登录；程序目录仍需单独复制。
     p.tip Windows 默认用户数据目录：%APPDATA%\PixivFun，可按 Win+R 输入此路径查看。
     button.action(:disabled='busy' @click='exportBackup' type='button') {{ exporting ? '正在导出…' : '导出数据备份' }}
-    a.records(download href='/api/local/export') 仅导出访问记录
   Card(title='导入备份')
     p 选择 PixivFun 的 JSON 备份，兼容以前“导出访问记录”生成的文件。最大 32 MB。
     p.tip 访问记录、同名作者分类的成员、精选作者、隐藏作品和屏蔽作者会合并去重，保留本机已有数据。
+    p.error(v-if='legacyBackup') 此文件是旧版“仅访问记录”导出，不含精选作者、作者分类和标记样式，无法从中恢复这些数据。请回到原电脑重新导出“数据备份”。
     input(
       :disabled='busy || completed'
       @change='selectFile'
@@ -41,7 +41,7 @@
       p {{ resultMessage }}
       button.action(@click='reload' type='button') 刷新页面应用数据
   Card(title='Google Drive 记录同步')
-    p 在下方连接同一个 Google 账号，旧电脑点击“上传记录”，新电脑点击“下载合并”。这是手动同步，仅包含作品和作者访问记录；迁移分类和偏好请使用上面的数据备份。
+    p 在下方连接同一个 Google 账号，旧电脑点击“上传数据”，新电脑点击“下载合并”。同步访问记录、精选作者、分类、隐藏作品、屏蔽作者及标记与阅读偏好；下载时恢复云端偏好，保留并合并本机记录。浏览器布局设置请通过上面的文件备份迁移。
     GoogleDriveSync
 </template>
 
@@ -54,11 +54,13 @@ import {
   MAX_BACKUP_BYTES,
   parseLocalBackup,
   type LocalBackup,
+  type summarizeLocalBackup,
 } from '~~/shared/local-backup'
 
 const backup = shallowRef<LocalBackup>()
 const filename = ref('')
 const restorePreferences = ref(false)
+const legacyBackup = ref(false)
 const exporting = ref(false)
 const importing = ref(false)
 const reading = ref(false)
@@ -110,6 +112,7 @@ function createDownloadLink(url: string) {
 
 async function selectFile(event: Event) {
   backup.value = undefined
+  legacyBackup.value = false
   error.value = ''
   restorePreferences.value = false
   const file = (event.target as HTMLInputElement).files?.[0]
@@ -118,9 +121,10 @@ async function selectFile(event: Event) {
   try {
     if (file.size > MAX_BACKUP_BYTES - 1024)
       throw new Error('备份文件过大，最大支持 32 MB')
-    const parsed = parseLocalBackup(
-      JSON.parse((await file.text()).replace(/^\uFEFF/, ''))
-    )
+    const raw = JSON.parse((await file.text()).replace(/^\uFEFF/, ''))
+    const parsed = parseLocalBackup(raw)
+    legacyBackup.value = raw.format === undefined && raw.version === undefined
+    restorePreferences.value = !legacyBackup.value && !!parsed.preferences
     backup.value = parsed
     filename.value = file.name
   } catch (cause) {
@@ -142,6 +146,7 @@ async function importBackup() {
   try {
     const result = await $fetch<{
       imported: { artworks: number; authorVisits: number }
+      summary?: ReturnType<typeof summarizeLocalBackup>
     }>('/api/local/backup', {
       method: 'POST',
       body: {
@@ -151,6 +156,10 @@ async function importBackup() {
     })
     completed.value = true
     resultMessage.value = `导入成功，新增 ${result.imported.artworks} 条作品访问记录、${result.imported.authorVisits} 条作者访问记录，其他数据已合并。请刷新页面使所有列表和设置生效。`
+    if (result.summary) {
+      const summary = result.summary
+      resultMessage.value += ` 本机现有精选作者 ${summary.featuredAuthors} 位、分类 ${summary.categories} 个（成员关系 ${summary.categoryMembers} 条）、隐藏作品 ${summary.hiddenArtworks} 条、屏蔽作者 ${summary.blockedAuthors} 位。${restorePreferences.value ? '标记颜色与阅读偏好已恢复。' : '保留本机标记颜色与阅读偏好。'}`
+    }
     if (restorePreferences.value) {
       try {
         for (const [key, value] of Object.entries(

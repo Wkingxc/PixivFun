@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { summarizeLocalBackup } from '../shared/local-backup.ts'
 import {
   createGoogleOAuthRequest,
   exchangeGoogleAuthorizationCode,
@@ -230,6 +231,22 @@ test('Google Drive 上传取集合并集并保留未来字段，同步只返回�
   try {
     repository.recordArtworkVisit('100')
     repository.recordAuthorVisit('200')
+    repository.saveFeaturedAuthor('200', {
+      userId: '200',
+      userName: '精选',
+      profileImageUrl: '',
+      userComment: '',
+      illusts: [],
+    })
+    const category = repository.createAuthorCategory('迁移测试')
+    repository.setAuthorCategories('200', [category])
+    repository.hideAuthorArtworks('200', ['100'])
+    repository.updatePreferences({
+      viewedMarker: {
+        markAuthorName: false,
+        authorVisitedColor: { r: 1, g: 2, b: 3, a: 1 },
+      },
+    })
     assert.deepEqual(await service.upload(), {
       created: true,
       artworks: 1,
@@ -254,6 +271,8 @@ test('Google Drive 上传取集合并集并保留未来字段，同步只返回�
       found: true,
       artworksAdded: 2,
       authorsAdded: 2,
+      summary: summarizeLocalBackup(repository.exportLocalBackup()),
+      legacy: false,
     })
     assert.deepEqual(repository.getVisitedArtworkIds(['100', '300', '500']), [
       '100',
@@ -264,7 +283,46 @@ test('Google Drive 上传取集合并集并保留未来字段，同步只返回�
       found: true,
       artworksAdded: 0,
       authorsAdded: 0,
+      summary: summarizeLocalBackup(repository.exportLocalBackup()),
+      legacy: false,
     })
+    const target = new LocalPersistenceRepository({
+      databasePath: join(directory, 'second-computer.sqlite'),
+    })
+    try {
+      const targetService = new GoogleDriveSyncService({
+        repository: target,
+        getAccessToken: async () => 'test-access-token',
+        fetch,
+      })
+      await targetService.sync()
+      assert.equal(target.getFeaturedAuthors().total, 1)
+      assert.deepEqual(
+        target
+          .getAuthorCategories()
+          .map(({ name, authorIds }) => ({ name, authorIds })),
+        [{ name: '迁移测试', authorIds: ['200'] }]
+      )
+      assert.deepEqual(target.getHiddenAuthorArtworkIds('200'), ['100'])
+      assert.deepEqual(
+        target.getPreferences().viewedMarker,
+        repository.getPreferences().viewedMarker
+      )
+      // Existing visit-only cloud files stay readable and are identified explicitly.
+      remote = {
+        exportedAt: Date.now(),
+        data: { visitedArtworkIds: ['700'], visitedAuthorIds: ['800'] },
+      }
+      const legacyResult = await targetService.sync()
+      assert.equal(legacyResult.legacy, true)
+      assert.equal(target.getFeaturedAuthors().total, 1)
+      assert.deepEqual(
+        target.getPreferences().viewedMarker,
+        repository.getPreferences().viewedMarker
+      )
+    } finally {
+      target.close()
+    }
   } finally {
     repository.close()
     rmSync(directory, { recursive: true, force: true })
