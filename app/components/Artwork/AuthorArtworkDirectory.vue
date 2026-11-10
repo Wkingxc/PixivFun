@@ -101,7 +101,12 @@ section.author-artwork-directory
                 :alt='item.artwork?.alt || item.artwork?.title || ""',
                 :src='item.artwork?.url || ""'
                 lazyload
-                v-if='item.artwork'
+                v-if='item.artwork && mode === "scroll" && !readyCoverUrls.has(item.artwork.url)'
+              )
+              img(
+                :alt='item.artwork.alt || item.artwork.title || ""',
+                :src='item.artwork.url'
+                v-else-if='item.artwork'
               )
               ArtworkViewedOverlay(
                 :artwork-id='item.entry.id',
@@ -171,6 +176,7 @@ import {
   serializeArtworkDirectoryScroll,
 } from '~/utils/artworkDirectoryNavigation'
 import { shouldRecordArtworkVisitGesture } from '~/utils/linkGestures'
+import { createDirectoryCoverPreloader } from '~/utils/directoryCoverPreloader'
 import { useLocalPersistenceStore } from '~/stores/local-persistence'
 import { filterArtworksByPageCount } from '~/utils/artworkLayout'
 import {
@@ -224,6 +230,8 @@ const scrollThumbRatio = ref(0)
 const scrollThumbDragging = ref(false)
 const scrollThumbSize = 48
 const metadataLoads = new Map<string, Promise<void>>()
+const coverPreloader = createDirectoryCoverPreloader()
+const readyCoverUrls = shallowRef(new Set<string>())
 const resolvedMetadataIds = new Set<string>()
 const quickPageTarget = ref(1)
 let wheelLocked = false
@@ -399,14 +407,32 @@ async function preloadAdjacentPages(
     (item) => item >= 1 && item <= totalPages.value
   )
   await Promise.allSettled(
-    adjacentPages.map((item) => loadPage(item, requestId))
+    adjacentPages.map(async (item) => {
+      await loadPage(item, requestId)
+      if (requestId !== directoryRequestId) return
+      await preloadPageCovers(item)
+    })
   )
+}
+
+async function preloadPageCovers(page: number): Promise<void> {
+  await coverPreloader.preload(
+    getAuthorArtworkPage(directoryEntries.value, page, pageSize).flatMap(
+      (entry) => {
+        const artwork = artworkCache.value[entry.id]
+        return artwork?.url ? [artwork.url] : []
+      }
+    )
+  )
+  readyCoverUrls.value = new Set(coverPreloader.readyUrls())
 }
 
 async function initializeDirectory(): Promise<void> {
   const requestId = ++directoryRequestId
   ++filterRequestId
   metadataLoads.clear()
+  coverPreloader.clear()
+  readyCoverUrls.value = new Set()
   resolvedMetadataIds.clear()
   entries.value = []
   currentArtworkPosition.value = null
@@ -545,6 +571,8 @@ async function changePage(
   const target = Math.min(Math.max(page, 1), totalPages.value)
   try {
     await loadPage(target, requestId)
+    if (requestId !== directoryRequestId) return
+    await preloadPageCovers(target)
   } catch {
     return
   }
@@ -690,11 +718,18 @@ async function setMode(nextMode: ArtworkDirectoryMode): Promise<void> {
 }
 
 async function loadScrollWindow(page: number): Promise<void> {
+  const requestId = directoryRequestId
   const pages = Array.from(
     { length: 5 },
     (_, index) => page + index - 2
   ).filter((item) => item >= 1 && item <= totalPages.value)
-  await Promise.allSettled(pages.map((item) => loadPage(item)))
+  await Promise.allSettled(
+    pages.map(async (item) => {
+      await loadPage(item, requestId)
+      if (requestId !== directoryRequestId || Math.abs(item - page) > 1) return
+      await preloadPageCovers(item)
+    })
+  )
 }
 
 async function drainLiveScrollLoads(): Promise<void> {
@@ -714,6 +749,7 @@ async function drainLiveScrollLoads(): Promise<void> {
       lastLoadedPage = targetPage
       try {
         await loadPage(targetPage)
+        if (requestId === directoryRequestId) void preloadPageCovers(targetPage)
       } catch {
         // Keep following the latest thumb position even if one request fails.
       }
@@ -967,6 +1003,7 @@ watch(normalizedMinPageCount, refreshDirectoryForPageCountFilter)
 
 onBeforeUnmount(() => {
   ++directoryRequestId
+  coverPreloader.clear()
   ++filterRequestId
   if (wheelTimer) clearTimeout(wheelTimer)
   if (quickPageTimer) clearTimeout(quickPageTimer)
