@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import type { SearchPopularResult } from '~/api/search'
-import type { UserSearchUser } from '~/utils/userSearch'
+import type { UserSearchMode, UserSearchUser } from '~/utils/userSearch'
 import type { ArtworkInfo, NovelInfo } from '~/types'
 
 export type SearchContentType =
@@ -126,7 +126,7 @@ export const useSearchStore = defineStore('search', () => {
 
   async function searchUsers(
     keyword: string,
-    params?: { p?: number }
+    params?: { p?: number; s_mode?: UserSearchMode }
   ): Promise<void> {
     if (!keyword) return
     const controller = beginSearch()

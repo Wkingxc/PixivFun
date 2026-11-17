@@ -19,6 +19,36 @@ export interface UserSearchResult {
   total: number
 }
 
+export const USER_SEARCH_PAGE_SIZE = 10
+export type UserSearchMode = 's_usr' | 's_usr_full'
+
+export function normalizeUserSearchMode(value: unknown): UserSearchMode {
+  return value === 's_usr_full' ? 's_usr_full' : 's_usr'
+}
+
+/** Current desktop responses put pagination inside body.page. */
+export function getUserSearchPage(raw: unknown): {
+  userIds: string[]
+  total: number | undefined
+} {
+  const body = raw as Record<string, unknown> | null
+  const page = body?.page as Record<string, unknown> | null
+  const ids = page?.userIds ?? body?.userIds
+  const totalRaw =
+    page?.total ?? body?.total ?? body?.totalUsers ?? body?.total_users
+  const total =
+    typeof totalRaw === 'string' && totalRaw.trim()
+      ? Number(totalRaw)
+      : totalRaw
+  return {
+    userIds: Array.isArray(ids) ? ids.map(asString).filter(Boolean) : [],
+    total:
+      typeof total === 'number' && Number.isFinite(total) && total >= 0
+        ? total
+        : undefined,
+  }
+}
+
 function asString(value: unknown): string {
   if (typeof value === 'string') return value
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
@@ -83,6 +113,7 @@ export function normalizeUserSearchResult(raw: unknown): UserSearchResult {
         record.profile_img ??
           record.profileImg ??
           record.profileImageUrl ??
+          record.imageBig ??
           record.image
       ),
       comment: asString(
@@ -92,10 +123,6 @@ export function normalizeUserSearchResult(raw: unknown): UserSearchResult {
       works: works.slice(0, 3),
     })
   }
-  const totalRaw = body?.total ?? body?.totalUsers ?? body?.total_users
-  const total =
-    typeof totalRaw === 'number' && Number.isFinite(totalRaw)
-      ? totalRaw
-      : normalized.length
+  const total = getUserSearchPage(body).total ?? normalized.length
   return { users: normalized, total }
 }

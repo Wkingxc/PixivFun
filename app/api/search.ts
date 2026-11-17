@@ -6,6 +6,9 @@ import {
 } from '~/utils/searchSuggestions'
 import {
   normalizeUserSearchResult,
+  getUserSearchPage,
+  normalizeUserSearchMode,
+  type UserSearchMode,
   type UserSearchResult,
 } from '~/utils/userSearch'
 import { emptyTagInfo, normalizeTagInfo, type TagInfo } from '~/utils/tagInfo'
@@ -111,12 +114,13 @@ export class SearchApi extends PixivApiBase {
   /**
    * User search (requires authentication). Pixiv's own /search/users page
    * calls `GET /ajax/search/users?nick=&s_mode=&p=&i=` and receives a
-   * relational `{ total, userIds, workIds }` payload, so profiles are
+   * `{ page: { total, userIds, workIds }, users }` payload. Older responses
+   * can omit the inline users, so missing profiles are
    * hydrated through the same cache the user endpoints use.
    */
   async searchUsers(
     keyword: string,
-    params?: { p?: number; creatorOnly?: boolean },
+    params?: { p?: number; creatorOnly?: boolean; s_mode?: UserSearchMode },
     options?: SearchRequestOptions
   ): Promise<UserSearchResult> {
     return requestCache.fetch(
@@ -124,7 +128,8 @@ export class SearchApi extends PixivApiBase {
         'search-users',
         keyword,
         params?.p,
-        params?.creatorOnly ?? false
+        params?.creatorOnly ?? false,
+        normalizeUserSearchMode(params?.s_mode)
       ),
       async () => {
         const { data } = await this.http.get<PixivResponse<unknown>>(
@@ -132,7 +137,7 @@ export class SearchApi extends PixivApiBase {
           {
             params: {
               nick: keyword,
-              s_mode: 's_usr',
+              s_mode: normalizeUserSearchMode(params?.s_mode),
               p: params?.p ?? 1,
               i: params?.creatorOnly ? '1' : '0',
               lang: 'zh',
@@ -144,9 +149,7 @@ export class SearchApi extends PixivApiBase {
         // Some variants inline the user entities directly.
         if (Array.isArray(body?.users)) return normalizeUserSearchResult(body)
 
-        const userIds = Array.isArray(body?.userIds)
-          ? body.userIds.map(String)
-          : []
+        const { userIds, total: pageTotal } = getUserSearchPage(body)
         const users = (
           await Promise.all(
             userIds.map(async (id) => {
@@ -180,11 +183,7 @@ export class SearchApi extends PixivApiBase {
           )
         ).filter((user): user is NonNullable<typeof user> => user !== null)
 
-        const totalRaw = body?.total
-        const total =
-          typeof totalRaw === 'number' && Number.isFinite(totalRaw)
-            ? totalRaw
-            : users.length
+        const total = pageTotal ?? users.length
         return { users, total }
       },
       { ttl: CACHE_TTL.list, signal: options?.signal }

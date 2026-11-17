@@ -10,7 +10,7 @@
           @click='setQuery({ type: opt.value })'
           v-for='opt in contentOptions'
         ) {{ opt.label }}
-      .refine-bar(v-if='!isUsers')
+      .refine-bar
         .refine-field
           span.refine-label 匹配
           FnbSelect(
@@ -18,28 +18,28 @@
             :options='activeSModeOptions'
             @update:model-value='(v) => setQuery({ s_mode: v })'
           )
-        .refine-field
+        .refine-field(v-if='!isUsers')
           span.refine-label 排序
           FnbSelect(
             :model-value='selectedOrder',
             :options='orderOptions'
             @update:model-value='(v) => setQuery({ order: v })'
           )
-        .refine-field
+        .refine-field(v-if='!isUsers')
           span.refine-label 分级
           FnbSelect(
             :model-value='selectedMode',
             :options='modeOptions'
             @update:model-value='(v) => setQuery({ mode: v })'
           )
-        .refine-field
+        .refine-field(v-if='!isUsers')
           span.refine-label AI
           FnbSelect(
             :model-value='selectedAiType',
             :options='aiTypeOptions'
             @update:model-value='(v) => setQuery({ ai_type: v })'
           )
-        .refine-field
+        .refine-field(v-if='!isUsers')
           span.refine-label 收藏数
           FnbSelect(
             :model-value='selectedMinBookmarks',
@@ -111,7 +111,7 @@
           FnbPagination(
             :item-count='currentTotal',
             :page='page',
-            :page-size='currentResults.length'
+            :page-size='isUsers ? USER_SEARCH_PAGE_SIZE : currentResults.length'
             @update:page='goPage'
           )
         ul.user-result-list(v-if='isUsers')
@@ -147,7 +147,7 @@
           FnbPagination(
             :item-count='currentTotal',
             :page='page',
-            :page-size='currentResults.length'
+            :page-size='isUsers ? USER_SEARCH_PAGE_SIZE : currentResults.length'
             @update:page='goPage'
           )
 </template>
@@ -162,6 +162,10 @@ import { useSearchStore, type SearchContentType } from '~/stores/search'
 import { effect } from 'vue'
 import { setTitle } from '~/utils/setTitle'
 import { contentOptions } from '~/utils/searchOptions'
+import {
+  normalizeUserSearchMode,
+  USER_SEARCH_PAGE_SIZE,
+} from '~/utils/userSearch'
 
 // ── Filter options ──
 
@@ -177,6 +181,11 @@ const novelSModeOptions = [
   { label: '标签（部分一致）', value: 's_tag_only' },
   { label: '标签（完全一致）', value: 's_tag_full' },
   { label: '正文', value: 's_tc' },
+]
+
+const userSModeOptions = [
+  { label: '昵称（部分一致）', value: 's_usr' },
+  { label: '昵称（完全一致）', value: 's_usr_full' },
 ]
 
 const orderOptions = [
@@ -235,7 +244,11 @@ const page = computed(() => {
 })
 
 const selectedType = computed(() => (route.query.type as string) || 'artworks')
-const selectedSMode = computed(() => (route.query.s_mode as string) || 's_tag')
+const selectedSMode = computed(() =>
+  selectedType.value === 'users'
+    ? normalizeUserSearchMode(route.query.s_mode)
+    : (route.query.s_mode as string) || 's_tag'
+)
 const selectedOrder = computed(() => (route.query.order as string) || 'date_d')
 const selectedMode = computed(() => (route.query.mode as string) || 'all')
 const selectedAiType = computed(() => (route.query.ai_type as string) || '')
@@ -261,7 +274,11 @@ const visibleUserResults = computed(() =>
 )
 
 const activeSModeOptions = computed(() =>
-  isNovel.value ? novelSModeOptions : artworkSModeOptions
+  isUsers.value
+    ? userSModeOptions
+    : isNovel.value
+      ? novelSModeOptions
+      : artworkSModeOptions
 )
 
 const currentResults = computed(() => {
@@ -323,7 +340,10 @@ async function makeSearch(): Promise<void> {
 
   try {
     if (isUsers.value) {
-      await searchStore.searchUsers(keyword.value, { p: page.value })
+      await searchStore.searchUsers(keyword.value, {
+        p: page.value,
+        s_mode: normalizeUserSearchMode(selectedSMode.value),
+      })
     } else if (isNovel.value) {
       await searchStore.searchNovels(effectiveKeyword.value, {
         p: page.value,
